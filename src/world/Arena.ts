@@ -4,7 +4,7 @@ import { fbm, noise2 } from './noise';
 import { addOutline, toonGradient } from './toon';
 
 /** Late-afternoon sun, shared by the light rig, sky and far layers. */
-export const SUN_DIRECTION = new THREE.Vector3(-0.75, 0.45, 0.45).normalize();
+export const SUN_DIRECTION = new THREE.Vector3(-0.8, 0.36, 0.45).normalize();
 const HORIZON = new THREE.Color('#f3dfb8');
 const SUNLIT = new THREE.Color('#ffe2b8');
 
@@ -184,8 +184,8 @@ function createTerrain(): THREE.Mesh {
   geometry.rotateX(-Math.PI / 2);
   const position = geometry.getAttribute('position');
   const colors = new Float32Array(position.count * 3);
-  const meadow = new THREE.Color('#5f8f34');
-  const lush = new THREE.Color('#3f7a2c');
+  const meadow = new THREE.Color('#6a8f3a');
+  const lush = new THREE.Color('#4a7a30');
   const sage = new THREE.Color('#8fa64f');
   const golden = new THREE.Color('#dcbc62');
   const ochre = new THREE.Color('#bf9447');
@@ -269,8 +269,8 @@ function createGrass(rng: () => number, time: { value: number }, benders: GrassB
     uniforms: THREE.UniformsUtils.merge([
       THREE.UniformsLib.fog,
       {
-        uBase: { value: new THREE.Color('#355f22') },
-        uTip: { value: new THREE.Color('#c9d873') },
+        uBase: { value: new THREE.Color('#3a5f22') },
+        uTip: { value: new THREE.Color('#e0d97a') },
         uSun: { value: SUN_DIRECTION },
       },
     ]),

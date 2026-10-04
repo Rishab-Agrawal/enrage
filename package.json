@@ -8,7 +8,7 @@
     "build": "tsc && vite build",
     "preview": "vite preview --host 127.0.0.1",
     "test": "playwright test",
-    "verify:visual": "playwright test tests/visual.spec.ts",
+    "bake": "node scripts/bake-characters.mjs",
     "inspect:canvas": "node scripts/inspect-threejs-canvas.mjs"
   },
   "dependencies": {
@@ -20,7 +20,6 @@
     "@gltf-transform/functions": "^4.5.1",
     "@playwright/test": "^1.60.0",
     "@types/node": "^25.9.0",
-    "@types/pngjs": "^6.0.5",
     "@types/three": "^0.184.1",
     "pngjs": "^7.0.0",
     "sharp": "^0.35.5",

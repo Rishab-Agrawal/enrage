@@ -2,7 +2,7 @@ import type { Mood } from '../game/events';
 
 export type Outcome = 'victory' | 'defeat' | null;
 
-export type HudState = {
+type HudState = {
   player: number; // 0..1
   npc: number; // 0..1
   mood: Mood;

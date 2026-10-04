@@ -39,6 +39,11 @@ export class Input {
     return this.pressed.delete(intent);
   }
 
+  /** Forget latched presses, e.g. clicks made on the result screen. */
+  clear(): void {
+    this.pressed.clear();
+  }
+
   dispose(): void {
     window.removeEventListener('keydown', this.onKeyDown);
     window.removeEventListener('keyup', this.onKeyUp);

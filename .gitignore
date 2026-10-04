@@ -8,3 +8,4 @@ references/ccgs/
 .claude/settings.local.json
 artifacts/dev/
 *.tmp.*
+*.webm

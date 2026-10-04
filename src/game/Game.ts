@@ -88,14 +88,14 @@ export class Game {
 
   private buildScene(): void {
     this.scene.fog = new THREE.Fog('#ead9b8', 70, 650);
-    const sun = new THREE.DirectionalLight('#ffe2b4', 2.7);
+    const sun = new THREE.DirectionalLight('#ffd49a', 2.9);
     sun.position.copy(SUN_DIRECTION).multiplyScalar(40);
     sun.castShadow = true;
     sun.shadow.mapSize.set(2048, 2048);
     Object.assign(sun.shadow.camera, { left: -18, right: 18, top: 18, bottom: -18, near: 1, far: 90 });
     sun.shadow.bias = -0.0004;
     sun.shadow.normalBias = 0.03;
-    this.scene.add(sun, new THREE.HemisphereLight('#c4dcff', '#6f7d3a', 1.35));
+    this.scene.add(sun, new THREE.HemisphereLight('#c8d8f0', '#7d7a3e', 1.2));
     this.scene.add(this.arena.group, this.player.character.root, this.npc.character.root, this.vfx.group);
     this.player.character.rim.value.copy(PLAYER_RIM);
   }
@@ -107,6 +107,7 @@ export class Game {
     this.outcomeTimer = 0;
     this.hitstop = 0;
     this.events.length = 0;
+    this.input.clear();
     this.debug.sync();
     this.cameraRig.update(0, this.player.position, this.npc.position, true);
   }

@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "runId": "pass-2",
+  "captures": [
+    { "mode": "desktop", "state": "active-play", "report": "artifacts/pass-2/desktop-active-play.json" },
+    { "mode": "desktop", "state": "enraged", "report": "artifacts/pass-2/desktop-enraged.json" },
+    { "mode": "desktop", "state": "resting", "report": "artifacts/pass-2/desktop-resting.json" },
+    { "mode": "desktop", "state": "victory", "report": "artifacts/pass-2/desktop-victory.json" },
+    { "mode": "desktop", "state": "defeat", "report": "artifacts/pass-2/desktop-defeat.json" }
+  ],
+  "artifacts": ["public/models/player.glb", "public/models/npc.glb", "artifacts/pass-2/fight.webm"]
+}

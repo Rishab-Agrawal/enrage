@@ -40,7 +40,7 @@ function radialTexture(stops: [number, string][], spikes = 0): THREE.CanvasTextu
   return texture;
 }
 
-/** Pooled, event-driven effects: impact stars, dust, the NPC's mood ring and his rage embers. */
+/** Event-driven effects (impact stars, dust) plus the NPC's mood ring and rage embers. */
 export class Vfx {
   readonly group = new THREE.Group();
   private readonly bursts: Burst[] = [];

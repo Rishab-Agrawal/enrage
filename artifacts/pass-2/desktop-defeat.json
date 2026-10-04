@@ -1,0 +1,118 @@
+{
+  "url": "http://127.0.0.1:5188",
+  "mode": "desktop",
+  "state": "defeat",
+  "requestedState": "defeat",
+  "appliedState": "defeat",
+  "runId": "pass-2",
+  "seed": 42,
+  "screenshotPath": "artifacts/pass-2/desktop-defeat.png",
+  "gpu": {
+    "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 3050 Laptop GPU (0x000025E2) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+    "vendor": "Google Inc. (NVIDIA)",
+    "softwareRendered": false
+  },
+  "result": {
+    "ok": true,
+    "reason": "nonblank",
+    "rect": {
+      "x": 0,
+      "y": 0,
+      "width": 1280,
+      "height": 720
+    },
+    "drawingBuffer": {
+      "width": 1280,
+      "height": 720
+    },
+    "alphaPixels": 4096,
+    "variance": 244,
+    "colorBuckets": 236,
+    "metrics": {
+      "colorBuckets": 333,
+      "colorEntropyBits": 5.65,
+      "edgeDensity": 0.364,
+      "luminance": {
+        "mean": 116.7,
+        "p5": 63.2,
+        "p95": 184.9,
+        "contrast": 121.7
+      },
+      "dominantColorShare": 0.161,
+      "nonBackgroundShare": 0.839
+    },
+    "renderBudget": {
+      "tier": "desktop",
+      "note": "starting-point budget; adjust per game and document overrides",
+      "rows": [
+        {
+          "metric": "calls",
+          "actual": 37,
+          "limit": 300,
+          "ok": true
+        },
+        {
+          "metric": "triangles",
+          "actual": 543524,
+          "limit": 750000,
+          "ok": true
+        },
+        {
+          "metric": "geometries",
+          "actual": 31,
+          "limit": 300,
+          "ok": true
+        },
+        {
+          "metric": "textures",
+          "actual": 16,
+          "limit": 60,
+          "ok": true
+        }
+      ],
+      "withinBudget": true
+    },
+    "diagnostics": {
+      "frame": 8,
+      "elapsed": 4.308099999994029,
+      "outcome": "defeat",
+      "player": {
+        "position": {
+          "x": 0,
+          "y": 0,
+          "z": 6.871597084069547
+        },
+        "speed": 6.858089032162964e-8,
+        "health": 0,
+        "state": "down"
+      },
+      "npc": {
+        "position": {
+          "x": 0,
+          "y": 0,
+          "z": -3.3599999999999994
+        },
+        "health": 400,
+        "mood": "calm",
+        "state": "calm"
+      },
+      "renderer": {
+        "calls": 37,
+        "triangles": 543524,
+        "geometries": 31,
+        "textures": 16
+      },
+      "canvas": {
+        "clientWidth": 1280,
+        "clientHeight": 720,
+        "width": 1280,
+        "height": 720,
+        "dpr": 1
+      }
+    }
+  },
+  "consoleErrors": [],
+  "pageErrors": [],
+  "consoleErrorCount": 0,
+  "pageErrorCount": 0
+}

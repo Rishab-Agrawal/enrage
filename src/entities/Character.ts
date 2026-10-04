@@ -3,7 +3,7 @@ import type { GLTF } from 'three/addons/loaders/GLTFLoader.js';
 import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
 import { addOutline, toonGradient } from '../world/toon';
 
-export type PlayOptions = { loop?: boolean; fade?: number; speed?: number; from?: number };
+type PlayOptions = { loop?: boolean; fade?: number; speed?: number; from?: number };
 
 /** A Tripo-baked GLB as a cel-shaded, animated fighter with a rim-light and hit-flash channel. */
 export class Character {

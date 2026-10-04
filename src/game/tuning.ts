@@ -10,8 +10,6 @@ export const tuning = {
   haymakerDamage: 30,
 };
 
-export type Tuning = typeof tuning;
-
 /** Radius of the playable circle, metres. */
 export const ARENA_RADIUS = 12;
 /** A calm NPC never lets the player inside this distance. */
