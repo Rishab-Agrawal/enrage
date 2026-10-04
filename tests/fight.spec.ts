@@ -49,11 +49,13 @@ test('WASD moves the player', async ({ page }) => {
   expect(errors).toEqual([]);
 });
 
-test('legs always show the speed the body actually moves at', async ({ page }) => {
+test('legs settle on the speed the body actually moves at', async ({ page }) => {
   test.setTimeout(60_000);
   const errors = await start(page);
   const misfits: string[] = [];
   let last = await read(page);
+  // When each fighter's legs last matched the body: they get a blend's time to catch up with a change.
+  const matched = { player: last.elapsed, npc: last.elapsed };
   const watch = async (ms: number) => {
     for (const end = Date.now() + ms; Date.now() < end; ) {
       await page.waitForTimeout(60);
@@ -61,10 +63,14 @@ test('legs always show the speed the body actually moves at', async ({ page }) =
       const dt = d.elapsed - last.elapsed;
       for (const who of ['player', 'npc'] as const) {
         const [a, b] = [last[who], d[who]];
-        if (dt <= 0 || a.stride === null || b.stride === null || a.state !== b.state) continue;
+        if (dt <= 0 || a.stride === null || b.stride === null || a.state !== b.state) {
+          matched[who] = d.elapsed;
+          continue;
+        }
         // The body's average speed over the window lies between the speeds the legs showed at its ends.
         const moved = Math.hypot(b.position.x - a.position.x, b.position.z - a.position.z) / dt;
-        if (moved < Math.min(a.stride, b.stride) - 0.5 || moved > Math.max(a.stride, b.stride) + 0.5) {
+        if (moved >= Math.min(a.stride, b.stride) - 0.5 && moved <= Math.max(a.stride, b.stride) + 0.5) matched[who] = d.elapsed;
+        else if (d.elapsed - matched[who] > 0.3) {
           misfits.push(`${who} ${b.state} at ${d.elapsed.toFixed(2)}s: legs ${a.stride.toFixed(1)}→${b.stride.toFixed(1)} m/s, body ${moved.toFixed(1)} m/s`);
         }
       }

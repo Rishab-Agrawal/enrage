@@ -44,32 +44,61 @@ function readClip(file) {
 }
 
 const isConstant = (values, stride) => values.every((v, i) => Math.abs(v - values[i % stride]) < 1e-5);
-const seam = ({ values: q }) => {
-  const n = q.length - 4;
-  return 2 * Math.acos(Math.min(1, Math.abs(q[0] * q[n] + q[1] * q[n + 1] + q[2] * q[n + 2] + q[3] * q[n + 3])));
-};
+const angle = (q, i, j) => 2 * Math.acos(Math.min(1, Math.abs(q[i] * q[j] + q[i + 1] * q[j + 1] + q[i + 2] * q[j + 2] + q[i + 3] * q[j + 3])));
 
-/** Makes a locomotion cycle play in place. Returns the ground speed it depicted, in armature units per second. */
+/** Keys `a` < `b`, at least half the take apart, whose poses match best: the take's cleanest cycle. */
+function bestCycle(clip, n) {
+  const rotations = clip.tracks.filter((t) => t.name.endsWith('.quaternion') && t.times.length === n);
+  let best = { a: 0, b: n - 1, mismatch: Infinity };
+  for (let a = 0; a < n; a++) {
+    for (let b = a + Math.ceil(n / 2); b < n; b++) {
+      let mismatch = 0;
+      for (const { values } of rotations) mismatch += angle(values, a * 4, b * 4) ** 2;
+      if (mismatch < best.mismatch) best = { a, b, mismatch };
+    }
+  }
+  return best;
+}
+
+/**
+ * Makes a locomotion take a seamless in-place cycle: trims it to its cleanest cycle (Tripo's run starts
+ * mid-stride and accelerating), then spreads every channel's mismatch across the loop, the Hip's travel
+ * included, evenly over the cycle. Returns the ground speed it depicted, in armature units per second.
+ */
 function inPlace(clip) {
-  // Hip carries the travel (Z is up): strip its horizontal drift and centre the cycle on the body's origin, keeping sway and bob.
-  const { times, values } = clip.tracks.find((t) => t.name === 'Hip.position');
-  const n = times.length, last = values.length - 3, span = times[n - 1] - times[0];
-  const drift = [values[last] - values[0], values[last + 1] - values[1]];
+  const hip = clip.tracks.find((t) => t.name === 'Hip.position');
+  const { a, b } = bestCycle(clip, hip.times.length);
+  const [start, period] = [hip.times[a], hip.times[b] - hip.times[a]];
+  const frames = hip.times.slice(a, b + 1);
+  for (const track of clip.tracks) {
+    const interpolant = track.createInterpolant(), size = track.getValueSize();
+    const values = new Float32Array(frames.length * size);
+    frames.forEach((t, i) => values.set(interpolant.evaluate(t), i * size));
+    track.times = frames.map((t) => t - start);
+    track.values = values;
+  }
+  clip.resetDuration();
+  let travel;
+  for (const track of clip.tracks) {
+    const { times, values } = track, size = track.getValueSize(), last = values.length - size;
+    const flip = size === 4 && values.slice(last).reduce((dot, v, k) => dot + v * values[k], 0) < 0 ? -1 : 1;
+    const error = Array.from(values.slice(last), (v, k) => v - flip * values[k]);
+    for (let i = 0; i < times.length; i++) {
+      for (let k = 0; k < size; k++) values[i * size + k] -= (error[k] * times[i]) / period;
+      if (size === 4) {
+        const q = values.subarray(i * 4, i * 4 + 4), length = Math.hypot(...q);
+        for (let k = 0; k < 4; k++) q[k] /= length;
+      }
+    }
+    if (track === hip) travel = error;
+  }
+  // Hip carries the travel (Z is up): centre its sway on the body's origin.
   for (const k of [0, 1]) {
     let mean = 0;
-    for (let i = 0; i < n; i++) mean += (values[i * 3 + k] -= (drift[k] * (times[i] - times[0])) / span) / n;
-    for (let i = 0; i < n; i++) values[i * 3 + k] -= mean;
+    for (let i = k; i < hip.values.length; i += 3) mean += hip.values[i] / hip.times.length;
+    for (let i = k; i < hip.values.length; i += 3) hip.values[i] -= mean;
   }
-  // A cycle missing its closing frame (Tripo's run) hitches on every wrap: repeat frame 0 one step on.
-  if (clip.tracks.some((t) => t.name.endsWith('.quaternion') && seam(t) > 0.02)) {
-    const end = times[n - 1] + times[n - 1] - times[n - 2];
-    for (const track of clip.tracks) {
-      track.values = Float32Array.from([...track.values, ...track.values.slice(0, track.getValueSize())]);
-      track.times = Float32Array.from([...track.times, end]);
-    }
-    clip.resetDuration();
-  }
-  return Math.hypot(...drift) / span;
+  return Math.hypot(travel[0], travel[1]) / period;
 }
 
 const io = new NodeIO();
