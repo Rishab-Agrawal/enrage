@@ -26,6 +26,8 @@ const CHARACTERS = {
 };
 // Seconds to keep: the defeat take stands back up at the end.
 const TRIM = { 'player/defeat': 4.6, 'npc/defeat': 4.6 };
+// Locomotion plays in place: the game moves the body.
+const IN_PLACE = new Set(['run', 'walk']);
 const PATHS = { position: 'translation', quaternion: 'rotation', scale: 'scale' };
 
 const fileIn = (dir, ext) => {
@@ -61,9 +63,15 @@ for (const [character, clips] of Object.entries(CHARACTERS)) {
       // FBX units: the armature carries a 100x scale the GLB already bakes in.
       if (nodeName === 'Armature' && property === 'scale') continue;
       if (property === 'scale' && isConstant(values, stride)) continue;
-      // In place: pin Root's horizontal travel (armature space is Z-up), keep its vertical bob.
-      if (nodeName === 'Root' && property === 'position') {
-        for (let i = 0; i < values.length; i += 3) { values[i] = values[0]; values[i + 1] = values[1]; }
+      // Hip carries the travel (Z is up): strip its horizontal drift and centre the cycle on the body's origin, keeping sway and bob.
+      if (IN_PLACE.has(name) && nodeName === 'Hip' && property === 'position') {
+        const { times } = track, n = times.length, last = values.length - 3;
+        for (const k of [0, 1]) {
+          const drift = values[last + k] - values[k];
+          let mean = 0;
+          for (let i = 0; i < n; i++) mean += (values[i * 3 + k] -= (drift * (times[i] - times[0])) / (times[n - 1] - times[0])) / n;
+          for (let i = 0; i < n; i++) values[i * 3 + k] -= mean;
+        }
       }
       const node = nodes.get(nodeName);
       if (!node) throw new Error(`${character}/${name}: no node ${nodeName}`);
