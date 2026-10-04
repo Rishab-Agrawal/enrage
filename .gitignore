@@ -1,0 +1,8 @@
+node_modules/
+dist/
+test-results/
+artifacts/tripo*
+*.log
+.DS_Store
+references/ccgs/
+.claude/settings.local.json
