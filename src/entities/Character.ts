@@ -53,7 +53,7 @@ export class Character {
 
   update(delta: number): void {
     this.mixer.update(delta);
-    this.flash.value = Math.max(0, this.flash.value - delta * 6);
+    this.flash.value = Math.max(0, this.flash.value - delta * 8);
   }
 
   private toonFrom(source: THREE.MeshStandardMaterial): THREE.MeshToonMaterial {

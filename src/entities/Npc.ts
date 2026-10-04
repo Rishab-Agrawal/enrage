@@ -136,7 +136,7 @@ export class Npc {
   /** Damage always lands; a flinch only interrupts movement, never a committed attack or roar. */
   takeHit(damage: number): void {
     this.health = Math.max(0, this.health - damage);
-    this.character.flash.value = 0.8;
+    this.character.flash.value = 0.45;
     if (this.health <= 0) this.enter('down');
     else if ((this.state === 'chase' || this.state === 'recover') && this.poise <= 0) {
       this.poise = POISE_TIME;

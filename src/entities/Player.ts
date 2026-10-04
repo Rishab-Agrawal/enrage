@@ -132,21 +132,22 @@ export class Player {
   takeHit(damage: number, from: THREE.Vector3, knockback: number): boolean {
     if (this.invulnerable) return false;
     this.health = Math.max(0, this.health - damage);
+    this.character.flash.value = 0.45;
     this.push(from, knockback + 2.5);
-    this.character.flash.value = 0.6;
-    this.timer = 0;
     if (this.health <= 0) {
       this.state = 'down';
       this.character.play('defeat', { loop: false, speed: 1.2, fade: 0.1 });
-    } else {
-      this.state = 'hurt';
-      this.character.play('hurt', { loop: false, speed: 1.5, fade: 0.06 });
     }
     return true;
   }
 
+  /** Knocked away from `from`: a short stagger that input can't steer out of. */
   push(from: THREE.Vector3, strength: number): void {
+    if (this.state === 'down') return;
     this.velocity.subVectors(this.position, from).setY(0).setLength(strength);
+    this.state = 'hurt';
+    this.timer = 0;
+    this.character.play('hurt', { loop: false, speed: 1.5, fade: 0.06 });
   }
 
   private buffer(action: 'strike' | 'dodge'): void {

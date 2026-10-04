@@ -176,6 +176,8 @@ export class Game {
         }
       }
       if (event.type === 'shove' && distance < PERSONAL_SPACE + 1.2) this.player.push(this.npc.position, 9);
+      // His roar blasts away anyone standing at his feet: enraging him up close isn't free damage.
+      if (event.type === 'mood' && event.mood === 'enraged' && distance < PERSONAL_SPACE + 0.5) this.player.push(this.npc.position, 8);
     }
 
     // A calm NPC keeps the player out of reach; otherwise bodies just don't overlap.
