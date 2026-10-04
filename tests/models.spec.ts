@@ -37,6 +37,10 @@ for (const model of ['player', 'npc']) {
           let farthest = 0;
           for (let i = 0; i < v.length; i += 3) farthest = Math.max(farthest, Math.hypot(v[i], v[i + 1]));
           expect(farthest, `${bone} travel`).toBeLessThan(0.25); // gait sway, not travel
+          const steps: number[] = [];
+          for (let i = 3; i < v.length; i += 3) steps.push(Math.hypot(v[i] - v[i - 3], v[i + 1] - v[i - 2]));
+          steps.sort((a, b) => a - b);
+          expect(steps.at(-1)!, `${bone} lurch`).toBeLessThan(5 * steps[steps.length >> 1]); // sways, never jolts
         }
       }
     }

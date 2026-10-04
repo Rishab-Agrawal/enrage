@@ -46,12 +46,17 @@ function readClip(file) {
 const isConstant = (values, stride) => values.every((v, i) => Math.abs(v - values[i % stride]) < 1e-5);
 const angle = (q, i, j) => 2 * Math.acos(Math.min(1, Math.abs(q[i] * q[j] + q[i + 1] * q[j + 1] + q[i + 2] * q[j + 2] + q[i + 3] * q[j + 3])));
 
-/** Keys `a` < `b`, at least half the take apart, whose poses match best: the take's cleanest cycle. */
-function bestCycle(clip, n) {
+/**
+ * Keys `a` < `b` one gait cycle (two steps, 0.5-1.5 s in any walk or run) apart whose poses match best: the
+ * take's cleanest cycle. Looping more than one cycle would repeat the take's glitches (Tripo's walk lurches sideways).
+ */
+function bestCycle(clip, times) {
+  const n = times.length;
   const rotations = clip.tracks.filter((t) => t.name.endsWith('.quaternion') && t.times.length === n);
   let best = { a: 0, b: n - 1, mismatch: Infinity };
   for (let a = 0; a < n; a++) {
-    for (let b = a + Math.ceil(n / 2); b < n; b++) {
+    for (let b = a + 1; b < n && times[b] - times[a] <= 1.5; b++) {
+      if (times[b] - times[a] < 0.5) continue;
       let mismatch = 0;
       for (const { values } of rotations) mismatch += angle(values, a * 4, b * 4) ** 2;
       if (mismatch < best.mismatch) best = { a, b, mismatch };
@@ -67,7 +72,7 @@ function bestCycle(clip, n) {
  */
 function inPlace(clip) {
   const hip = clip.tracks.find((t) => t.name === 'Hip.position');
-  const { a, b } = bestCycle(clip, hip.times.length);
+  const { a, b } = bestCycle(clip, hip.times);
   const [start, period] = [hip.times[a], hip.times[b] - hip.times[a]];
   const frames = hip.times.slice(a, b + 1);
   for (const track of clip.tracks) {
