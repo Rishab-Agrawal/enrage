@@ -1,9 +1,10 @@
 // Bakes each Tripo character into one game GLB: the rig GLB's skinned mesh and
-// PBR textures plus the animation tracks of every retargeted clip FBX.
-// Usage: node scripts/bake-characters.mjs   (reads artifacts/tripo, writes public/models)
+// PBR textures plus the animation tracks of every clip FBX (Tripo retargets, or Mixamo takes retargeted here).
+// Usage: node scripts/bake-characters.mjs   (reads artifacts, writes public/models)
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import sharp from 'sharp';
+import * as THREE from 'three';
 import { NodeIO } from '@gltf-transform/core';
 import { dedup, prune, textureCompress } from '@gltf-transform/functions';
 
@@ -11,17 +12,17 @@ import { dedup, prune, textureCompress } from '@gltf-transform/functions';
 globalThis.document = { createElementNS: () => ({ addEventListener() {}, removeEventListener() {}, style: {} }) };
 const { FBXLoader } = await import('three/examples/jsm/loaders/FBXLoader.js');
 
-const TRIPO = 'artifacts/tripo';
-// Clip name -> retarget output dir. Both rigs are Tripo's normalised v1.0 skeleton, so
+const ARTIFACTS = 'artifacts';
+// Clip name -> FBX dir. Both rigs are Tripo's normalised v1.0 skeleton, so
 // clips transfer between them (Gorran's haymaker is Wren's cross; both collapse the same way).
 const CHARACTERS = {
   player: {
-    idle: 'player-anim/idle', walk: 'npc-anim/walk', run: 'player-anim/run', jab: 'player-anim/box_01', cross: 'player-anim/box_02',
-    hurt: 'player-anim/hit_to_body_01', defeat: 'npc-anim/defeat_03',
+    idle: 'tripo/player-anim/idle', walk: 'mixamo/walk', run: 'tripo/player-anim/run', jab: 'tripo/player-anim/box_01', cross: 'tripo/player-anim/box_02',
+    hurt: 'tripo/player-anim/hit_to_body_01', defeat: 'tripo/npc-anim/defeat_03',
   },
   npc: {
-    calm: 'npc-anim/fold_arms', idle: 'player-anim/idle', roar: 'npc-anim/angry_01', walk: 'npc-anim/walk', run: 'npc-anim/run',
-    punch: 'npc-anim/box_03', haymaker: 'player-anim/box_02', hurt: 'npc-anim/hit_to_stomach', defeat: 'npc-anim/defeat_03',
+    calm: 'tripo/npc-anim/fold_arms', idle: 'tripo/player-anim/idle', roar: 'tripo/npc-anim/angry_01', walk: 'tripo/npc-anim/walk', run: 'tripo/npc-anim/run',
+    punch: 'tripo/npc-anim/box_03', haymaker: 'tripo/player-anim/box_02', hurt: 'tripo/npc-anim/hit_to_stomach', defeat: 'tripo/npc-anim/defeat_03',
   },
 };
 // Seconds to keep: the defeat take stands back up at the end.
@@ -36,11 +37,83 @@ const fileIn = (dir, ext) => {
   return join(dir, name);
 };
 
-function readClip(file) {
+function readFbx(file) {
   const buffer = readFileSync(file);
-  const fbx = new FBXLoader().parse(buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength), '');
-  // FBXLoader emits each take twice; the shallower node path binds correctly.
-  return fbx.animations.sort((a, b) => a.name.split('|').length - b.name.split('|').length)[0];
+  return new FBXLoader().parse(buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength), '');
+}
+
+// FBXLoader emits each take twice; the shallower node path binds correctly.
+const takeOf = (fbx) => fbx.animations.sort((a, b) => a.name.split('|').length - b.name.split('|').length)[0];
+
+// Mixamo bone -> Tripo bone. Tripo bones not listed hold their rest pose.
+const MIXAMO = {
+  Hips: 'Hip', Spine: 'Waist', Spine1: 'Spine01', Spine2: 'Spine02', Neck: 'NeckTwist01', Head: 'Head',
+  ...Object.fromEntries(['Left', 'Right'].flatMap((side) => Object.entries({
+    Shoulder: 'Clavicle', Arm: 'Upperarm', ForeArm: 'Forearm', Hand: 'Hand', UpLeg: 'Thigh', Leg: 'Calf', Foot: 'Foot', ToeBase: 'ToeBase',
+  }).map(([from, to]) => [side + from, `${side[0]}_${to}`]))),
+};
+// Mixamo faces +Z; Tripo faces +X. Both are Y-up.
+const TO_TRIPO = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI / 2);
+// Tripo's clips key the Armature from Z-up to Y-up and counter-rotate Root; keying the same keeps crossfades upright.
+const ARMATURE = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -Math.PI / 2);
+
+/**
+ * Re-expresses a Mixamo take on a Tripo rig. Both rest in a T-pose, so each Tripo bone turns, in world space, as its
+ * Mixamo bone turns from rest; the hips travel scaled by hip height.
+ */
+function retarget(fbx, nodes) {
+  const take = takeOf(fbx);
+  const world = (node) => {
+    const m = new THREE.Matrix4().fromArray(node.getWorldMatrix());
+    const [position, rotation] = [new THREE.Vector3(), new THREE.Quaternion()];
+    m.decompose(position, rotation, new THREE.Vector3());
+    return { position, rotation };
+  };
+  const bone = (name) => fbx.getObjectByName(`mixamorig${name}`);
+  fbx.updateMatrixWorld(true);
+  const rest = new Map(Object.keys(MIXAMO).map((name) => [name, bone(name).getWorldQuaternion(new THREE.Quaternion())]));
+  const hipsRest = bone('Hips').getWorldPosition(new THREE.Vector3());
+  const [root, hip] = [world(nodes.get('Root')), world(nodes.get('Hip'))];
+  const scale = hip.position.y / hipsRest.y;
+  const tripo = new Map(Object.entries(MIXAMO).map(([from, to]) => [to, from]));
+
+  const times = take.tracks.find((t) => t.name === 'mixamorigHips.position').times;
+  const values = new Map([...tripo.keys()].map((name) => [name, []]));
+  const hipTravel = [];
+  const mixer = new THREE.AnimationMixer(fbx);
+  mixer.clipAction(take).setLoop(THREE.LoopOnce).play().clampWhenFinished = true; // sample the last key, not a wrap to the first
+  const turn = new THREE.Quaternion(), q = new THREE.Quaternion(), p = new THREE.Vector3();
+  for (const t of times) {
+    mixer.setTime(t);
+    fbx.updateMatrixWorld(true);
+    // Walk the Tripo tree from Root, carrying each parent's world rotation.
+    const visit = (node, parent) => {
+      const from = tripo.get(node.getName());
+      let rotation;
+      if (from) {
+        bone(from).getWorldQuaternion(turn).multiply(q.copy(rest.get(from)).invert());
+        turn.premultiply(TO_TRIPO).multiply(q.copy(TO_TRIPO).invert());
+        rotation = turn.clone().multiply(world(node).rotation);
+        values.get(node.getName()).push(...q.copy(parent).invert().multiply(rotation).toArray());
+      } else {
+        rotation = parent.clone().multiply(new THREE.Quaternion(...node.getRotation()));
+      }
+      for (const child of node.listChildren()) visit(child, rotation);
+    };
+    for (const child of nodes.get('Root').listChildren()) visit(child, root.rotation);
+    bone('Hips').getWorldPosition(p).sub(hipsRest).multiplyScalar(scale).applyQuaternion(TO_TRIPO).add(hip.position);
+    hipTravel.push(...p.sub(root.position).applyQuaternion(q.copy(root.rotation).invert()).toArray());
+  }
+
+  const constant = (name, value) => new THREE.KeyframeTrack(name, [0, times.at(-1)], [...value, ...value]);
+  const armatureRoot = new THREE.Quaternion().copy(ARMATURE).invert().multiply(root.rotation);
+  return new THREE.AnimationClip(take.name, -1, [
+    constant('Armature.quaternion', ARMATURE.toArray()),
+    constant('Root.quaternion', armatureRoot.toArray()),
+    constant('Root.position', root.position.clone().applyQuaternion(ARMATURE.clone().invert()).toArray()),
+    new THREE.VectorKeyframeTrack('Hip.position', times, hipTravel),
+    ...[...values].map(([name, v]) => new THREE.QuaternionKeyframeTrack(`${name}.quaternion`, times, v)),
+  ]);
 }
 
 const isConstant = (values, stride) => values.every((v, i) => Math.abs(v - values[i % stride]) < 1e-5);
@@ -67,8 +140,8 @@ function bestCycle(clip, times) {
 
 /**
  * Makes a locomotion take a seamless in-place cycle: trims it to its cleanest cycle (Tripo's run starts
- * mid-stride and accelerating), then spreads every channel's mismatch across the loop, the Hip's travel
- * included, evenly over the cycle. Returns the ground speed it depicted, in armature units per second.
+ * mid-stride and accelerating), then spreads every channel's mismatch in pose and velocity across the loop, the
+ * Hip's travel included. Returns the ground speed it depicted, in armature units per second.
  */
 function inPlace(clip) {
   const hip = clip.tracks.find((t) => t.name === 'Hip.position');
@@ -88,8 +161,12 @@ function inPlace(clip) {
     const { times, values } = track, size = track.getValueSize(), last = values.length - size;
     const flip = size === 4 && values.slice(last).reduce((dot, v, k) => dot + v * values[k], 0) < 0 ? -1 : 1;
     const error = Array.from(values.slice(last), (v, k) => v - flip * values[k]);
+    // Likewise its velocity (Mixamo's loops close the pose, not the motion): a parabola, zero at both ends.
+    const slope = (i) => Array.from({ length: size }, (_, k) => (values[(i + 1) * size + k] - values[i * size + k]) / (times[i + 1] - times[i]));
+    const [opening, closing] = [slope(0), slope(times.length - 2)];
+    const kink = closing.map((v, k) => (v - flip * opening[k]) / (2 * period));
     for (let i = 0; i < times.length; i++) {
-      for (let k = 0; k < size; k++) values[i * size + k] -= (error[k] * times[i]) / period;
+      for (let k = 0; k < size; k++) values[i * size + k] += kink[k] * times[i] * (period - times[i]) - (error[k] * times[i]) / period;
       if (size === 4) {
         const q = values.subarray(i * 4, i * 4 + 4), length = Math.hypot(...q);
         for (let k = 0; k < 4; k++) q[k] /= length;
@@ -108,13 +185,14 @@ function inPlace(clip) {
 
 const io = new NodeIO();
 for (const [character, clips] of Object.entries(CHARACTERS)) {
-  const doc = await io.read(fileIn(join(TRIPO, `${character}-rig`, 'rig'), '.glb'));
+  const doc = await io.read(fileIn(join(ARTIFACTS, 'tripo', `${character}-rig`, 'rig'), '.glb'));
   const root = doc.getRoot();
   const buffer = root.listBuffers()[0];
   const nodes = new Map(root.listNodes().map((n) => [n.getName(), n]));
 
   for (const [name, source] of Object.entries(clips)) {
-    const clip = readClip(fileIn(join(TRIPO, source), '.fbx'));
+    const fbx = readFbx(fileIn(join(ARTIFACTS, source), '.fbx'));
+    const clip = fbx.getObjectByName('mixamorigHips') ? retarget(fbx, nodes) : takeOf(fbx);
     if (TRIM[`${character}/${name}`]) clip.trim(0, TRIM[`${character}/${name}`]);
     const animation = doc.createAnimation(name);
     if (IN_PLACE.has(name)) animation.setExtras({ groundSpeed: inPlace(clip) });

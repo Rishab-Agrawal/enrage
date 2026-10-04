@@ -2,6 +2,7 @@ node_modules/
 dist/
 test-results/
 artifacts/tripo*
+artifacts/mixamo/
 *.log
 .DS_Store
 references/ccgs/
