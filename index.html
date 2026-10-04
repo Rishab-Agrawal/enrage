@@ -2,30 +2,57 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <meta name="theme-color" content="#111312" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#2b3550" />
     <link rel="icon" href="data:," />
-    <title>Three.js Vite Game</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@500;700;900&display=swap" rel="stylesheet" />
+    <title>enrage</title>
   </head>
   <body>
     <main id="app">
-      <canvas id="game-canvas" aria-label="Playable Three.js game canvas"></canvas>
-      <section id="hud" aria-live="polite">
-        <div class="hud-metric">
-          <span>Relays</span>
-          <strong><span id="score-value">0</span>/<span id="target-value">8</span></strong>
-        </div>
-        <div class="hud-metric">
-          <span>Time</span>
-          <strong id="timer-value">00:00</strong>
-        </div>
-        <div id="status-line">Collect relays</div>
-      </section>
-      <div id="touch-controls" aria-hidden="true">
-        <div id="touch-stick">
-          <div id="touch-knob"></div>
-        </div>
-        <button id="dash-button" type="button">Dash</button>
+      <canvas id="game-canvas" aria-label="Fight arena"></canvas>
+      <div id="vignette" aria-hidden="true"></div>
+
+      <header id="hud" aria-live="polite">
+        <section class="fighter player">
+          <h2>Wren</h2>
+          <div class="bar"><i class="chip"></i><i class="fill"></i></div>
+        </section>
+        <section class="fighter npc">
+          <h2>Gorran</h2>
+          <div class="bar"><i class="chip"></i><i class="fill"></i></div>
+          <div id="mood" class="mood calm">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path class="icon-calm" d="M4 14c3-1 5-4 8-4s5 3 8 4M4 18c3-1 5-4 8-4s5 3 8 4M12 3c2 2 3 4 3 6" />
+              <path class="icon-rage" d="M12 2c1 4 6 6 6 12a6 6 0 0 1-12 0c0-3 2-5 3-6 0 2 1 3 2 3 0-4-1-6 1-9z" />
+            </svg>
+            <span>Calm</span>
+          </div>
+        </section>
+      </header>
+
+      <p id="hint"></p>
+
+      <footer id="controls" aria-label="Controls">
+        <span><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> move</span>
+        <span><kbd>LMB</kbd> strike</span>
+        <span><kbd>Space</kbd> dodge</span>
+        <span><kbd>M</kbd> mute</span>
+      </footer>
+
+      <aside id="debug"></aside>
+
+      <div id="result" hidden>
+        <h1></h1>
+        <p></p>
+        <button type="button">Rematch <kbd>R</kbd></button>
+      </div>
+
+      <div id="loading">
+        <h1>enrage</h1>
+        <div class="progress"><i></i></div>
       </div>
     </main>
     <script type="module" src="/src/main.ts"></script>

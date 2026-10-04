@@ -1,13 +1,15 @@
 :root {
-  color: #f6f1df;
-  background: #111312;
-  font-family:
-    Avenir Next,
-    Avenir,
-    "Segoe UI",
-    sans-serif;
+  --ink: #1f1a2e;
+  --paper: #fff8ea;
+  --gold: #e9c77b;
+  --frame: rgba(28, 30, 48, 0.62);
+  --player: linear-gradient(90deg, #3ea98a, #9be6a4);
+  --npc: linear-gradient(270deg, #d8402a, #ffb257);
+  --calm: #8fe6d5;
+  --rage: #ff5a36;
+  color: var(--paper);
+  font-family: 'Zen Maru Gothic', 'Segoe UI', sans-serif;
   font-synthesis: none;
-  text-rendering: geometricPrecision;
 }
 
 * {
@@ -21,18 +23,7 @@ body,
   height: 100%;
   margin: 0;
   overflow: hidden;
-}
-
-body {
-  min-width: 320px;
-}
-
-#app {
-  position: relative;
-  background:
-    radial-gradient(circle at 18% 18%, rgba(245, 186, 73, 0.16), transparent 26rem),
-    radial-gradient(circle at 82% 72%, rgba(72, 186, 167, 0.14), transparent 24rem),
-    #111312;
+  background: #2b3550;
 }
 
 #game-canvas {
@@ -40,117 +31,306 @@ body {
   width: 100vw;
   height: 100vh;
   outline: none;
-  touch-action: none;
 }
 
+#vignette {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(ellipse at 50% 45%, transparent 55%, rgba(40, 24, 10, 0.38) 100%);
+  transition: box-shadow 0.4s;
+}
+
+#app.hurt #vignette {
+  box-shadow: inset 0 0 90px rgba(200, 30, 20, 0.45);
+}
+
+/* Health bars: mirrored fighting-game pair under the top edge. */
 #hud {
   position: absolute;
-  top: max(16px, env(safe-area-inset-top));
-  left: max(16px, env(safe-area-inset-left));
+  top: 22px;
+  left: 50%;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 48px;
+  width: min(940px, calc(100vw - 48px));
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.fighter h2 {
+  margin: 0 0 6px;
+  font-size: 1.15rem;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  text-shadow: 0 2px 0 var(--ink), 0 0 12px rgba(0, 0, 0, 0.35);
+}
+
+.npc h2 {
+  text-align: right;
+}
+
+.bar {
+  position: relative;
+  height: 20px;
+  border: 2px solid var(--gold);
+  background: var(--frame);
+  clip-path: polygon(14px 0, 100% 0, calc(100% - 14px) 100%, 0 100%);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
+}
+
+.npc .bar {
+  clip-path: polygon(0 0, calc(100% - 14px) 0, 100% 100%, 14px 100%);
+}
+
+.bar i {
+  position: absolute;
+  inset: 2px;
+  transform-origin: left;
+}
+
+.npc .bar i {
+  transform-origin: right;
+}
+
+.bar .chip {
+  background: #fff3d6;
+}
+
+.player .fill {
+  background: var(--player);
+}
+
+.npc .fill {
+  background: var(--npc);
+}
+
+.bar .fill::after {
+  content: '';
+  position: absolute;
+  inset: 0 0 55% 0;
+  background: rgba(255, 255, 255, 0.28);
+}
+
+.player.regen .fill {
+  animation: regen 1.6s linear infinite;
+}
+
+@keyframes regen {
+  50% {
+    filter: brightness(1.25);
+  }
+}
+
+.mood {
   display: flex;
   align-items: center;
-  gap: 10px;
-  pointer-events: none;
-  color: #f6f1df;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 8px;
+  font-weight: 900;
+  font-size: 0.95rem;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
-  letter-spacing: 0;
+  text-shadow: 0 2px 0 var(--ink);
 }
 
-.hud-metric {
-  min-width: 92px;
-  padding: 8px 10px;
-  border: 1px solid rgba(246, 241, 223, 0.24);
-  background: rgba(17, 19, 18, 0.72);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.24);
-  backdrop-filter: blur(10px);
+.mood svg {
+  width: 30px;
+  height: 30px;
+  padding: 4px;
+  border: 2px solid currentColor;
+  background: var(--frame);
+  transform: rotate(45deg);
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
 }
 
-.hud-metric span {
-  display: block;
-  color: rgba(246, 241, 223, 0.68);
-  font-size: 0.68rem;
+.mood svg path {
+  transform: rotate(-45deg);
+  transform-origin: center;
 }
 
-.hud-metric strong {
-  display: block;
-  margin-top: 2px;
-  font-size: 1.08rem;
+.mood.calm {
+  color: var(--calm);
 }
 
-#status-line {
-  min-width: 132px;
-  padding: 9px 11px;
-  border-left: 3px solid #f5ba49;
-  background: rgba(17, 19, 18, 0.6);
-  font-weight: 700;
-  font-size: 0.78rem;
+.mood.enraged {
+  color: var(--rage);
+  animation: smoulder 1.2s ease-in-out infinite;
 }
 
-#touch-controls {
-  position: absolute;
-  right: max(18px, env(safe-area-inset-right));
-  bottom: max(18px, env(safe-area-inset-bottom));
-  left: max(18px, env(safe-area-inset-left));
+.mood.calm .icon-rage,
+.mood.enraged .icon-calm {
   display: none;
-  justify-content: space-between;
-  align-items: flex-end;
+}
+
+.mood.enraged .icon-rage {
+  fill: currentColor;
+  stroke: none;
+}
+
+@keyframes smoulder {
+  50% {
+    filter: drop-shadow(0 0 8px var(--rage));
+  }
+}
+
+#hint {
+  position: absolute;
+  top: 128px;
+  left: 50%;
+  margin: 0;
+  padding: 6px 18px;
+  transform: translateX(-50%);
+  font-weight: 700;
+  font-size: 1rem;
+  white-space: nowrap;
+  text-shadow: 0 2px 0 var(--ink), 0 0 10px rgba(0, 0, 0, 0.5);
+  pointer-events: none;
+  transition: opacity 0.3s;
+}
+
+#hint:empty {
+  opacity: 0;
+}
+
+#controls {
+  position: absolute;
+  bottom: 18px;
+  left: 22px;
+  display: flex;
+  gap: 18px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  text-shadow: 0 1px 0 var(--ink);
   pointer-events: none;
 }
 
-#touch-stick {
-  position: relative;
-  width: clamp(96px, 24vw, 132px);
-  aspect-ratio: 1;
-  border: 1px solid rgba(246, 241, 223, 0.28);
-  border-radius: 50%;
-  background: rgba(17, 19, 18, 0.52);
-  pointer-events: auto;
-  touch-action: none;
+kbd {
+  display: inline-block;
+  min-width: 1.7em;
+  margin-right: 3px;
+  padding: 1px 6px;
+  border: 1px solid rgba(233, 199, 123, 0.8);
+  border-bottom-width: 3px;
+  background: var(--frame);
+  color: var(--paper);
+  font: inherit;
+  font-size: 0.8rem;
+  text-align: center;
 }
 
-#touch-knob {
+#result {
   position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 42%;
-  aspect-ratio: 1;
-  border-radius: 50%;
-  background: #f5ba49;
-  box-shadow: 0 0 24px rgba(245, 186, 73, 0.44);
-  transform: translate(-50%, -50%);
+  inset: 0;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 6px;
+  background: radial-gradient(ellipse at center, rgba(25, 20, 40, 0.55), rgba(25, 20, 40, 0.15) 70%);
+  animation: rise 0.5s ease-out;
 }
 
-#dash-button {
-  width: clamp(74px, 18vw, 96px);
-  aspect-ratio: 1;
-  border: 1px solid rgba(246, 241, 223, 0.3);
-  border-radius: 50%;
-  color: #111312;
-  background: #48baa7;
-  font-weight: 800;
-  pointer-events: auto;
-  touch-action: none;
+#result[hidden],
+#loading[hidden] {
+  display: none;
 }
 
-@media (pointer: coarse), (max-width: 760px) {
-  #hud {
-    right: max(12px, env(safe-area-inset-right));
-    left: max(12px, env(safe-area-inset-left));
-    flex-wrap: wrap;
-    gap: 8px;
-  }
+#result h1 {
+  margin: 0;
+  font-size: clamp(3rem, 8vw, 5.5rem);
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--gold);
+  text-shadow: 0 4px 0 var(--ink), 0 0 30px rgba(255, 190, 90, 0.5);
+}
 
-  .hud-metric {
-    min-width: 78px;
-    padding: 7px 8px;
-  }
+#result.defeat h1 {
+  color: #f2e6e0;
+  text-shadow: 0 4px 0 var(--ink), 0 0 30px rgba(220, 60, 40, 0.6);
+}
 
-  #status-line {
-    min-width: min(148px, 48vw);
-    font-size: 0.72rem;
-  }
+#result p {
+  margin: 0 0 16px;
+  font-size: 1.1rem;
+  font-weight: 700;
+  text-shadow: 0 2px 0 var(--ink);
+}
 
-  #touch-controls {
-    display: flex;
+#result button {
+  padding: 10px 26px;
+  border: 2px solid var(--gold);
+  background: var(--frame);
+  color: var(--paper);
+  font: inherit;
+  font-weight: 900;
+  font-size: 1.05rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+  clip-path: polygon(12px 0, 100% 0, calc(100% - 12px) 100%, 0 100%);
+}
+
+#result button:hover,
+#result button:focus-visible {
+  background: rgba(233, 199, 123, 0.3);
+  outline: none;
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
   }
+}
+
+#loading {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 18px;
+  background: linear-gradient(#5d8fd0, #a9c7e6 55%, #f3dfb8);
+}
+
+#loading h1 {
+  margin: 0;
+  font-size: 4rem;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  text-shadow: 0 4px 0 var(--ink);
+}
+
+.progress {
+  width: 220px;
+  height: 8px;
+  border: 2px solid var(--gold);
+  background: var(--frame);
+}
+
+.progress i {
+  display: block;
+  height: 100%;
+  background: var(--gold);
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 0.2s;
+}
+
+#debug {
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+}
+
+.lil-gui.root {
+  --background-color: rgba(28, 30, 48, 0.88);
+  --title-background-color: rgba(233, 199, 123, 0.25);
+  --font-family: 'Zen Maru Gothic', sans-serif;
 }

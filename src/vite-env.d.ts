@@ -1,28 +1,19 @@
 /// <reference types="vite/client" />
 
+interface Vec3 {
+  x: number;
+  y: number;
+  z: number;
+}
+
 interface ThreeGameDiagnostics {
   frame: number;
   elapsed: number;
-  score: number;
-  targetScore: number;
-  complete: boolean;
-  player: {
-    position: { x: number; y: number; z: number };
-    speed: number;
-  };
-  renderer: {
-    calls: number;
-    triangles: number;
-    geometries: number;
-    textures: number;
-  };
-  canvas: {
-    clientWidth: number;
-    clientHeight: number;
-    width: number;
-    height: number;
-    dpr: number;
-  };
+  outcome: 'victory' | 'defeat' | null;
+  player: { position: Vec3; speed: number; health: number; state: string };
+  npc: { position: Vec3; health: number; mood: 'calm' | 'enraged'; state: string };
+  renderer: { calls: number; triangles: number; geometries: number; textures: number };
+  canvas: { clientWidth: number; clientHeight: number; width: number; height: number; dpr: number };
 }
 
 interface ThreeGameTestHooks {
@@ -30,7 +21,7 @@ interface ThreeGameTestHooks {
   seed(value: number): void | Promise<void>;
   /** Acknowledge after setup/assets are ready; throw for unknown states. */
   setState(name: string): { state: string } | Promise<{ state: string }>;
-  /** Stop simulation/state transitions immediately; keep rendering. Await optional synchronization. */
+  /** Stop simulation/state transitions immediately; keep rendering. */
   setPausedForScreenshot(paused: boolean): void | Promise<void>;
   /** Stabilize ambient/idle visuals without requiring an unpaused simulation tick. */
   setReducedMotion(enabled: boolean): void | Promise<void>;

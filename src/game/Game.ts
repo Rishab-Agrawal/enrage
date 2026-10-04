@@ -1,312 +1,298 @@
 import * as THREE from 'three';
-import { InputController } from '../core/InputController';
+import type { GLTF } from 'three/addons/loaders/GLTFLoader.js';
+import { Input } from '../core/Input';
 import { Loop } from '../core/Loop';
 import { createRenderer, resizeRenderer } from '../core/Renderer';
-import { Pickup } from '../entities/Pickup';
-import { Player, type ArenaBounds } from '../entities/Player';
-import { AudioSystem } from '../systems/AudioSystem';
+import { Npc } from '../entities/Npc';
+import { Player } from '../entities/Player';
+import { Audio } from '../systems/Audio';
 import { CameraRig } from '../systems/CameraRig';
-import { CollisionSystem } from '../systems/CollisionSystem';
-import { DebugTools, type DebugTuning } from '../systems/DebugTools';
-import { Hud } from '../systems/Hud';
+import { DebugPanel } from '../systems/DebugPanel';
+import { Hud, type Outcome } from '../systems/Hud';
+import { Vfx } from '../systems/Vfx';
 import { createSeededRandom } from '../utils/random';
+import { Arena, SUN_DIRECTION } from '../world/Arena';
+import type { FightEvent, Mood } from './events';
+import { ARENA_RADIUS, PERSONAL_SPACE, tuning } from './tuning';
 
-const ARENA: ArenaBounds = {
-  halfWidth: 11,
-  halfDepth: 7,
-};
+const STEP = 1 / 60;
+const PLAYER_RIM = new THREE.Color('#ffd9a0').multiplyScalar(0.3);
+const RAGE_RIM = new THREE.Color('#ff3a14').multiplyScalar(0.75);
 
 export class Game {
   private readonly renderer: THREE.WebGLRenderer;
   private readonly scene = new THREE.Scene();
-  private readonly camera = new THREE.PerspectiveCamera(48, 1, 0.1, 80);
-  private readonly input: InputController;
-  private readonly player = new Player();
-  private readonly pickups: Pickup[] = [];
-  private readonly collision = new CollisionSystem();
-  private readonly audio = new AudioSystem();
-  private readonly hud = new Hud();
+  private readonly camera = new THREE.PerspectiveCamera(50, 1, 0.1, 3000);
+  private readonly input: Input;
+  private readonly player: Player;
+  private readonly npc: Npc;
+  private readonly arena: Arena;
   private readonly cameraRig = new CameraRig(this.camera);
+  private readonly vfx = new Vfx();
+  private readonly audio = new Audio();
+  private readonly hud = new Hud(() => this.rematch());
+  private readonly debug: DebugPanel;
   private readonly loop = new Loop(
-    (delta, elapsed) => this.update(delta, elapsed),
-    () => this.render(),
+    (delta) => this.update(delta),
+    () => this.renderer.render(this.scene, this.camera),
   );
-
-  private readonly tuning: DebugTuning = {
-    speed: 5.8,
-    dashMultiplier: 1.75,
-    acceleration: 13,
-    cameraLag: 0.16,
-    exposure: 1.05,
-    maxDpr: 2,
-  };
-
-  private readonly debugTools: DebugTools;
-  private frame = 0;
-  private score = 0;
-  private elapsed = 0;
-  private complete = false;
-  // Route ALL gameplay randomness through this.rng (never Math.random) so the
-  // seed() test hook keeps screenshot baselines and bot playtests deterministic.
+  private readonly events: FightEvent[] = [];
+  // All gameplay randomness goes through this seeded RNG so tests stay deterministic.
   private rng = createSeededRandom(1);
-  private pausedForScreenshot = false;
-  private reducedMotion = false;
+  private outcome: Outcome = null;
+  private outcomeTimer = 0;
+  private hitstop = 0;
+  private elapsed = 0;
+  private frame = 0;
+  private paused = false;
+  private readonly offset = new THREE.Vector3();
 
-  constructor(private readonly canvas: HTMLCanvasElement) {
+  constructor(
+    private readonly canvas: HTMLCanvasElement,
+    models: { player: GLTF; npc: GLTF },
+  ) {
     this.renderer = createRenderer(canvas);
-    this.renderer.toneMappingExposure = this.tuning.exposure;
-
-    const stick = this.getElement('#touch-stick');
-    const knob = this.getElement('#touch-knob');
-    const dashButton = this.getElement('#dash-button');
-    this.input = new InputController(stick, knob, dashButton);
-
-    this.debugTools = new DebugTools(this.tuning, () => {
-      this.renderer.toneMappingExposure = this.tuning.exposure;
-      resizeRenderer(this.renderer, this.camera, this.tuning.maxDpr);
-    });
-
-    this.createScene();
-    this.hud.setTarget(this.pickups.length);
-    this.cameraRig.snapTo(this.player.group.position);
-    resizeRenderer(this.renderer, this.camera, this.tuning.maxDpr);
+    this.input = new Input(canvas);
+    this.player = new Player(models.player);
+    this.npc = new Npc(models.npc, () => this.rng());
+    this.arena = new Arena({ a: this.player.position, b: this.npc.position });
+    this.debug = new DebugPanel(
+      () => this.npc.mood,
+      (mood) => this.setMood(mood),
+      () => this.rematch(),
+    );
+    this.buildScene();
+    this.rematch();
     this.installTestHooks();
-    this.publishDiagnostics();
   }
 
   start(): void {
     this.loop.start();
   }
 
+  /** The NPC's temper: the one input the fight takes from outside (debug panel now, the LLM later). */
+  setMood(mood: Mood): void {
+    if (this.outcome) return;
+    this.npc.setMood(mood, this.events);
+    this.debug.sync();
+  }
+
   dispose(): void {
     this.loop.stop();
     this.input.dispose();
-    this.audio.dispose();
-    this.debugTools.dispose();
-    for (const pickup of this.pickups) pickup.dispose();
-    this.player.dispose();
+    this.debug.dispose();
     this.renderer.dispose();
     window.__THREE_GAME_DIAGNOSTICS__ = undefined;
     window.__THREE_GAME_TEST_HOOKS__ = undefined;
   }
 
-  private update(delta: number, elapsed: number): void {
+  private buildScene(): void {
+    this.scene.fog = new THREE.Fog('#ead9b8', 70, 650);
+    const sun = new THREE.DirectionalLight('#ffe2b4', 2.7);
+    sun.position.copy(SUN_DIRECTION).multiplyScalar(40);
+    sun.castShadow = true;
+    sun.shadow.mapSize.set(2048, 2048);
+    Object.assign(sun.shadow.camera, { left: -18, right: 18, top: 18, bottom: -18, near: 1, far: 90 });
+    sun.shadow.bias = -0.0004;
+    sun.shadow.normalBias = 0.03;
+    this.scene.add(sun, new THREE.HemisphereLight('#c4dcff', '#6f7d3a', 1.35));
+    this.scene.add(this.arena.group, this.player.character.root, this.npc.character.root, this.vfx.group);
+    this.player.character.rim.value.copy(PLAYER_RIM);
+  }
+
+  private rematch(): void {
+    this.player.reset();
+    this.npc.reset();
+    this.outcome = null;
+    this.outcomeTimer = 0;
+    this.hitstop = 0;
+    this.events.length = 0;
+    this.debug.sync();
+    this.cameraRig.update(0, this.player.position, this.npc.position, true);
+  }
+
+  private update(delta: number): void {
     this.frame += 1;
-    if (this.pausedForScreenshot) {
-      this.publishDiagnostics();
-      return;
-    }
-    if (!this.complete) this.elapsed += delta;
-
-    resizeRenderer(this.renderer, this.camera, this.tuning.maxDpr);
-    // Reduced motion freezes ambient animation time so screenshots are stable.
-    const animDelta = this.reducedMotion ? 0 : delta;
-    const animElapsed = this.reducedMotion ? 0 : elapsed;
-    this.player.update(delta, animElapsed, this.input, this.tuning, ARENA);
-
-    for (const pickup of this.pickups) {
-      pickup.update(animDelta, animElapsed);
-    }
-
-    const collected = this.collision.collectPickups(this.player.group.position, this.pickups, 0.55);
-    for (const pickup of collected) {
-      this.score += 1;
-      this.audio.pickup(pickup.index);
-      this.hud.flashPickup();
-    }
-
-    if (this.score >= this.pickups.length) {
-      this.complete = true;
-    }
-
-    this.cameraRig.update(delta, this.player.group.position, this.tuning.cameraLag);
-    this.hud.update(this.score, this.pickups.length, this.elapsed, this.complete);
+    resizeRenderer(this.renderer, this.camera);
+    if (!this.paused) this.step(delta);
     this.publishDiagnostics();
   }
 
-  private render(): void {
-    this.renderer.render(this.scene, this.camera);
-  }
+  private step(delta: number): void {
+    this.elapsed += delta;
+    if (this.input.consume('mute')) this.audio.toggleMute();
+    if (this.input.consume('rematch') && this.outcome) this.rematch();
 
-  private createScene(): void {
-    this.scene.background = new THREE.Color('#151713');
-    this.scene.fog = new THREE.Fog('#151713', 20, 44);
+    // Hitstop slows the fight, never the camera or effects.
+    this.hitstop -= delta;
+    const fightDelta = this.hitstop > 0 ? delta * 0.06 : delta;
+    const live = !this.outcome;
+    this.player.update(fightDelta, live ? this.input : null, this.cameraRig.forward, this.npc.position, this.events);
+    if (live) this.npc.update(fightDelta, this.player.position, this.events);
+    else this.npc.character.update(fightDelta);
+    this.resolve(live);
+    this.react();
+    this.judge(delta);
 
-    const hemisphere = new THREE.HemisphereLight('#f6f1df', '#2b322d', 1.7);
-    this.scene.add(hemisphere);
-
-    const sun = new THREE.DirectionalLight('#fff1bf', 2.6);
-    sun.position.set(-5, 9, 6);
-    sun.castShadow = true;
-    sun.shadow.mapSize.set(2048, 2048);
-    sun.shadow.camera.near = 0.5;
-    sun.shadow.camera.far = 30;
-    sun.shadow.camera.left = -14;
-    sun.shadow.camera.right = 14;
-    sun.shadow.camera.top = 12;
-    sun.shadow.camera.bottom = -12;
-    this.scene.add(sun);
-
-    this.scene.add(this.createArena());
-    this.scene.add(this.player.group);
-    this.createPickups();
-  }
-
-  private createArena(): THREE.Group {
-    const arena = new THREE.Group();
-    const floorTexture = this.createFloorTexture();
-    floorTexture.wrapS = THREE.RepeatWrapping;
-    floorTexture.wrapT = THREE.RepeatWrapping;
-    floorTexture.repeat.set(ARENA.halfWidth / 2, ARENA.halfDepth / 2);
-
-    const floor = new THREE.Mesh(
-      new THREE.PlaneGeometry(ARENA.halfWidth * 2, ARENA.halfDepth * 2, 1, 1),
-      new THREE.MeshStandardMaterial({
-        color: '#2a2c25',
-        map: floorTexture,
-        roughness: 0.72,
-        metalness: 0.02,
-      }),
+    const rage = this.npc.mood === 'enraged' && this.npc.state !== 'down';
+    this.npc.character.rim.value.lerp(rage ? RAGE_RIM : PLAYER_RIM, 1 - Math.exp(-5 * delta));
+    this.vfx.update(delta, this.npc.position, rage ? 'enraged' : 'calm', this.elapsed);
+    this.arena.update(this.elapsed);
+    this.cameraRig.update(delta, this.player.position, this.npc.position);
+    this.hud.update(
+      {
+        player: this.player.health / tuning.playerMaxHealth,
+        npc: this.npc.health / tuning.npcMaxHealth,
+        mood: this.npc.mood,
+        regenerating: this.player.health < tuning.playerMaxHealth && this.player.state !== 'down',
+        hint: this.hint(),
+        outcome: this.outcomeTimer > 1.4 ? this.outcome : null,
+        npcHealthLeft: Math.ceil(this.npc.health),
+      },
+      delta,
     );
-    floor.rotation.x = -Math.PI / 2;
-    floor.receiveShadow = true;
-    arena.add(floor);
-
-    const railMaterial = new THREE.MeshStandardMaterial({
-      color: '#d94f35',
-      roughness: 0.52,
-      metalness: 0.08,
-    });
-    const longRailGeometry = new THREE.BoxGeometry(ARENA.halfWidth * 2 + 1, 0.55, 0.42);
-    const shortRailGeometry = new THREE.BoxGeometry(0.42, 0.55, ARENA.halfDepth * 2 + 1);
-    const rails = [
-      new THREE.Mesh(longRailGeometry, railMaterial),
-      new THREE.Mesh(longRailGeometry, railMaterial),
-      new THREE.Mesh(shortRailGeometry, railMaterial),
-      new THREE.Mesh(shortRailGeometry, railMaterial),
-    ];
-    rails[0].position.set(0, 0.28, -ARENA.halfDepth - 0.24);
-    rails[1].position.set(0, 0.28, ARENA.halfDepth + 0.24);
-    rails[2].position.set(-ARENA.halfWidth - 0.24, 0.28, 0);
-    rails[3].position.set(ARENA.halfWidth + 0.24, 0.28, 0);
-    for (const rail of rails) {
-      rail.castShadow = true;
-      rail.receiveShadow = true;
-      arena.add(rail);
-    }
-
-    const markerMaterial = new THREE.MeshBasicMaterial({ color: '#f5ba49' });
-    const markerGeometry = new THREE.RingGeometry(0.68, 0.72, 48);
-    const centerMarker = new THREE.Mesh(markerGeometry, markerMaterial);
-    centerMarker.rotation.x = -Math.PI / 2;
-    centerMarker.position.y = 0.018;
-    arena.add(centerMarker);
-
-    return arena;
   }
 
-  private createPickups(): void {
-    const positions = [
-      [-8, -4],
-      [-3, -5],
-      [3, -4.8],
-      [8, -3],
-      [-7.5, 3.5],
-      [-1.5, 4.7],
-      [4.5, 3.8],
-      [8.2, 1.4],
-    ];
+  /** Combat rules: blows land within reach and in front of the attacker; bodies don't overlap. */
+  private resolve(live: boolean): void {
+    const toNpc = this.offset.subVectors(this.npc.position, this.player.position).setY(0);
+    const distance = toNpc.length();
+    for (const event of this.events) {
+      if (event.type === 'contact' && event.who === 'player') {
+        const facing = new THREE.Vector3(Math.sin(this.player.yaw), 0, Math.cos(this.player.yaw));
+        const inFront = facing.dot(toNpc) > distance * 0.25;
+        if (this.npc.mood === 'enraged' && this.npc.state !== 'down' && distance <= event.reach && inFront) {
+          this.npc.takeHit(event.damage);
+          const at = this.player.position.clone().addScaledVector(toNpc, 0.55 / Math.max(distance, 0.01)).setY(1.35);
+          this.events.push({ type: 'hit', who: 'npc', at, damage: event.damage });
+        }
+      }
+      if (event.type === 'contact' && event.who === 'npc') {
+        const facing = new THREE.Vector3(Math.sin(this.npc.yaw), 0, Math.cos(this.npc.yaw));
+        const inFront = -facing.dot(toNpc) > distance * 0.4;
+        if (distance <= event.reach && inFront && this.player.takeHit(event.damage, this.npc.position, event.knockback)) {
+          const at = this.npc.position.clone().addScaledVector(toNpc, -0.9 / Math.max(distance, 0.01)).setY(1.2);
+          this.events.push({ type: 'hit', who: 'player', at, damage: event.damage });
+        }
+      }
+      if (event.type === 'shove' && distance < PERSONAL_SPACE + 1.2) this.player.push(this.npc.position, 9);
+    }
 
-    positions.forEach(([x, z], index) => {
-      const pickup = new Pickup(index, new THREE.Vector3(x, 0.8, z));
-      this.pickups.push(pickup);
-      this.scene.add(pickup.group);
-    });
+    // A calm NPC keeps the player out of reach; otherwise bodies just don't overlap.
+    const calm = live && this.npc.mood === 'calm';
+    const minimum = calm ? PERSONAL_SPACE : this.player.radius + this.npc.radius;
+    if (distance < minimum && distance > 0.001) {
+      const push = calm ? Math.min(minimum - distance, 0.15) : minimum - distance;
+      this.player.position.addScaledVector(toNpc, -push / distance);
+    }
+    for (const body of [this.player.position, this.npc.position]) {
+      const r = Math.hypot(body.x, body.z);
+      if (r > ARENA_RADIUS) body.multiplyScalar(ARENA_RADIUS / r);
+    }
   }
 
-  private createFloorTexture(): THREE.CanvasTexture {
-    const size = 256;
-    const textureCanvas = document.createElement('canvas');
-    textureCanvas.width = size;
-    textureCanvas.height = size;
-    const context = textureCanvas.getContext('2d');
-    if (!context) throw new Error('Could not create floor texture context.');
-
-    context.fillStyle = '#282a24';
-    context.fillRect(0, 0, size, size);
-    context.strokeStyle = 'rgba(246, 241, 223, 0.08)';
-    context.lineWidth = 1;
-    for (let i = 0; i <= size; i += 32) {
-      context.beginPath();
-      context.moveTo(i, 0);
-      context.lineTo(i, size);
-      context.moveTo(0, i);
-      context.lineTo(size, i);
-      context.stroke();
+  /** Feedback for this frame's events, then clear them. */
+  private react(): void {
+    for (const event of this.events) {
+      switch (event.type) {
+        case 'swing':
+          this.audio.swing(event.heavy);
+          break;
+        case 'hit': {
+          // Taking a blow from Gorran is the heavier event.
+          const heavy = event.who === 'player';
+          this.vfx.hit(event.at, heavy);
+          this.audio.hit(heavy);
+          this.cameraRig.shake(heavy ? 0.55 : 0.28);
+          this.hitstop = heavy ? 0.09 : 0.06;
+          break;
+        }
+        case 'dodge':
+          this.vfx.puff(event.at, 4);
+          this.audio.whoosh();
+          break;
+        case 'shove':
+          this.vfx.puff(this.player.position, 3);
+          this.audio.swing(true);
+          break;
+        case 'mood':
+          if (event.mood === 'enraged') {
+            this.vfx.roar();
+            this.audio.roar();
+            this.cameraRig.shake(0.5);
+          } else {
+            this.audio.chime();
+          }
+          break;
+        case 'contact':
+          break;
+      }
     }
-    context.strokeStyle = 'rgba(245, 186, 73, 0.24)';
-    context.lineWidth = 2;
-    context.strokeRect(8, 8, size - 16, size - 16);
+    this.events.length = 0;
+  }
 
-    const texture = new THREE.CanvasTexture(textureCanvas);
-    texture.colorSpace = THREE.SRGBColorSpace;
-    return texture;
+  private judge(delta: number): void {
+    if (this.outcome) {
+      this.outcomeTimer += delta;
+      return;
+    }
+    if (this.npc.health <= 0) this.outcome = 'victory';
+    else if (this.player.health <= 0) this.outcome = 'defeat';
+    if (!this.outcome) return;
+    this.audio.stinger(this.outcome === 'victory');
+    if (this.outcome === 'defeat') this.npc.standDown();
+    this.debug.sync();
+  }
+
+  private hint(): string {
+    if (this.outcome) return '';
+    const health = this.player.health / tuning.playerMaxHealth;
+    if (this.npc.mood === 'enraged') return health < 0.35 ? 'You can’t outlast him. Calm him down to rest.' : '';
+    if (this.npc.health === tuning.npcMaxHealth && health > 0.99) return 'He won’t fight while calm. Enrage him.';
+    return health > 0.95 ? 'Rested. Enrage him to fight on.' : 'He’s calm. Catch your breath.';
   }
 
   private installTestHooks(): void {
-    // Deterministic hooks consumed by tests/visual-regression.template.ts and
-    // bot playtests. Keep these real when evolving the game: silent no-op hooks
-    // produce flaky screenshot baselines.
+    const settle = (seconds: number) => {
+      for (let t = 0; t < seconds; t += STEP) this.step(STEP);
+    };
     window.__THREE_GAME_TEST_HOOKS__ = {
       seed: (value: number) => {
         this.rng = createSeededRandom(value);
       },
       setState: (name: string) => {
-        if (name !== 'active-play' && name !== 'complete') throw new Error(`Unknown test state: ${name}`);
-        this.resetRun();
-        if (name === 'complete') this.completeRun();
-        this.render();
-        this.publishDiagnostics();
+        this.rematch();
+        if (name === 'enraged') {
+          this.setMood('enraged');
+          settle(3.2);
+        } else if (name === 'resting') {
+          this.setMood('enraged');
+          this.npc.takeHit(150);
+          this.player.health = 35;
+          this.setMood('calm');
+          settle(1.5);
+        } else if (name === 'victory') {
+          this.setMood('enraged');
+          this.npc.takeHit(tuning.npcMaxHealth);
+          settle(3);
+        } else if (name === 'defeat') {
+          this.setMood('enraged');
+          settle(1.5);
+          this.player.takeHit(tuning.playerMaxHealth, this.npc.position, 3);
+          settle(3);
+        } else if (name !== 'active-play') {
+          throw new Error(`Unknown test state: ${name}`);
+        }
+        settle(STEP);
         return { state: name };
       },
       setPausedForScreenshot: (paused: boolean) => {
-        this.pausedForScreenshot = paused;
+        this.paused = paused;
       },
-      setReducedMotion: (enabled: boolean) => {
-        this.reducedMotion = enabled;
-        if (enabled) {
-          this.player.stabilizeVisuals();
-          for (const pickup of this.pickups) pickup.stabilizeVisuals();
-        }
-        this.render();
-        this.publishDiagnostics();
-      },
-      hideDebugUi: (hidden: boolean) => {
-        this.debugTools.setHidden(hidden);
-      },
+      // Ambient motion runs on fight time, which setPausedForScreenshot already freezes.
+      setReducedMotion: () => {},
+      hideDebugUi: (hidden: boolean) => this.debug.setHidden(hidden),
     };
-  }
-
-  private resetRun(): void {
-    this.score = 0;
-    this.elapsed = 0;
-    this.complete = false;
-    this.player.reset();
-    for (const pickup of this.pickups) {
-      pickup.reset(this.rng() * Math.PI * 2);
-    }
-    this.cameraRig.snapTo(this.player.group.position);
-    this.hud.setTarget(this.pickups.length);
-    this.hud.update(this.score, this.pickups.length, this.elapsed, this.complete);
-  }
-
-  private completeRun(): void {
-    for (const pickup of this.pickups) {
-      if (pickup.active) pickup.collect();
-    }
-    this.score = this.pickups.length;
-    this.complete = true;
-    this.hud.update(this.score, this.pickups.length, this.elapsed, this.complete);
   }
 
   private publishDiagnostics(): void {
@@ -314,16 +300,18 @@ export class Game {
     window.__THREE_GAME_DIAGNOSTICS__ = {
       frame: this.frame,
       elapsed: this.elapsed,
-      score: this.score,
-      targetScore: this.pickups.length,
-      complete: this.complete,
+      outcome: this.outcome,
       player: {
-        position: {
-          x: this.player.group.position.x,
-          y: this.player.group.position.y,
-          z: this.player.group.position.z,
-        },
+        position: { x: this.player.position.x, y: this.player.position.y, z: this.player.position.z },
         speed: this.player.velocity.length(),
+        health: this.player.health,
+        state: this.player.state,
+      },
+      npc: {
+        position: { x: this.npc.position.x, y: this.npc.position.y, z: this.npc.position.z },
+        health: this.npc.health,
+        mood: this.npc.mood,
+        state: this.npc.state,
       },
       renderer: {
         calls: info.render.calls,
@@ -336,14 +324,8 @@ export class Game {
         clientHeight: this.canvas.clientHeight,
         width: this.canvas.width,
         height: this.canvas.height,
-        dpr: Math.min(window.devicePixelRatio || 1, this.tuning.maxDpr),
+        dpr: Math.min(window.devicePixelRatio || 1, 2),
       },
     };
-  }
-
-  private getElement(selector: string): HTMLElement {
-    const element = document.querySelector<HTMLElement>(selector);
-    if (!element) throw new Error(`Missing element: ${selector}`);
-    return element;
   }
 }

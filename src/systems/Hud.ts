@@ -1,36 +1,66 @@
+import type { Mood } from '../game/events';
+
+export type Outcome = 'victory' | 'defeat' | null;
+
+export type HudState = {
+  player: number; // 0..1
+  npc: number; // 0..1
+  mood: Mood;
+  regenerating: boolean;
+  hint: string;
+  outcome: Outcome;
+  npcHealthLeft: number;
+};
+
+const $ = <T extends HTMLElement>(selector: string) => document.querySelector(selector) as T;
+
+/** DOM HUD. Reads one state snapshot per frame and writes only what changed. */
 export class Hud {
-  private readonly scoreValue = this.getElement('#score-value');
-  private readonly targetValue = this.getElement('#target-value');
-  private readonly timerValue = this.getElement('#timer-value');
-  private readonly statusLine = this.getElement('#status-line');
+  private readonly app = $('#app');
+  private readonly playerFill = $('.player .fill');
+  private readonly playerChip = $('.player .chip');
+  private readonly playerSection = $('.fighter.player');
+  private readonly npcFill = $('.npc .fill');
+  private readonly npcChip = $('.npc .chip');
+  private readonly mood = $('#mood');
+  private readonly moodLabel = $('#mood span');
+  private readonly hint = $('#hint');
+  private readonly result = $('#result');
+  private readonly resultTitle = $('#result h1');
+  private readonly resultText = $('#result p');
+  private chips = { player: 1, npc: 1 };
+  private last: Partial<HudState> = {};
 
-  setTarget(target: number): void {
-    this.targetValue.textContent = String(target);
+  constructor(onRematch: () => void) {
+    $('#result button').addEventListener('click', onRematch);
   }
 
-  update(score: number, target: number, elapsed: number, complete: boolean): void {
-    this.scoreValue.textContent = String(score);
-    this.targetValue.textContent = String(target);
-    const minutes = Math.floor(elapsed / 60).toString().padStart(2, '0');
-    const seconds = Math.floor(elapsed % 60).toString().padStart(2, '0');
-    this.timerValue.textContent = `${minutes}:${seconds}`;
-    this.statusLine.textContent = complete ? 'Relay grid online' : 'Collect relays';
-  }
+  update(state: HudState, delta: number): void {
+    // Chip damage trails the real value, then drains.
+    for (const who of ['player', 'npc'] as const) {
+      this.chips[who] = state[who] >= this.chips[who] ? state[who] : this.chips[who] - Math.min(this.chips[who] - state[who], delta * 0.5);
+    }
+    this.playerFill.style.transform = `scaleX(${state.player})`;
+    this.playerChip.style.transform = `scaleX(${this.chips.player})`;
+    this.npcFill.style.transform = `scaleX(${state.npc})`;
+    this.npcChip.style.transform = `scaleX(${this.chips.npc})`;
 
-  flashPickup(): void {
-    this.statusLine.animate(
-      [
-        { transform: 'translateY(0)', borderLeftColor: '#f5ba49' },
-        { transform: 'translateY(-3px)', borderLeftColor: '#48baa7' },
-        { transform: 'translateY(0)', borderLeftColor: '#f5ba49' },
-      ],
-      { duration: 220, easing: 'ease-out' },
-    );
-  }
+    if (state.mood !== this.last.mood) {
+      this.mood.className = `mood ${state.mood}`;
+      this.moodLabel.textContent = state.mood === 'calm' ? 'Calm' : 'Enraged';
+      if (this.last.mood) this.mood.animate([{ transform: 'scale(1.5)' }, { transform: 'scale(1)' }], { duration: 450, easing: 'cubic-bezier(.2,1.6,.4,1)' });
+    }
+    if (state.regenerating !== this.last.regenerating) this.playerSection.classList.toggle('regen', state.regenerating);
+    if (state.hint !== this.last.hint) this.hint.textContent = state.hint;
+    this.app.classList.toggle('hurt', state.player < 0.3 && !state.outcome);
 
-  private getElement(selector: string): HTMLElement {
-    const element = document.querySelector<HTMLElement>(selector);
-    if (!element) throw new Error(`Missing HUD element: ${selector}`);
-    return element;
+    if (state.outcome !== this.last.outcome) {
+      this.result.hidden = !state.outcome;
+      this.result.className = state.outcome ?? '';
+      this.resultTitle.textContent = state.outcome === 'victory' ? 'Victory' : 'Defeat';
+      this.resultText.textContent =
+        state.outcome === 'victory' ? 'Gorran is down. He never healed.' : `Gorran still had ${state.npcHealthLeft} health. Rest more between rounds.`;
+    }
+    this.last = { ...state };
   }
 }

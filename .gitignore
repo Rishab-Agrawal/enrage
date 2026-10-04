@@ -6,3 +6,5 @@ artifacts/tripo*
 .DS_Store
 references/ccgs/
 .claude/settings.local.json
+artifacts/dev/
+*.tmp.*

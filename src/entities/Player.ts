@@ -1,88 +1,187 @@
 import * as THREE from 'three';
-import type { InputController } from '../core/InputController';
+import type { GLTF } from 'three/addons/loaders/GLTFLoader.js';
+import type { Input } from '../core/Input';
+import type { FightEvent } from '../game/events';
+import { tuning } from '../game/tuning';
+import { Character } from './Character';
+import { turnToward, yawTo } from './steering';
 
-export type PlayerTuning = {
-  speed: number;
-  dashMultiplier: number;
-  acceleration: number;
-};
+/** Clip-second windows: `contact` is when the fist lands (measured from the clip's extension frame). */
+const STRIKES = [
+  { clip: 'jab', from: 0.15, contact: 0.49, to: 1.0, speed: 1.6 },
+  { clip: 'cross', from: 1.25, contact: 2.2, to: 2.6, speed: 2.4 },
+];
+const STRIKE_REACH = 1.95;
+const DODGE_TIME = 0.32;
+const DODGE_SPEED = 10;
+const DODGE_COOLDOWN = 0.7;
+const HURT_TIME = 0.42;
+const BUFFER_TIME = 0.25;
 
-export type ArenaBounds = {
-  halfWidth: number;
-  halfDepth: number;
-};
+type State = 'move' | 'strike' | 'dodge' | 'hurt' | 'down';
 
 export class Player {
-  readonly group = new THREE.Group();
+  readonly character: Character;
   readonly velocity = new THREE.Vector3();
-
+  readonly radius = 0.35;
+  health = tuning.playerMaxHealth;
+  state: State = 'move';
+  private timer = 0;
+  private contactAt = 0;
+  private cancelAt = 0;
+  private endAt = 0;
+  private combo = 0;
+  private dodgeCooldown = 0;
+  private buffered: 'strike' | 'dodge' | null = null;
+  private bufferTimer = 0;
   private readonly move = new THREE.Vector2();
-  private readonly targetVelocity = new THREE.Vector3();
-  private readonly bodyMaterial = new THREE.MeshStandardMaterial({
-    color: '#f5ba49',
-    roughness: 0.48,
-    metalness: 0.12,
-  });
-  private readonly accentMaterial = new THREE.MeshStandardMaterial({
-    color: '#48baa7',
-    roughness: 0.32,
-    metalness: 0.18,
-    emissive: '#123f39',
-    emissiveIntensity: 0.35,
-  });
-  private readonly bodyGeometry = new THREE.CapsuleGeometry(0.38, 0.58, 6, 12);
-  private readonly noseGeometry = new THREE.ConeGeometry(0.22, 0.5, 4);
+  private readonly wish = new THREE.Vector3();
+  private readonly toNpc = new THREE.Vector3();
 
-  constructor() {
-    const body = new THREE.Mesh(this.bodyGeometry, this.bodyMaterial);
-    body.castShadow = true;
-    body.receiveShadow = true;
-    body.position.y = 0.68;
-    this.group.add(body);
-
-    const nose = new THREE.Mesh(this.noseGeometry, this.accentMaterial);
-    nose.castShadow = true;
-    nose.position.set(0, 0.68, -0.58);
-    nose.rotation.x = Math.PI / 2;
-    this.group.add(nose);
+  constructor(gltf: GLTF) {
+    this.character = new Character(gltf, 1.65);
+    this.reset();
   }
 
-  update(delta: number, elapsed: number, input: InputController, tuning: PlayerTuning, bounds: ArenaBounds): void {
-    input.readMovement(this.move);
-    const dash = input.isDashHeld() ? tuning.dashMultiplier : 1;
-    this.targetVelocity.set(this.move.x, 0, this.move.y).multiplyScalar(tuning.speed * dash);
+  get position(): THREE.Vector3 {
+    return this.character.root.position;
+  }
 
-    const smoothing = 1 - Math.exp(-tuning.acceleration * delta);
-    this.velocity.lerp(this.targetVelocity, smoothing);
-    this.group.position.addScaledVector(this.velocity, delta);
+  get yaw(): number {
+    return this.character.root.rotation.y;
+  }
 
-    this.group.position.x = THREE.MathUtils.clamp(this.group.position.x, -bounds.halfWidth + 0.8, bounds.halfWidth - 0.8);
-    this.group.position.z = THREE.MathUtils.clamp(this.group.position.z, -bounds.halfDepth + 0.8, bounds.halfDepth - 0.8);
-
-    if (this.velocity.lengthSq() > 0.001) {
-      this.group.rotation.y = Math.atan2(this.velocity.x, -this.velocity.z);
-    }
-
-    this.group.position.y = 0.06 + Math.sin(elapsed * 9) * Math.min(this.velocity.length() / 40, 0.08);
+  get invulnerable(): boolean {
+    return this.state === 'dodge' || this.state === 'down';
   }
 
   reset(): void {
-    this.group.position.set(0, 0, 0);
-    this.group.rotation.set(0, 0, 0);
+    this.health = tuning.playerMaxHealth;
+    this.position.set(0, 0, 6);
+    this.character.root.rotation.y = Math.PI;
     this.velocity.set(0, 0, 0);
-    this.move.set(0, 0);
-    this.targetVelocity.set(0, 0, 0);
-    this.stabilizeVisuals();
+    this.dodgeCooldown = 0;
+    this.buffered = null;
+    this.toMove();
   }
 
-  stabilizeVisuals(): void {
-    this.group.position.y = 0.06;
+  /** `forward` is the camera's ground-plane forward; input is camera-relative. */
+  update(delta: number, input: Input | null, forward: THREE.Vector3, npc: THREE.Vector3, events: FightEvent[]): void {
+    this.timer += delta;
+    this.dodgeCooldown -= delta;
+    this.bufferTimer -= delta;
+    if (this.state !== 'down') this.health = Math.min(tuning.playerMaxHealth, this.health + tuning.playerRegen * delta);
+
+    if (input) {
+      if (input.consume('strike')) this.buffer('strike');
+      if (input.consume('dodge')) this.buffer('dodge');
+      input.movement(this.move);
+    } else {
+      this.move.set(0, 0);
+    }
+    // Camera-relative wish direction; right = forward × up.
+    this.wish.set(forward.x * this.move.y - forward.z * this.move.x, 0, forward.z * this.move.y + forward.x * this.move.x);
+    this.toNpc.subVectors(npc, this.position).setY(0);
+
+    if (this.bufferTimer <= 0) this.buffered = null;
+    const canAct = this.state === 'move' || (this.state === 'strike' && this.timer >= this.cancelAt);
+    if (canAct && this.buffered === 'dodge' && this.dodgeCooldown <= 0) this.startDodge(events);
+    else if (canAct && this.buffered === 'strike') this.startStrike(events);
+
+    switch (this.state) {
+      case 'move': {
+        this.velocity.lerp(this.wish.multiplyScalar(tuning.playerSpeed), 1 - Math.exp(-14 * delta));
+        const moving = this.move.lengthSq() > 0.04;
+        const target = moving ? yawTo(this.wish) : yawTo(this.toNpc);
+        turnToward(this.character.root, target, moving ? 12 : 5, delta);
+        const clip = moving ? 'run' : 'idle';
+        if (this.character.clip !== clip) this.character.play(clip, { fade: 0.15 });
+        break;
+      }
+      case 'strike': {
+        this.velocity.multiplyScalar(Math.exp(-12 * delta));
+        // Close the last half-metre so strikes connect instead of whiffing at max range.
+        const gap = this.toNpc.length() - 1.45;
+        if (this.timer < this.contactAt && gap > 0 && gap < 1.2) this.position.addScaledVector(this.toNpc.normalize(), Math.min(gap, 3 * delta));
+        if (this.contactAt > 0 && this.timer >= this.contactAt) {
+          this.contactAt = 0;
+          events.push({ type: 'contact', who: 'player', damage: tuning.strikeDamage, reach: STRIKE_REACH, knockback: 0 });
+        }
+        if (this.timer >= this.endAt) this.toMove();
+        break;
+      }
+      case 'dodge': {
+        const k = 1 - this.timer / DODGE_TIME;
+        this.velocity.setLength(DODGE_SPEED * (0.35 + 0.65 * k));
+        if (this.timer >= DODGE_TIME) this.toMove();
+        break;
+      }
+      case 'hurt':
+        this.velocity.multiplyScalar(Math.exp(-6 * delta));
+        if (this.timer >= HURT_TIME) this.toMove();
+        break;
+      case 'down':
+        this.velocity.multiplyScalar(Math.exp(-6 * delta));
+        break;
+    }
+    this.position.addScaledVector(this.velocity, delta);
+    this.character.update(delta);
   }
 
-  dispose(): void {
-    this.bodyGeometry.dispose();
-    this.noseGeometry.dispose();
-    this.bodyMaterial.dispose();
-    this.accentMaterial.dispose();
+  /** Returns false when the blow is avoided. */
+  takeHit(damage: number, from: THREE.Vector3, knockback: number): boolean {
+    if (this.invulnerable) return false;
+    this.health = Math.max(0, this.health - damage);
+    this.push(from, knockback + 2.5);
+    this.character.flash.value = 0.6;
+    this.timer = 0;
+    if (this.health <= 0) {
+      this.state = 'down';
+      this.character.play('defeat', { loop: false, speed: 1.2, fade: 0.1 });
+    } else {
+      this.state = 'hurt';
+      this.character.play('hurt', { loop: false, speed: 1.5, fade: 0.06 });
+    }
+    return true;
+  }
+
+  push(from: THREE.Vector3, strength: number): void {
+    this.velocity.subVectors(this.position, from).setY(0).setLength(strength);
+  }
+
+  private buffer(action: 'strike' | 'dodge'): void {
+    this.buffered = action;
+    this.bufferTimer = BUFFER_TIME;
+  }
+
+  private startStrike(events: FightEvent[]): void {
+    const strike = STRIKES[this.combo++ % STRIKES.length];
+    this.buffered = null;
+    this.state = 'strike';
+    this.timer = 0;
+    this.contactAt = (strike.contact - strike.from) / strike.speed;
+    this.cancelAt = this.contactAt + 0.08;
+    this.endAt = (strike.to - strike.from) / strike.speed;
+    if (this.toNpc.lengthSq() < 36) this.character.root.rotation.y = yawTo(this.toNpc);
+    this.character.play(strike.clip, { loop: false, from: strike.from, speed: strike.speed, fade: 0.06 });
+    events.push({ type: 'swing', who: 'player', heavy: false });
+  }
+
+  private startDodge(events: FightEvent[]): void {
+    this.buffered = null;
+    this.state = 'dodge';
+    this.timer = 0;
+    this.dodgeCooldown = DODGE_COOLDOWN;
+    const direction = this.wish.lengthSq() > 0.01 ? this.wish.clone() : this.toNpc.clone().negate();
+    this.velocity.copy(direction.setY(0).normalize()).multiplyScalar(DODGE_SPEED);
+    this.character.root.rotation.y = yawTo(direction);
+    this.character.play('run', { speed: 2.2, fade: 0.05 });
+    events.push({ type: 'dodge', at: this.position.clone() });
+  }
+
+  private toMove(): void {
+    this.state = 'move';
+    this.timer = 0;
+    this.combo = 0;
   }
 }
