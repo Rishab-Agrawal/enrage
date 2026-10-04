@@ -29,6 +29,8 @@ const CHARACTERS = {
 const TRIM = { 'player/defeat': 4.6, 'npc/defeat': 4.6 };
 // Locomotion plays in place: the game moves the body, and the clip records the ground speed it depicts.
 const IN_PLACE = new Set(['run', 'walk']);
+// Seconds either side of a gait's loop seam over which its velocity jump is eased out.
+const SEAM_EASE = 0.2;
 const PATHS = { position: 'translation', quaternion: 'rotation', scale: 'scale' };
 
 const fileIn = (dir, ext) => {
@@ -59,7 +61,8 @@ const ARMATURE = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0,
 
 /**
  * Re-expresses a Mixamo take on a Tripo rig. Both rest in a T-pose, so each Tripo bone turns, in world space, as its
- * Mixamo bone turns from rest; the hips travel scaled by hip height.
+ * Mixamo bone turns from rest; the hips travel scaled by hip height. Wrists hold their rest bend: Mixamo walks flap
+ * them ~40°, which reads as flailing on rigid gloved fists.
  */
 function retarget(fbx, nodes) {
   const take = takeOf(fbx);
@@ -75,7 +78,7 @@ function retarget(fbx, nodes) {
   const hipsRest = bone('Hips').getWorldPosition(new THREE.Vector3());
   const [root, hip] = [world(nodes.get('Root')), world(nodes.get('Hip'))];
   const scale = hip.position.y / hipsRest.y;
-  const tripo = new Map(Object.entries(MIXAMO).map(([from, to]) => [to, from]));
+  const tripo = new Map(Object.entries(MIXAMO).filter(([from]) => !from.endsWith('Hand')).map(([from, to]) => [to, from]));
 
   const times = take.tracks.find((t) => t.name === 'mixamorigHips.position').times;
   const values = new Map([...tripo.keys()].map((name) => [name, []]));
@@ -140,8 +143,8 @@ function bestCycle(clip, times) {
 
 /**
  * Makes a locomotion take a seamless in-place cycle: trims it to its cleanest cycle (Tripo's run starts
- * mid-stride and accelerating), then spreads every channel's mismatch in pose and velocity across the loop, the
- * Hip's travel included. Returns the ground speed it depicted, in armature units per second.
+ * mid-stride and accelerating), then spreads every channel's pose mismatch across the loop, the Hip's travel
+ * included, and eases out its velocity jump at the seam. Returns the ground speed it depicted, in armature units per second.
  */
 function inPlace(clip) {
   const hip = clip.tracks.find((t) => t.name === 'Hip.position');
@@ -152,6 +155,12 @@ function inPlace(clip) {
     const interpolant = track.createInterpolant(), size = track.getValueSize();
     const values = new Float32Array(frames.length * size);
     frames.forEach((t, i) => values.set(interpolant.evaluate(t), i * size));
+    // q and -q are one rotation: keep each key in its predecessor's hemisphere, since the fixes below work on components.
+    for (let i = 4; size === 4 && i < values.length; i += 4) {
+      if (values[i] * values[i - 4] + values[i + 1] * values[i - 3] + values[i + 2] * values[i - 2] + values[i + 3] * values[i - 1] < 0) {
+        for (let k = i; k < i + 4; k++) values[k] = -values[k];
+      }
+    }
     track.times = frames.map((t) => t - start);
     track.values = values;
   }
@@ -161,12 +170,13 @@ function inPlace(clip) {
     const { times, values } = track, size = track.getValueSize(), last = values.length - size;
     const flip = size === 4 && values.slice(last).reduce((dot, v, k) => dot + v * values[k], 0) < 0 ? -1 : 1;
     const error = Array.from(values.slice(last), (v, k) => v - flip * values[k]);
-    // Likewise its velocity (Mixamo's loops close the pose, not the motion): a parabola, zero at both ends.
+    // Mixamo's loops close the pose, not the motion: ease the seam's velocity jump out with a bump local to it.
     const slope = (i) => Array.from({ length: size }, (_, k) => (values[(i + 1) * size + k] - values[i * size + k]) / (times[i + 1] - times[i]));
     const [opening, closing] = [slope(0), slope(times.length - 2)];
-    const kink = closing.map((v, k) => (v - flip * opening[k]) / (2 * period));
+    const kink = closing.map((v, k) => (v - flip * opening[k]) / 2);
     for (let i = 0; i < times.length; i++) {
-      for (let k = 0; k < size; k++) values[i * size + k] += kink[k] * times[i] * (period - times[i]) - (error[k] * times[i]) / period;
+      const away = Math.min(times[i], period - times[i]), bump = away < SEAM_EASE ? away * (1 - away / SEAM_EASE) ** 2 : 0;
+      for (let k = 0; k < size; k++) values[i * size + k] += kink[k] * bump - (error[k] * times[i]) / period;
       if (size === 4) {
         const q = values.subarray(i * 4, i * 4 + 4), length = Math.hypot(...q);
         for (let k = 0; k < 4; k++) q[k] /= length;
