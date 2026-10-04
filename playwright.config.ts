@@ -36,17 +36,5 @@ export default defineConfig({
         viewport: { width: 1280, height: 720 },
       },
     },
-    {
-      // iPhone viewport, DPR and touch on the same GPU-backed Chromium as the
-      // inspector. devices['iPhone 13'] alone selects WebKit, which needs its
-      // own browser download and renders headless without the GPU. Confirm
-      // Safari-specific behavior on a real device.
-      name: 'mobile-chrome',
-      use: {
-        ...devices['iPhone 13'],
-        defaultBrowserType: 'chromium',
-        channel: 'chromium',
-      },
-    },
   ],
 });

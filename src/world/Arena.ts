@@ -186,15 +186,22 @@ function createTerrain(): THREE.Mesh {
   const colors = new Float32Array(position.count * 3);
   const meadow = new THREE.Color('#5f8f34');
   const lush = new THREE.Color('#3f7a2c');
-  const golden = new THREE.Color('#c9ad52');
+  const sage = new THREE.Color('#8fa64f');
+  const golden = new THREE.Color('#dcbc62');
+  const ochre = new THREE.Color('#bf9447');
+  const far = new THREE.Color();
   const color = new THREE.Color();
   for (let i = 0; i < position.count; i += 1) {
     const x = position.getX(i);
     const z = position.getZ(i);
-    position.setY(i, groundHeight(x, z));
+    const y = groundHeight(x, z);
+    position.setY(i, y);
     const r = Math.hypot(x, z);
-    const gold = THREE.MathUtils.smoothstep(r, 25, 120) * (0.55 + 0.45 * fbm(x * 0.02, z * 0.02));
-    color.copy(meadow).lerp(lush, fbm(x * 0.08 + 9, z * 0.08) * 0.8).lerp(golden, gold);
+    // Far hills: a patchwork of sage, gold and ochre, lighter on the crests.
+    far.copy(sage).lerp(golden, THREE.MathUtils.smoothstep(fbm(x * 0.015, z * 0.015), 0.35, 0.6));
+    far.lerp(ochre, THREE.MathUtils.smoothstep(fbm(x * 0.03 + 4, z * 0.03), 0.55, 0.75) * 0.6);
+    far.multiplyScalar(0.8 + 0.3 * THREE.MathUtils.smoothstep(y, -12, 22));
+    color.copy(meadow).lerp(lush, fbm(x * 0.08 + 9, z * 0.08) * 0.8).lerp(far, THREE.MathUtils.smoothstep(r, 25, 90));
     color.toArray(colors, i * 3);
   }
   geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
@@ -330,7 +337,7 @@ function createGrass(rng: () => number, time: { value: number }, benders: GrassB
     const height = 0.1 + tall * 0.8 + rng() * 0.1;
     euler.set((rng() - 0.5) * 0.5, rng() * Math.PI, (rng() - 0.5) * 0.5);
     quaternion.setFromEuler(euler);
-    scale.set(0.9 + rng() * 0.6, height, 1);
+    scale.set(0.6 + rng() * 0.5, height, 1);
     matrix.compose(spot, quaternion, scale);
     grass.setMatrixAt(placed, matrix);
     const warm = THREE.MathUtils.smoothstep(r, 14, 45) * 0.45 + fbm(spot.x * 0.12 + 5, spot.z * 0.12) * 0.35;

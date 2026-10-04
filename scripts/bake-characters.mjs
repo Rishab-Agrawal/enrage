@@ -13,19 +13,19 @@ const { FBXLoader } = await import('three/examples/jsm/loaders/FBXLoader.js');
 
 const TRIPO = 'artifacts/tripo';
 // Clip name -> retarget output dir. Both rigs are Tripo's normalised v1.0 skeleton, so
-// clips transfer between them (Gorran's haymaker is Wren's cross).
+// clips transfer between them (Gorran's haymaker is Wren's cross; both collapse the same way).
 const CHARACTERS = {
   player: {
     idle: 'player-anim/idle', run: 'player-anim/run', jab: 'player-anim/box_01', cross: 'player-anim/box_02',
-    hurt: 'player-anim/hit_to_body_01', defeat: 'player-anim/defeat_02',
+    hurt: 'player-anim/hit_to_body_01', defeat: 'npc-anim/defeat_03',
   },
   npc: {
     calm: 'npc-anim/fold_arms', roar: 'npc-anim/angry_01', walk: 'npc-anim/walk', run: 'npc-anim/run',
     punch: 'npc-anim/box_03', haymaker: 'player-anim/box_02', hurt: 'npc-anim/hit_to_stomach', defeat: 'npc-anim/defeat_03',
   },
 };
-// Seconds to keep: both defeat takes stand back up at the end.
-const TRIM = { 'player/defeat': 3.6, 'npc/defeat': 4.6 };
+// Seconds to keep: the defeat take stands back up at the end.
+const TRIM = { 'player/defeat': 4.6, 'npc/defeat': 4.6 };
 const PATHS = { position: 'translation', quaternion: 'rotation', scale: 'scale' };
 
 const fileIn = (dir, ext) => {

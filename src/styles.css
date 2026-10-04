@@ -235,6 +235,7 @@ kbd {
   animation: rise 0.5s ease-out;
 }
 
+.mood[hidden],
 #result[hidden],
 #loading[hidden] {
   display: none;

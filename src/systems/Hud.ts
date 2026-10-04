@@ -53,6 +53,7 @@ export class Hud {
     if (state.regenerating !== this.last.regenerating) this.playerSection.classList.toggle('regen', state.regenerating);
     if (state.hint !== this.last.hint) this.hint.textContent = state.hint;
     this.app.classList.toggle('hurt', state.player < 0.3 && !state.outcome);
+    this.mood.hidden = Boolean(state.outcome);
 
     if (state.outcome !== this.last.outcome) {
       this.result.hidden = !state.outcome;
