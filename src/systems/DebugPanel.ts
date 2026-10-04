@@ -24,7 +24,8 @@ export class DebugPanel {
     balance.add(tuning, 'punchDamage', 0, 60, 1).name('punch damage');
     balance.add(tuning, 'haymakerDamage', 0, 60, 1).name('haymaker damage');
     balance.add(tuning, 'npcRunSpeed', 2, 8, 0.1).name('NPC run speed');
-    balance.add(tuning, 'playerSpeed', 2, 8, 0.1).name('player speed');
+    balance.add(tuning, 'playerWalkSpeed', 0.5, 4, 0.1).name('player walk speed');
+    balance.add(tuning, 'playerSprintSpeed', 2, 8, 0.1).name('player sprint speed');
   }
 
   /** Reflect a mood set elsewhere (rematch, test hooks, a future LLM). */

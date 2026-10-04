@@ -16,7 +16,7 @@ const TRIPO = 'artifacts/tripo';
 // clips transfer between them (Gorran's haymaker is Wren's cross; both collapse the same way).
 const CHARACTERS = {
   player: {
-    idle: 'player-anim/idle', run: 'player-anim/run', jab: 'player-anim/box_01', cross: 'player-anim/box_02',
+    idle: 'player-anim/idle', walk: 'npc-anim/walk', run: 'player-anim/run', jab: 'player-anim/box_01', cross: 'player-anim/box_02',
     hurt: 'player-anim/hit_to_body_01', defeat: 'npc-anim/defeat_03',
   },
   npc: {

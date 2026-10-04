@@ -19,11 +19,12 @@ async function start(page: Page): Promise<string[]> {
   return errors;
 }
 
-/** Hold W toward him and swing whenever he is in reach, for up to `seconds` or until `stop` holds. */
+/** Sprint toward him and swing whenever he is in reach, for up to `seconds` or until `stop` holds. */
 async function brawl(page: Page, seconds: number, stop: (d: Diagnostics) => boolean): Promise<Diagnostics> {
   const box = (await page.locator('#game-canvas').boundingBox())!;
   await page.mouse.move(box.width / 2, box.height / 2);
   await page.keyboard.down('KeyW');
+  await page.keyboard.down('ShiftLeft');
   const end = Date.now() + seconds * 1000;
   let d = await read(page);
   while (Date.now() < end && !d.outcome && !stop(d)) {
@@ -34,18 +35,28 @@ async function brawl(page: Page, seconds: number, stop: (d: Diagnostics) => bool
     await page.waitForTimeout(120);
     d = await read(page);
   }
+  await page.keyboard.up('ShiftLeft');
   await page.keyboard.up('KeyW');
   return d;
 }
 
-test('WASD moves the player', async ({ page }) => {
+test('WASD walks, Shift sprints, and Shift alone dashes', async ({ page }) => {
   const errors = await start(page);
-  const before = await read(page);
-  await page.keyboard.down('KeyD');
-  await page.waitForTimeout(500);
-  await page.keyboard.up('KeyD');
-  const after = await read(page);
-  expect(Math.hypot(after.player.position.x - before.player.position.x, after.player.position.z - before.player.position.z)).toBeGreaterThan(1);
+  /** Metres the player covers while `keys` are held, pressed in order, for `ms`. */
+  const travel = async (keys: string[], ms: number) => {
+    const before = await read(page);
+    for (const key of keys) await page.keyboard.down(key);
+    await page.waitForTimeout(ms);
+    for (const key of keys) await page.keyboard.up(key);
+    await page.waitForTimeout(400);
+    const after = await read(page);
+    return Math.hypot(after.player.position.x - before.player.position.x, after.player.position.z - before.player.position.z);
+  };
+  const walked = await travel(['KeyD'], 600);
+  const sprinted = await travel(['KeyA', 'ShiftLeft'], 600);
+  expect(walked).toBeGreaterThan(0.5);
+  expect(sprinted).toBeGreaterThan(2 * walked);
+  expect(await travel(['ShiftLeft'], 100)).toBeGreaterThan(1.5);
   expect(errors).toEqual([]);
 });
 
@@ -79,9 +90,11 @@ test('legs settle on the speed the body actually moves at', async ({ page }) => 
   };
   // Each leg of the route ends at rest: positions sampled across a reversal can't show the speed through it.
   const route: [string[], number][] = [
-    [['KeyW', 'Space'], 2500], // dash, then into his personal space
-    [['KeyS'], 3500], // back into the arena edge
-    [['KeyD'], 3000], // along the edge
+    [['ShiftLeft'], 1000], // dash where the body faces
+    [['KeyW', 'ShiftLeft'], 2500], // sprint into his personal space
+    [['KeyS', 'ShiftLeft'], 3500], // back into the arena edge
+    [['KeyD'], 3000], // walk along the edge
+    [['KeyD', 'ShiftLeft'], 2000], // sprint along it
   ];
   for (const [keys, ms] of route) {
     for (const key of keys) await page.keyboard.down(key);

@@ -15,10 +15,10 @@ function jerk(v: ArrayLike<number>, size: number, before: number, i: number, aft
 }
 
 // Gaits are drawn at the body's measured speed, so each must loop in place, without a hitch, and record the speed it depicts.
-for (const [model, clips] of [['player', ['run']], ['npc', ['run', 'walk']]] as const) {
+for (const model of ['player', 'npc']) {
   test(`${model} gaits loop in place`, async () => {
     const doc = await new NodeIO().read(`public/models/${model}.glb`);
-    for (const name of clips) {
+    for (const name of ['run', 'walk']) {
       const animation = doc.getRoot().listAnimations().find((a) => a.getName() === name)!;
       expect(animation.getExtras().groundSpeed, `${model}/${name} ground speed`).toBeGreaterThan(0);
       for (const channel of animation.listChannels()) {

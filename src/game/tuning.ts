@@ -2,7 +2,8 @@
 export const tuning = {
   playerMaxHealth: 100,
   playerRegen: 3,
-  playerSpeed: 4.6,
+  playerWalkSpeed: 1.5,
+  playerSprintSpeed: 4.6,
   strikeDamage: 9,
   npcMaxHealth: 400,
   npcRunSpeed: 4.8,

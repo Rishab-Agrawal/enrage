@@ -7,8 +7,9 @@ export class Input {
 
   private readonly onKeyDown = (event: KeyboardEvent) => {
     if (event.repeat) return;
+    // Shift sprints toward the held direction; with none held, it dashes where the body faces.
+    if (event.key === 'Shift' && this.movement(new THREE.Vector2()).lengthSq() === 0) this.pressed.add('dodge');
     this.keys.add(event.code);
-    if (event.code === 'Space') this.pressed.add('dodge');
     if (event.code === 'KeyR') this.pressed.add('rematch');
     if (event.code === 'KeyM') this.pressed.add('mute');
   };
@@ -33,6 +34,10 @@ export class Input {
     const held = (a: string, b: string) => (this.keys.has(a) || this.keys.has(b) ? 1 : 0);
     target.set(held('KeyD', 'ArrowRight') - held('KeyA', 'ArrowLeft'), held('KeyW', 'ArrowUp') - held('KeyS', 'ArrowDown'));
     return target.lengthSq() > 1 ? target.normalize() : target;
+  }
+
+  get sprinting(): boolean {
+    return this.keys.has('ShiftLeft') || this.keys.has('ShiftRight');
   }
 
   consume(intent: 'strike' | 'dodge' | 'rematch' | 'mute'): boolean {

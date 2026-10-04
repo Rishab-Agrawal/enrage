@@ -21,7 +21,7 @@ The player strikes to empty the NPC's health. His heavy attacks, and a regen rat
 
 | Clause | Proof in code |
 | --- | --- |
-| Verb on real input | LMB strike, Space/RMB dodge, WASD move (`Input.ts`) |
+| Verb on real input | LMB strike, WASD walk, Shift sprint (dash when standing), RMB dash (`Input.ts`) |
 | Objective visible | Both health bars, top of screen |
 | Pressure in the first minute | An enraged NPC chases and hits for 18–24 |
 | Reward changes state | Damage is permanent: the NPC never heals |

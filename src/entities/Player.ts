@@ -89,7 +89,7 @@ export class Player {
 
     switch (this.state) {
       case 'move': {
-        this.velocity.lerp(this.wish.multiplyScalar(tuning.playerSpeed), 1 - Math.exp(-14 * delta));
+        this.velocity.lerp(this.wish.multiplyScalar(input?.sprinting ? tuning.playerSprintSpeed : tuning.playerWalkSpeed), 1 - Math.exp(-14 * delta));
         // Face where the body is actually going; standing, face him.
         const { moving, velocity } = this.character;
         turnToward(this.character.root, yawTo(moving ? velocity : this.toNpc), moving ? 12 : 5, delta);
@@ -169,7 +169,7 @@ export class Player {
     this.state = 'dodge';
     this.timer = 0;
     this.dodgeCooldown = DODGE_COOLDOWN;
-    const direction = this.wish.lengthSq() > 0.01 ? this.wish.clone() : this.toNpc.clone().negate();
+    const direction = this.wish.lengthSq() > 0.01 ? this.wish.clone() : new THREE.Vector3(Math.sin(this.yaw), 0, Math.cos(this.yaw));
     this.velocity.copy(direction.setY(0).normalize()).multiplyScalar(DODGE_SPEED);
     this.character.root.rotation.y = yawTo(direction);
     this.character.locomote('idle');
