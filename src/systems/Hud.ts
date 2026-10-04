@@ -48,7 +48,7 @@ export class Hud {
     if (state.mood !== this.last.mood) {
       this.mood.className = `mood ${state.mood}`;
       this.moodLabel.textContent = state.mood === 'calm' ? 'Calm' : 'Enraged';
-      if (this.last.mood) this.mood.animate([{ transform: 'scale(1.5)' }, { transform: 'scale(1)' }], { duration: 450, easing: 'cubic-bezier(.2,1.6,.4,1)' });
+      if (this.last.mood) this.mood.animate([{ transform: 'scale(1.5)' }, { transform: 'scale(1)' }], { duration: 450, easing: 'cubic-bezier(.22,1,.36,1)' });
     }
     if (state.regenerating !== this.last.regenerating) this.playerSection.classList.toggle('regen', state.regenerating);
     if (state.hint !== this.last.hint) this.hint.textContent = state.hint;
