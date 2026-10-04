@@ -49,6 +49,46 @@ test('WASD moves the player', async ({ page }) => {
   expect(errors).toEqual([]);
 });
 
+test('legs always show the speed the body actually moves at', async ({ page }) => {
+  test.setTimeout(60_000);
+  const errors = await start(page);
+  const misfits: string[] = [];
+  let last = await read(page);
+  const watch = async (ms: number) => {
+    for (const end = Date.now() + ms; Date.now() < end; ) {
+      await page.waitForTimeout(60);
+      const d = await read(page);
+      const dt = d.elapsed - last.elapsed;
+      for (const who of ['player', 'npc'] as const) {
+        const [a, b] = [last[who], d[who]];
+        if (dt <= 0 || a.stride === null || b.stride === null || a.state !== b.state) continue;
+        // The body's average speed over the window lies between the speeds the legs showed at its ends.
+        const moved = Math.hypot(b.position.x - a.position.x, b.position.z - a.position.z) / dt;
+        if (moved < Math.min(a.stride, b.stride) - 0.5 || moved > Math.max(a.stride, b.stride) + 0.5) {
+          misfits.push(`${who} ${b.state} at ${d.elapsed.toFixed(2)}s: legs ${a.stride.toFixed(1)}→${b.stride.toFixed(1)} m/s, body ${moved.toFixed(1)} m/s`);
+        }
+      }
+      last = d;
+    }
+  };
+  // Each leg of the route ends at rest: positions sampled across a reversal can't show the speed through it.
+  const route: [string[], number][] = [
+    [['KeyW', 'Space'], 2500], // dash, then into his personal space
+    [['KeyS'], 3500], // back into the arena edge
+    [['KeyD'], 3000], // along the edge
+  ];
+  for (const [keys, ms] of route) {
+    for (const key of keys) await page.keyboard.down(key);
+    await watch(ms);
+    for (const key of keys) await page.keyboard.up(key);
+    await watch(600);
+  }
+  await setMood(page, 'enraged');
+  await watch(4000); // he chases
+  expect(misfits).toEqual([]);
+  expect(errors).toEqual([]);
+});
+
 test('a calm NPC keeps the player out of reach and cannot be hurt', async ({ page }) => {
   const errors = await start(page);
   let closest = Infinity;

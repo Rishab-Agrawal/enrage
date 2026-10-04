@@ -55,8 +55,7 @@ export class Npc {
 
   reset(): void {
     this.health = tuning.npcMaxHealth;
-    this.position.set(0, 0, -4);
-    this.character.root.rotation.y = 0;
+    this.character.place(0, -4, 0);
     this.mood = 'calm';
     this.enter('calm');
   }
@@ -89,7 +88,6 @@ export class Npc {
         } else if (distance < COMFORT_DISTANCE) {
           this.walk(this.retreatHeading(), WALK_SPEED, delta);
         } else {
-          if (this.character.clip !== 'calm') this.character.play('calm', { fade: 0.4 });
           turnToward(root, yawTo(this.toPlayer), 1.5, delta);
         }
         break;
@@ -107,7 +105,7 @@ export class Npc {
         break;
       case 'chase':
         if (distance <= ATTACK_RANGE) this.startAttack(events);
-        else this.walk(this.toPlayer.normalize(), tuning.npcRunSpeed, delta, 'run');
+        else this.walk(this.toPlayer.normalize(), tuning.npcRunSpeed, delta);
         break;
       case 'attack':
         // Tracks the player through the wind-up, committed after contact: sidestepping late works.
@@ -130,7 +128,6 @@ export class Npc {
       case 'down':
         break;
     }
-    this.character.update(delta);
   }
 
   /** Damage always lands; a flinch only interrupts movement, never a committed attack or roar. */
@@ -149,7 +146,8 @@ export class Npc {
     this.timer = 0;
     this.contactAt = 0;
     const play = this.character.play.bind(this.character);
-    if (state === 'calm') play('calm', { fade: 0.4 });
+    if (state === 'calm') this.character.locomote('calm');
+    if (state === 'chase' || state === 'recover') this.character.locomote('idle');
     if (state === 'shove') {
       // A back-off swat with the punch: knocks the player away, never hurts.
       this.shoveCooldown = SHOVE_COOLDOWN;
@@ -159,8 +157,6 @@ export class Npc {
       this.endAt = this.contactAt + 0.4;
     }
     if (state === 'roar') play('roar', { loop: false, from: 1.2, fade: 0.15 });
-    if (state === 'chase') play('run', { fade: 0.2 });
-    if (state === 'recover') play('walk', { fade: 0.25 });
     if (state === 'flinch') play('hurt', { loop: false, from: 0.1, speed: 1.6, fade: 0.06 });
     if (state === 'down') play('defeat', { loop: false, speed: 1.2, fade: 0.12 });
   }
@@ -188,9 +184,8 @@ export class Npc {
     return this.heading;
   }
 
-  private walk(direction: THREE.Vector3, speed: number, delta: number, clip = 'walk'): void {
+  private walk(direction: THREE.Vector3, speed: number, delta: number): void {
     this.position.addScaledVector(direction, speed * delta);
     turnToward(this.character.root, yawTo(direction), 7, delta);
-    if (this.character.clip !== clip) this.character.play(clip, { fade: 0.25 });
   }
 }

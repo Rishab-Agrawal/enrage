@@ -20,13 +20,13 @@ const CHARACTERS = {
     hurt: 'player-anim/hit_to_body_01', defeat: 'npc-anim/defeat_03',
   },
   npc: {
-    calm: 'npc-anim/fold_arms', roar: 'npc-anim/angry_01', walk: 'npc-anim/walk', run: 'npc-anim/run',
+    calm: 'npc-anim/fold_arms', idle: 'player-anim/idle', roar: 'npc-anim/angry_01', walk: 'npc-anim/walk', run: 'npc-anim/run',
     punch: 'npc-anim/box_03', haymaker: 'player-anim/box_02', hurt: 'npc-anim/hit_to_stomach', defeat: 'npc-anim/defeat_03',
   },
 };
 // Seconds to keep: the defeat take stands back up at the end.
 const TRIM = { 'player/defeat': 4.6, 'npc/defeat': 4.6 };
-// Locomotion plays in place: the game moves the body.
+// Locomotion plays in place: the game moves the body, and the clip records the ground speed it depicts.
 const IN_PLACE = new Set(['run', 'walk']);
 const PATHS = { position: 'translation', quaternion: 'rotation', scale: 'scale' };
 
@@ -44,6 +44,33 @@ function readClip(file) {
 }
 
 const isConstant = (values, stride) => values.every((v, i) => Math.abs(v - values[i % stride]) < 1e-5);
+const seam = ({ values: q }) => {
+  const n = q.length - 4;
+  return 2 * Math.acos(Math.min(1, Math.abs(q[0] * q[n] + q[1] * q[n + 1] + q[2] * q[n + 2] + q[3] * q[n + 3])));
+};
+
+/** Makes a locomotion cycle play in place. Returns the ground speed it depicted, in armature units per second. */
+function inPlace(clip) {
+  // Hip carries the travel (Z is up): strip its horizontal drift and centre the cycle on the body's origin, keeping sway and bob.
+  const { times, values } = clip.tracks.find((t) => t.name === 'Hip.position');
+  const n = times.length, last = values.length - 3, span = times[n - 1] - times[0];
+  const drift = [values[last] - values[0], values[last + 1] - values[1]];
+  for (const k of [0, 1]) {
+    let mean = 0;
+    for (let i = 0; i < n; i++) mean += (values[i * 3 + k] -= (drift[k] * (times[i] - times[0])) / span) / n;
+    for (let i = 0; i < n; i++) values[i * 3 + k] -= mean;
+  }
+  // A cycle missing its closing frame (Tripo's run) hitches on every wrap: repeat frame 0 one step on.
+  if (clip.tracks.some((t) => t.name.endsWith('.quaternion') && seam(t) > 0.02)) {
+    const end = times[n - 1] + times[n - 1] - times[n - 2];
+    for (const track of clip.tracks) {
+      track.values = Float32Array.from([...track.values, ...track.values.slice(0, track.getValueSize())]);
+      track.times = Float32Array.from([...track.times, end]);
+    }
+    clip.resetDuration();
+  }
+  return Math.hypot(...drift) / span;
+}
 
 const io = new NodeIO();
 for (const [character, clips] of Object.entries(CHARACTERS)) {
@@ -56,6 +83,7 @@ for (const [character, clips] of Object.entries(CHARACTERS)) {
     const clip = readClip(fileIn(join(TRIPO, source), '.fbx'));
     if (TRIM[`${character}/${name}`]) clip.trim(0, TRIM[`${character}/${name}`]);
     const animation = doc.createAnimation(name);
+    if (IN_PLACE.has(name)) animation.setExtras({ groundSpeed: inPlace(clip) });
     for (const track of clip.tracks) {
       const [nodeName, property] = track.name.split('.');
       const values = Float32Array.from(track.values);
@@ -63,16 +91,6 @@ for (const [character, clips] of Object.entries(CHARACTERS)) {
       // FBX units: the armature carries a 100x scale the GLB already bakes in.
       if (nodeName === 'Armature' && property === 'scale') continue;
       if (property === 'scale' && isConstant(values, stride)) continue;
-      // Hip carries the travel (Z is up): strip its horizontal drift and centre the cycle on the body's origin, keeping sway and bob.
-      if (IN_PLACE.has(name) && nodeName === 'Hip' && property === 'position') {
-        const { times } = track, n = times.length, last = values.length - 3;
-        for (const k of [0, 1]) {
-          const drift = values[last + k] - values[k];
-          let mean = 0;
-          for (let i = 0; i < n; i++) mean += (values[i * 3 + k] -= (drift * (times[i] - times[0])) / (times[n - 1] - times[0])) / n;
-          for (let i = 0; i < n; i++) values[i * 3 + k] -= mean;
-        }
-      }
       const node = nodes.get(nodeName);
       if (!node) throw new Error(`${character}/${name}: no node ${nodeName}`);
       const sampler = doc.createAnimationSampler()

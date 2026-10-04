@@ -57,8 +57,7 @@ export class Player {
 
   reset(): void {
     this.health = tuning.playerMaxHealth;
-    this.position.set(0, 0, 6);
-    this.character.root.rotation.y = Math.PI;
+    this.character.place(0, 6, Math.PI);
     this.velocity.set(0, 0, 0);
     this.dodgeCooldown = 0;
     this.buffered = null;
@@ -91,11 +90,9 @@ export class Player {
     switch (this.state) {
       case 'move': {
         this.velocity.lerp(this.wish.multiplyScalar(tuning.playerSpeed), 1 - Math.exp(-14 * delta));
-        const moving = this.move.lengthSq() > 0.04;
-        const target = moving ? yawTo(this.wish) : yawTo(this.toNpc);
-        turnToward(this.character.root, target, moving ? 12 : 5, delta);
-        const clip = moving ? 'run' : 'idle';
-        if (this.character.clip !== clip) this.character.play(clip, { fade: 0.15 });
+        // Face where the body is actually going; standing, face him.
+        const { moving, velocity } = this.character;
+        turnToward(this.character.root, yawTo(moving ? velocity : this.toNpc), moving ? 12 : 5, delta);
         break;
       }
       case 'strike': {
@@ -125,7 +122,6 @@ export class Player {
         break;
     }
     this.position.addScaledVector(this.velocity, delta);
-    this.character.update(delta);
   }
 
   /** Returns false when the blow is avoided. */
@@ -176,7 +172,7 @@ export class Player {
     const direction = this.wish.lengthSq() > 0.01 ? this.wish.clone() : this.toNpc.clone().negate();
     this.velocity.copy(direction.setY(0).normalize()).multiplyScalar(DODGE_SPEED);
     this.character.root.rotation.y = yawTo(direction);
-    this.character.play('run', { speed: 2.2, fade: 0.05 });
+    this.character.locomote('idle');
     events.push({ type: 'dodge', at: this.position.clone() });
   }
 
@@ -184,5 +180,6 @@ export class Player {
     this.state = 'move';
     this.timer = 0;
     this.combo = 0;
+    this.character.locomote('idle');
   }
 }

@@ -130,8 +130,10 @@ export class Game {
     const live = !this.outcome;
     this.player.update(fightDelta, live ? this.input : null, this.cameraRig.forward, this.npc.position, this.events);
     if (live) this.npc.update(fightDelta, this.player.position, this.events);
-    else this.npc.character.update(fightDelta);
     this.resolve(live);
+    // Animate once bodies are where they end up this frame: locomotion shows the actual displacement.
+    this.player.character.update(fightDelta);
+    this.npc.character.update(fightDelta);
     this.react();
     this.judge(delta);
 
@@ -306,12 +308,14 @@ export class Game {
       outcome: this.outcome,
       player: {
         position: { x: this.player.position.x, y: this.player.position.y, z: this.player.position.z },
-        speed: this.player.velocity.length(),
+        speed: this.player.character.velocity.length(),
+        stride: this.player.character.stride,
         health: this.player.health,
         state: this.player.state,
       },
       npc: {
         position: { x: this.npc.position.x, y: this.npc.position.y, z: this.npc.position.z },
+        stride: this.npc.character.stride,
         health: this.npc.health,
         mood: this.npc.mood,
         state: this.npc.state,
