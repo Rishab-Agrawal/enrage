@@ -21,10 +21,21 @@ const BUFFER_TIME = 0.25;
 const MAX_TWIST = 0.8;
 /** Once she stops turning, a twist past this, rad, settles with a pivot too. */
 const SETTLE = 0.2;
-/** Seconds a pivot takes: unhurried and light. */
-const PIVOT_TIME = 0.42;
+/**
+ * A pivot's steps: the outer foot steps round as the hips turn on the ball of the inner, then the inner follows in a
+ * smaller step. Each turns the hips its share of the way to her aim over its seconds, its knee lifting up to `lift`.
+ */
+const STEPS = [
+  { share: 0.7, time: 0.42, lift: 1 },
+  { share: 1, time: 0.3, lift: 0.6 },
+];
 
 type State = 'move' | 'strike' | 'dodge' | 'hurt' | 'down';
+/**
+ * A pivot under way: which of STEPS it is on and that step's progress, 0 to 1; the hips' yaw the step set off from, the
+ * ball of the foot it turns on and the leg stepping round (positive the left); and how large its steps are, up to 1.
+ */
+type Pivot = { step: number; t: number; from: number; about: THREE.Vector3; leg: number; size: number };
 
 export class Player {
   readonly character: Character;
@@ -45,11 +56,7 @@ export class Player {
   private turn = 0;
   /** Where she heads: A/D steer it, W walks along it and the camera looks along it. Her hips catch up with it. */
   private aim = 0;
-  /**
-   * A pivot under way: the hips' yaw it set off from and turns them by, the ball of the foot it turns on, the leg that
-   * steps round (positive the left), and its progress, 0 to 1.
-   */
-  private pivot: { from: number; by: number; about: THREE.Vector3; leg: number; t: number } | null = null;
+  private pivot: Pivot | null = null;
   private readonly wish = new THREE.Vector3();
   private readonly toNpc = new THREE.Vector3();
 
@@ -146,8 +153,7 @@ export class Player {
 
   /**
    * Her hips follow her aim: closely on the move; standing, her upper body leads and her hips hold until it has
-   * twisted as far as it goes, then catch up in a quick step: they pivot on the ball of the inner foot while the outer
-   * knee lifts and swings round. Mid-action her aim eases after her hips instead.
+   * twisted as far as it goes, then catch up in a pivot's two steps. Mid-action her aim eases after her hips instead.
    */
   private follow(delta: number): void {
     const { character } = this;
@@ -160,20 +166,27 @@ export class Player {
       character.turn(lag * (1 - Math.exp(-20 * delta)));
       this.pivot = null;
     } else if (this.pivot) {
-      this.pivot.t = Math.min(1, this.pivot.t + delta / PIVOT_TIME);
-      const { from, by, about, t } = this.pivot;
-      character.turn(angleTo(facing, from + by * THREE.MathUtils.smootherstep(t, 0, 1)), about);
-      if (t === 1) this.pivot = null;
+      const { step, from, about, leg, size } = this.pivot;
+      const { share, time } = STEPS[step];
+      const t = Math.min(1, this.pivot.t + delta / time);
+      this.pivot.t = t;
+      character.turn(angleTo(facing, from + share * angleTo(from, this.aim) * THREE.MathUtils.smootherstep(t, 0, 1)), about);
+      if (t === 1) this.pivot = STEPS[step + 1] ? this.stepOff(step + 1, -leg, size) : null;
     } else if (Math.abs(lag) > MAX_TWIST || (Math.abs(this.turn) < 0.05 && Math.abs(lag) > SETTLE)) {
-      // Turn by as much as her aim will be ahead when the step lands; step out with the leg on the turning side.
-      const by = lag - this.turn * tuning.playerTurnRate * PIVOT_TIME;
-      const leg = Math.sign(by);
-      this.pivot = { from: facing, by, about: character.ball(-leg), leg, t: 0 };
+      // Step out first with the leg on the turning side; the further she has to turn, the larger the steps.
+      this.pivot = this.stepOff(0, Math.sign(lag), Math.min(1, Math.abs(lag) / MAX_TWIST));
     }
     const twist = this.state === 'move' ? angleTo(character.root.rotation.y, this.aim) : 0;
     character.twist += (twist - character.twist) * (1 - Math.exp(-20 * delta));
-    const knee = this.pivot ? this.pivot.leg * Math.min(1, Math.abs(this.pivot.by) / MAX_TWIST) * Math.sin(Math.PI * this.pivot.t) : 0;
+    const { pivot } = this;
+    const knee = pivot ? pivot.leg * pivot.size * STEPS[pivot.step].lift * Math.sin(Math.PI * pivot.t) : 0;
     character.knee += (knee - character.knee) * (1 - Math.exp(-40 * delta));
+  }
+
+  /** Starts a pivot's `step`: `leg` steps round while the hips turn on the ball of the other foot. */
+  private stepOff(step: number, leg: number, size: number): Pivot {
+    const { character } = this;
+    return { step, t: 0, from: character.root.rotation.y, about: character.ball(-leg), leg, size };
   }
 
   /** Returns false when the blow is avoided. */

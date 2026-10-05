@@ -58,13 +58,16 @@ const MIXAMO = {
 const TO_TRIPO = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI / 2);
 // Tripo's clips key the Armature from Z-up to Y-up and counter-rotate Root; keying the same keeps crossfades upright.
 const ARMATURE = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -Math.PI / 2);
-const ARM_SWING = 0.7;
+// Arms swing half as far as Mixamo's, about a hang 7° further forward, with elbows 40% straighter.
+const ARM_SWING = 0.5;
+const ARM_FORWARD = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), THREE.MathUtils.degToRad(7));
+const ELBOW_BEND = 0.6;
 
 /**
  * Re-expresses a Mixamo take on a Tripo rig. Both rest in a T-pose, so each Tripo bone turns, in world space, as its
  * Mixamo bone turns from rest; the hips travel scaled by hip height. Legs and collarbones first take Mixamo's rest
  * stance: Tripo's legs stand splayed ~7° and its collarbones hiked ~13°, which every step would carry, landing the feet
- * three times as wide under shrugged shoulders. Arms swing 30% less than Mixamo's, and wrists hold their rest bend:
+ * three times as wide under shrugged shoulders. Arms swing gentler than Mixamo's, and wrists hold their rest bend:
  * Mixamo walks flap them ~40°, which reads as flailing on rigid gloved fists.
  */
 function retarget(fbx, nodes) {
@@ -111,6 +114,7 @@ function retarget(fbx, nodes) {
         bone(from).getWorldQuaternion(turn).multiply(q.copy(rest.get(from)).invert());
         turn.premultiply(TO_TRIPO).multiply(q.copy(TO_TRIPO).invert());
         rotation = turn.clone().multiply(stance.get(node.getName()) ?? q.identity()).multiply(world(node).rotation);
+        if (node.getName().endsWith('arm')) rotation.premultiply(ARM_FORWARD); // upper arm and forearm alike
         values.get(node.getName()).push(...q.copy(parent).invert().multiply(rotation).toArray());
       } else {
         rotation = parent.clone().multiply(new THREE.Quaternion(...node.getRotation()));
@@ -121,12 +125,16 @@ function retarget(fbx, nodes) {
     bone('Hips').getWorldPosition(p).sub(hipsRest).multiplyScalar(scale).applyQuaternion(TO_TRIPO).add(hip.position);
     hipTravel.push(...p.sub(root.position).applyQuaternion(q.copy(root.rotation).invert()).toArray());
   }
-  // Each arm bone eases toward its average pose.
-  for (const name of ['L_Upperarm', 'L_Forearm', 'R_Upperarm', 'R_Forearm']) {
+  // Keeps `share` of each key's turn away from `toward`: by default the bone's average pose.
+  const ease = (name, share, toward) => {
     const keys = values.get(name);
     const poses = Array.from(times, (_, i) => new THREE.Quaternion().fromArray(keys, i * 4));
-    const mean = poses.reduce((m, pose, i) => m.slerp(pose, 1 / (i + 1)), poses[0].clone());
-    poses.forEach((pose, i) => q.slerpQuaternions(mean, pose, ARM_SWING).toArray(keys, i * 4));
+    toward ??= poses.reduce((m, pose, i) => m.slerp(pose, 1 / (i + 1)), poses[0].clone());
+    poses.forEach((pose, i) => q.slerpQuaternions(toward, pose, share).toArray(keys, i * 4));
+  };
+  for (const side of ['L', 'R']) {
+    ease(`${side}_Upperarm`, ARM_SWING);
+    ease(`${side}_Forearm`, ELBOW_BEND, new THREE.Quaternion(...nodes.get(`${side}_Forearm`).getRotation())); // rest: near straight
   }
 
   const constant = (name, value) => new THREE.KeyframeTrack(name, [0, times.at(-1)], [...value, ...value]);
