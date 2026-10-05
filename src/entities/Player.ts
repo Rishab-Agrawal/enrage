@@ -4,10 +4,13 @@ import type { Input } from '../core/Input';
 import type { FightEvent } from '../game/events';
 import { tuning } from '../game/tuning';
 import { Character } from './Character';
-import { angleTo } from './steering';
+import { angleTo, turnToward, yawTo } from './steering';
 
-/** The jab's clip-second window, guard to guard: `contact` is the left fist at full stretch. */
-const JAB = { from: 0.15, contact: 0.65, to: 1.25, speed: 1.8 };
+/** Clip-second windows: `contact` is when the striking `hand` lands (measured from the clip's extension frame). */
+const STRIKES = [
+  { clip: 'jab', hand: 'L_Hand', from: 0.15, contact: 0.49, to: 1.0, speed: 1.6 },
+  { clip: 'cross', hand: 'R_Hand', from: 1.25, contact: 2.2, to: 2.6, speed: 2.4 },
+];
 const DODGE_TIME = 0.32;
 const DODGE_SPEED = 10;
 const DODGE_COOLDOWN = 0.7;
@@ -25,7 +28,10 @@ export class Player {
   state: State = 'move';
   private timer = 0;
   private contactAt = 0;
+  private cancelAt = 0;
   private endAt = 0;
+  private combo = 0;
+  private strike = STRIKES[0];
   private dodgeCooldown = 0;
   private buffered: 'strike' | 'dodge' | null = null;
   private bufferTimer = 0;
@@ -33,6 +39,7 @@ export class Player {
   /** Turn input eased toward the held A/D, so turning (and the camera locked behind her) starts and stops softly. */
   private turn = 0;
   private readonly wish = new THREE.Vector3();
+  private readonly toNpc = new THREE.Vector3();
 
   constructor(gltf: GLTF) {
     this.character = new Character(gltf, 1.65);
@@ -64,10 +71,10 @@ export class Player {
   }
 
   /**
-   * Her legs answer input in every state but a dodge or a fall: strikes and flinches play on her upper body.
+   * Her legs answer input except while she strikes, dodges or is down: a flinch plays on her upper body only.
    * `resting`: she heals only while the NPC is calm, so running from his rage buys nothing.
    */
-  update(delta: number, input: Input | null, resting: boolean, events: FightEvent[]): void {
+  update(delta: number, input: Input | null, npc: THREE.Vector3, resting: boolean, events: FightEvent[]): void {
     this.timer += delta;
     this.dodgeCooldown -= delta;
     this.bufferTimer -= delta;
@@ -80,20 +87,28 @@ export class Player {
     } else {
       this.move.set(0, 0);
     }
+    this.toNpc.subVectors(npc, this.position).setY(0);
 
     if (this.state === 'strike' && this.contactAt > 0 && this.timer >= this.contactAt) {
       this.contactAt = 0;
-      events.push({ type: 'contact', who: 'player', damage: tuning.strikeDamage, knockback: 0, at: this.character.joint('L_Hand') });
+      events.push({ type: 'contact', who: 'player', damage: tuning.strikeDamage, knockback: 0, at: this.character.joint(this.strike.hand) });
     }
     if (this.state !== 'move' && this.state !== 'down' && this.timer >= this.endAt) this.toMove();
     if (this.bufferTimer <= 0) this.buffered = null;
-    if (this.state !== 'dodge' && this.state !== 'down' && this.buffered === 'dodge' && this.dodgeCooldown <= 0) this.startDodge(events);
-    else if (this.state === 'move' && this.buffered === 'strike') this.startStrike(events);
+    const canAct = this.state === 'move' || (this.state === 'strike' && this.timer >= this.cancelAt);
+    if ((canAct || this.state === 'hurt') && this.buffered === 'dodge' && this.dodgeCooldown <= 0) this.startDodge(events);
+    else if (canAct && this.buffered === 'strike') this.startStrike(events);
 
     if (this.state === 'dodge') {
       this.velocity.setLength(DODGE_SPEED * (0.35 + 0.65 * (1 - this.timer / DODGE_TIME)));
     } else if (this.state === 'down') {
       this.velocity.multiplyScalar(Math.exp(-6 * delta));
+    } else if (this.state === 'strike') {
+      this.velocity.multiplyScalar(Math.exp(-12 * delta));
+      // Through the wind-up, square up to him and close the last half-metre, so strikes connect instead of whiffing.
+      if (this.contactAt > 0 && this.toNpc.lengthSq() < 36) turnToward(this.character, yawTo(this.toNpc), 10, delta);
+      const gap = this.toNpc.length() - 1.3;
+      if (this.timer < this.contactAt && gap > 0 && gap < 1.2) this.position.addScaledVector(this.toNpc.normalize(), Math.min(gap, 3 * delta));
     } else {
       // A/D only turn her and W/S only walk her along her facing, so held together she walks an arc.
       // Shift hurries her forward only.
@@ -130,14 +145,16 @@ export class Player {
     this.bufferTimer = BUFFER_TIME;
   }
 
-  /** Jabs follow one another guard to guard, however fast the clicks come. */
   private startStrike(events: FightEvent[]): void {
+    const strike = (this.strike = STRIKES[this.combo++ % STRIKES.length]);
     this.buffered = null;
+    this.character.turn(angleTo(this.character.root.rotation.y, this.yaw));
     this.state = 'strike';
     this.timer = 0;
-    this.contactAt = (JAB.contact - JAB.from) / JAB.speed;
-    this.endAt = (JAB.to - JAB.from) / JAB.speed;
-    this.character.gesture('jab', { from: JAB.from, speed: JAB.speed });
+    this.contactAt = (strike.contact - strike.from) / strike.speed;
+    this.cancelAt = this.contactAt + 0.08;
+    this.endAt = (strike.to - strike.from) / strike.speed;
+    this.character.play(strike.clip, { loop: false, from: strike.from, speed: strike.speed, fade: 0.06 });
     events.push({ type: 'swing', who: 'player', heavy: false });
   }
 
@@ -157,6 +174,7 @@ export class Player {
   private toMove(): void {
     this.state = 'move';
     this.timer = 0;
+    this.combo = 0;
     this.character.endGesture();
     this.character.locomote('idle');
   }

@@ -87,27 +87,6 @@ test('W walks, Shift sprints, S backs up, A/D only turn, and Shift alone dashes'
   expect(errors).toEqual([]);
 });
 
-test('she walks on while she strikes', async ({ page }) => {
-  const errors = await start(page);
-  const box = (await page.locator('#game-canvas').boundingBox())!;
-  await page.mouse.move(box.width / 2, box.height / 2);
-  const before = await read(page);
-  let struck = false;
-  await page.keyboard.down('KeyW');
-  for (let i = 0; i < 8; i++) {
-    await page.mouse.down();
-    await page.mouse.up();
-    await page.waitForTimeout(150);
-    struck ||= (await read(page)).player.state === 'strike';
-  }
-  await page.keyboard.up('KeyW');
-  const after = await read(page);
-  const walked = Math.hypot(after.player.position.x - before.player.position.x, after.player.position.z - before.player.position.z);
-  expect(struck).toBe(true);
-  expect(walked / (after.elapsed - before.elapsed)).toBeGreaterThan(1.2); // near her 1.5 m/s walk
-  expect(errors).toEqual([]);
-});
-
 test('turning on the spot, her upper body leads and her hips pivot to catch up', async ({ page }) => {
   const errors = await start(page);
   await page.keyboard.down('KeyD');

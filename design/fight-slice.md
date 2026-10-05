@@ -11,7 +11,7 @@ The first playable slice: one fight, one NPC, one hilltop arena. No levels, no c
 - **Across 1–3 min:** you can't win one long exchange, so the fight becomes enrage → fight → calm → rest, repeated.
 - **Lose, learn, restart:** your bar empties → defeat card showing his remaining health → instant rematch (R).
 - **Risk and reward:** staying in to land one more hit against getting caught by his punch. Calming him early is safe but slow.
-- **A better player:** dodges through his wind-ups, keeps her jabs landing, and rests less.
+- **A better player:** dodges through his wind-ups, lands full combos, and rests less.
 - **Communicating the next decision:** his mood badge, his rage embers and rim light, his roar on enrage, and the wind-up before each attack.
 - **Non-goals:** levels, multiple NPCs, chat/voice, LLM, mobile/touch, gamepad.
 
@@ -37,15 +37,15 @@ The player strikes to empty the NPC's health. His heavy attacks create risk, and
 
 ## Contact
 
-Everything physical happens on touch. A blow lands only if the striking fist, sampled from its bone at full stretch, reaches the other's body; there are no invisible walls or ranged pushes. Knockback is an impulse on top of her own movement, never a loss of control. She strikes and flinches with her upper body, so her legs answer input at all times except mid-dodge or once down.
+Everything physical happens on touch. A blow lands only if the striking fist, sampled from its bone at full stretch, reaches the other's body; there are no invisible walls or ranged pushes. Knockback is an impulse on top of her own movement, never a loss of control. A flinch plays on her upper body, so a blow never takes her legs; only her own strikes and dodges commit them.
 
 ## Tuning (live in the debug panel)
 
 | | Player | NPC |
 | --- | --- | --- |
 | Health | 100, regen 3/s only while he is calm | 400, never heals |
-| Damage | 9 per jab | punch 16, haymaker 30 + knockback |
-| Rhythm | a jab every ~0.6 s, guard to guard; dodge 0.32 s with i-frames, 0.7 s cooldown | wind-up 0.5–0.9 s, ~1.5 s attack cycle |
+| Damage | 9 per strike (jab/cross alternate) | punch 16, haymaker 30 + knockback |
+| Rhythm | strike every ~0.45 s, dodge 0.32 s with i-frames, 0.7 s cooldown | wind-up 0.5–0.9 s, ~1.5 s attack cycle |
 
 Rough maths: a straight trade drains the player in about 12 s while dealing at most ~200 damage, so winning takes about two rests.
 

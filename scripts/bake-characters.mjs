@@ -17,7 +17,7 @@ const ARTIFACTS = 'artifacts';
 // clips transfer between them (Gorran's haymaker is Wren's cross; both collapse the same way).
 const CHARACTERS = {
   player: {
-    idle: 'tripo/player-anim/idle', walk: 'mixamo/walk', walkBack: 'mixamo/walk-back', run: 'tripo/player-anim/run', jab: 'tripo/player-anim/box_01',
+    idle: 'tripo/player-anim/idle', walk: 'mixamo/walk', walkBack: 'mixamo/walk-back', run: 'tripo/player-anim/run', jab: 'tripo/player-anim/box_01', cross: 'tripo/player-anim/box_02',
     hurt: 'tripo/player-anim/hit_to_body_01', defeat: 'tripo/npc-anim/defeat_03',
   },
   npc: {
@@ -223,13 +223,23 @@ function inPlace(clip) {
   return (Math.sign(-travel[1]) * Math.hypot(travel[0], travel[1])) / period;
 }
 
-/** Shifts a take's hip travel to set off from the rig's rest hips: some takes start with them half a metre aside. */
-function setOffFromRest(clip, rest) {
-  const hip = clip.tracks.find((t) => t.name === 'Hip.position');
-  const [dx, dy] = [rest[0] - hip.values[0], rest[1] - hip.values[1]]; // Z is up
-  for (let i = 0; i < hip.values.length; i += 3) {
-    hip.values[i] += dx;
-    hip.values[i + 1] += dy;
+/**
+ * Moves a take, unturned, so its hips set off from where the rig's rest hips stand: some start them half a metre aside,
+ * which a crossfade into the take would slide across.
+ */
+function setOffFromRest(clip, nodes) {
+  const track = (name) => clip.tracks.find((t) => t.name === name);
+  const rest = (name) => new THREE.Quaternion(...nodes.get(name).getRotation());
+  const hip = track('Hip.position');
+  const turns = track('Root.quaternion').createInterpolant();
+  const at = (i) => new THREE.Quaternion().fromArray(turns.evaluate(hip.times[i]));
+  // Root's rest turn as the take keys it: the take's Armature turn differs from the rig's.
+  const restRoot = new THREE.Quaternion().fromArray(track('Armature.quaternion').values).invert().multiply(rest('Armature')).multiply(rest('Root'));
+  const shift = new THREE.Vector3(...nodes.get('Hip').getTranslation()).applyQuaternion(restRoot);
+  shift.sub(new THREE.Vector3().fromArray(hip.values).applyQuaternion(at(0))).setZ(0); // Z is up
+  const p = new THREE.Vector3();
+  for (let i = 0; i < hip.times.length; i++) {
+    p.fromArray(hip.values, i * 3).add(shift.clone().applyQuaternion(at(i).invert())).toArray(hip.values, i * 3);
   }
 }
 
@@ -249,7 +259,7 @@ for (const [character, clips] of Object.entries(CHARACTERS)) {
     }
     const animation = doc.createAnimation(name);
     if (IN_PLACE.has(name)) animation.setExtras({ groundSpeed: inPlace(clip) });
-    else setOffFromRest(clip, nodes.get('Hip').getTranslation());
+    else setOffFromRest(clip, nodes);
     for (const track of clip.tracks) {
       const [nodeName, property] = track.name.split('.');
       const values = Float32Array.from(track.values);

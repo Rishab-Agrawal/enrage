@@ -139,7 +139,7 @@ export class Game {
     this.hitstop -= delta;
     const fightDelta = this.hitstop > 0 ? delta * 0.06 : delta;
     const live = !this.outcome;
-    this.player.update(fightDelta, live ? this.input : null, this.npc.mood === 'calm', this.events);
+    this.player.update(fightDelta, live ? this.input : null, this.npc.position, this.npc.mood === 'calm', this.events);
     if (live) this.npc.update(fightDelta, this.player.position, this.events);
     this.resolve();
     // Animate once bodies are where they end up this frame: locomotion shows the actual displacement.
