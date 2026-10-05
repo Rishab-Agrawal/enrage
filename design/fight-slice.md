@@ -17,7 +17,7 @@ The first playable slice: one fight, one NPC, one hilltop arena. No levels, no c
 
 ## Core loop contract
 
-The player strikes to empty the NPC's health. His heavy attacks, and a regen rate too slow to outlast him, create risk. Calming him buys rest, and enraging him buys another window to fight. Failure costs the run; a rematch is one key.
+The player strikes to empty the NPC's health. His heavy attacks create risk, and the player only regenerates while he is calm, too slowly to outlast him. Calming him buys rest, and enraging him buys another window to fight. Failure costs the run; a rematch is one key.
 
 | Clause | Proof in code |
 | --- | --- |
@@ -39,7 +39,7 @@ The player strikes to empty the NPC's health. His heavy attacks, and a regen rat
 
 | | Player | NPC |
 | --- | --- | --- |
-| Health | 100, regen 3/s | 400, never heals |
+| Health | 100, regen 3/s only while he is calm | 400, never heals |
 | Damage | 9 per strike (jab/cross alternate) | punch 24, kick 18 + knockback |
 | Rhythm | strike every ~0.45 s, dodge 0.35 s with i-frames, 0.7 s cooldown | wind-up ~0.5 s, ~1.4 s attack cycle |
 

@@ -177,7 +177,7 @@ test('a calm NPC nudged inside his comfort distance walks well clear of it', asy
   expect(errors).toEqual([]);
 });
 
-test('a straight fight is lost: regen is too slow', async ({ page }) => {
+test('a straight fight is lost: no regen while he is enraged', async ({ page }) => {
   test.setTimeout(90_000);
   const errors = await start(page);
   await setMood(page, 'enraged');

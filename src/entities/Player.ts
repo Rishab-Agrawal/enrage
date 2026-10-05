@@ -67,11 +67,12 @@ export class Player {
     this.toMove();
   }
 
-  update(delta: number, input: Input | null, npc: THREE.Vector3, events: FightEvent[]): void {
+  /** `resting`: the player heals only while the NPC is calm, so running from his rage buys nothing. */
+  update(delta: number, input: Input | null, npc: THREE.Vector3, resting: boolean, events: FightEvent[]): void {
     this.timer += delta;
     this.dodgeCooldown -= delta;
     this.bufferTimer -= delta;
-    if (this.state !== 'down') this.health = Math.min(tuning.playerMaxHealth, this.health + tuning.playerRegen * delta);
+    if (resting && this.state !== 'down') this.health = Math.min(tuning.playerMaxHealth, this.health + tuning.playerRegen * delta);
 
     if (input) {
       if (input.consume('strike')) this.buffer('strike');
