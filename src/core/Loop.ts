@@ -22,7 +22,8 @@ export class Loop {
 
   private readonly tick = (time: number) => {
     if (!this.running) return;
-    const deltaSeconds = Math.min((time - this.lastTime) / 1000, 0.05);
+    // A frame's timestamp can predate start(), so the first delta may come out negative.
+    const deltaSeconds = Math.max(0, Math.min((time - this.lastTime) / 1000, 0.05));
     this.lastTime = time;
     this.update(deltaSeconds, time / 1000);
     this.render();

@@ -13,6 +13,8 @@ interface ThreeGameDiagnostics {
   /** `speed` is measured ground speed; `stride` the ground speed the legs show, null mid-action. */
   player: { position: Vec3; speed: number; stride: number | null; health: number; state: string };
   npc: { position: Vec3; stride: number | null; health: number; mood: 'calm' | 'enraged'; state: string };
+  /** `yaw` is the heading movement keys are read against: W runs along it. */
+  camera: { yaw: number };
   renderer: { calls: number; triangles: number; geometries: number; textures: number };
   canvas: { clientWidth: number; clientHeight: number; width: number; height: number; dpr: number };
 }

@@ -5,6 +5,7 @@ import { Loop } from '../core/Loop';
 import { createRenderer, resizeRenderer } from '../core/Renderer';
 import { Npc } from '../entities/Npc';
 import { Player } from '../entities/Player';
+import { yawTo } from '../entities/steering';
 import { Audio } from '../systems/Audio';
 import { CameraRig } from '../systems/CameraRig';
 import { DebugPanel } from '../systems/DebugPanel';
@@ -109,7 +110,7 @@ export class Game {
     this.events.length = 0;
     this.input.clear();
     this.debug.sync();
-    this.cameraRig.update(0, this.player.position, this.npc.position, true);
+    this.cameraRig.update(0, this.player.position, this.player.yaw, true);
   }
 
   private update(delta: number): void {
@@ -141,7 +142,7 @@ export class Game {
     this.npc.character.rim.value.lerp(rage ? RAGE_RIM : PLAYER_RIM, 1 - Math.exp(-5 * delta));
     this.vfx.update(delta, this.npc.position, rage ? 'enraged' : 'calm', this.elapsed);
     this.arena.update(this.elapsed);
-    this.cameraRig.update(delta, this.player.position, this.npc.position);
+    this.cameraRig.update(delta, this.player.position, this.player.yaw);
     this.hud.update(
       {
         player: this.player.health / tuning.playerMaxHealth,
@@ -320,6 +321,7 @@ export class Game {
         mood: this.npc.mood,
         state: this.npc.state,
       },
+      camera: { yaw: yawTo(this.cameraRig.forward) },
       renderer: {
         calls: info.render.calls,
         triangles: info.render.triangles,

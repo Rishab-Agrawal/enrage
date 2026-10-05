@@ -27,7 +27,7 @@ export class Arena {
   constructor(benders: GrassBenders) {
     const rng = createSeededRandom(7);
     this.group.add(createSky(), createMountains(), ...createClouds(rng), createTerrain(), createDirtPatch());
-    this.group.add(createGrass(rng, this.time, benders), ...createFlowers(rng), ...createRocks(rng));
+    this.group.add(createGrass(rng, this.time, benders), createFlowers(rng), ...createRocks(rng));
     this.motes = createMotes(rng);
     this.group.add(this.motes);
   }
@@ -91,11 +91,13 @@ function createMountains(): THREE.Group {
     const indices: number[] = [];
     for (let i = 0; i <= segments; i += 1) {
       const angle = (i / segments) * Math.PI * 2;
-      const ridge = 1 - Math.abs(noise2(i * 0.06, range.seed) * 2 - 1);
-      const peak = range.height * (0.35 + 0.65 * fbm(i * 0.035, range.seed, 5)) * (0.7 + 0.3 * ridge);
+      // Noise sampled around a circle, so the range closes on itself without a seam.
+      const [c, s] = [Math.cos(angle), Math.sin(angle)];
+      const ridge = 1 - Math.abs(noise2(c * 3.4 + range.seed, s * 3.4) * 2 - 1);
+      const peak = range.height * (0.35 + 0.65 * fbm(c * 2 + range.seed, s * 2, 5)) * (0.7 + 0.3 * ridge);
       for (let j = 0; j <= rows; j += 1) {
         const t = j / rows;
-        const r = range.radius - t * 70 + noise2(i * 0.2, j + range.seed) * 25;
+        const r = range.radius - t * 70 + noise2(c * 11.5 + j, s * 11.5 + range.seed) * 25;
         positions.push(Math.cos(angle) * r, -60 + (peak + 60) * Math.pow(t, 0.8), Math.sin(angle) * r);
       }
     }
@@ -179,30 +181,36 @@ function createClouds(rng: () => number): THREE.Sprite[] {
   return clouds;
 }
 
+const MEADOW = new THREE.Color('#7aa443');
+const LUSH = new THREE.Color('#467a2e');
+const SAGE = new THREE.Color('#8fa64f');
+const GOLDEN = new THREE.Color('#dcbc62');
+const OCHRE = new THREE.Color('#bf9447');
+const far = new THREE.Color();
+
+/** The land's colour at (x, z): the grass takes it too, so the meadow's green is its grass. */
+function groundColor(x: number, z: number, target: THREE.Color): THREE.Color {
+  target.copy(MEADOW).lerp(LUSH, fbm(x * 0.08 + 9, z * 0.08) * 0.8);
+  const distance = THREE.MathUtils.smoothstep(Math.hypot(x, z), 25, 90);
+  if (distance === 0) return target;
+  // Far hills: a patchwork of sage, gold and ochre, lighter on the crests.
+  far.copy(SAGE).lerp(GOLDEN, THREE.MathUtils.smoothstep(fbm(x * 0.015, z * 0.015), 0.35, 0.6));
+  far.lerp(OCHRE, THREE.MathUtils.smoothstep(fbm(x * 0.03 + 4, z * 0.03), 0.55, 0.75) * 0.6);
+  far.multiplyScalar(0.8 + 0.3 * THREE.MathUtils.smoothstep(groundHeight(x, z), -12, 22));
+  return target.lerp(far, distance);
+}
+
 function createTerrain(): THREE.Mesh {
   const geometry = new THREE.PlaneGeometry(700, 700, 220, 220);
   geometry.rotateX(-Math.PI / 2);
   const position = geometry.getAttribute('position');
   const colors = new Float32Array(position.count * 3);
-  const meadow = new THREE.Color('#6a8f3a');
-  const lush = new THREE.Color('#4a7a30');
-  const sage = new THREE.Color('#8fa64f');
-  const golden = new THREE.Color('#dcbc62');
-  const ochre = new THREE.Color('#bf9447');
-  const far = new THREE.Color();
   const color = new THREE.Color();
   for (let i = 0; i < position.count; i += 1) {
     const x = position.getX(i);
     const z = position.getZ(i);
-    const y = groundHeight(x, z);
-    position.setY(i, y);
-    const r = Math.hypot(x, z);
-    // Far hills: a patchwork of sage, gold and ochre, lighter on the crests.
-    far.copy(sage).lerp(golden, THREE.MathUtils.smoothstep(fbm(x * 0.015, z * 0.015), 0.35, 0.6));
-    far.lerp(ochre, THREE.MathUtils.smoothstep(fbm(x * 0.03 + 4, z * 0.03), 0.55, 0.75) * 0.6);
-    far.multiplyScalar(0.8 + 0.3 * THREE.MathUtils.smoothstep(y, -12, 22));
-    color.copy(meadow).lerp(lush, fbm(x * 0.08 + 9, z * 0.08) * 0.8).lerp(far, THREE.MathUtils.smoothstep(r, 25, 90));
-    color.toArray(colors, i * 3);
+    position.setY(i, groundHeight(x, z));
+    groundColor(x, z, color).toArray(colors, i * 3);
   }
   geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
   geometry.computeVertexNormals();
@@ -246,76 +254,43 @@ function createDirtPatch(): THREE.Mesh {
 }
 
 function createGrass(rng: () => number, time: { value: number }, benders: GrassBenders): THREE.InstancedMesh {
-  // One tapered three-segment blade; uv.y runs base to tip.
+  // One blade: a single tapered triangle, shaded at the root and sunlit at the tip. Its normals point
+  // up, so it lights exactly like the ground beneath and the blades blend into one carpet.
   const blade = new THREE.BufferGeometry();
-  const w = [0.032, 0.026, 0.016, 0];
-  const verts: number[] = [];
-  const uvs: number[] = [];
-  for (let i = 0; i < 4; i += 1) {
-    const t = i / 3;
-    if (i < 3) verts.push(-w[i], t, 0, w[i], t, 0);
-    else verts.push(0, 1, 0);
-    if (i < 3) uvs.push(0, t, 1, t);
-    else uvs.push(0.5, 1);
-  }
-  blade.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
-  blade.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
-  blade.setIndex([0, 1, 2, 2, 1, 3, 2, 3, 4, 4, 3, 5, 4, 5, 6]);
+  blade.setAttribute('position', new THREE.Float32BufferAttribute([-0.035, 0, 0, 0.035, 0, 0, 0, 1, 0.12], 3));
+  blade.setAttribute('normal', new THREE.Float32BufferAttribute([0, 1, 0, 0, 1, 0, 0, 1, 0], 3));
+  blade.setAttribute('color', new THREE.Float32BufferAttribute([0.6, 0.66, 0.6, 0.6, 0.66, 0.6, 1.36, 1.32, 0.86], 3));
 
-  const count = 60000;
-  const material = new THREE.ShaderMaterial({
-    side: THREE.DoubleSide,
-    fog: true,
-    uniforms: THREE.UniformsUtils.merge([
-      THREE.UniformsLib.fog,
-      {
-        uBase: { value: new THREE.Color('#3a5f22') },
-        uTip: { value: new THREE.Color('#e0d97a') },
-        uSun: { value: SUN_DIRECTION },
-      },
-    ]),
-    vertexShader: /* glsl */ `
+  const material = new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide });
+  material.onBeforeCompile = (shader) => {
+    Object.assign(shader.uniforms, { uTime: time, uBenderA: { value: benders.a }, uBenderB: { value: benders.b } });
+    shader.vertexShader = /* glsl */ `
       uniform float uTime;
       uniform vec3 uBenderA, uBenderB;
-      varying float vHeight;
-      varying vec3 vTint;
-      #include <fog_pars_vertex>
-      vec3 bend(vec3 world, vec3 bender, float h) {
+      // Feet part the grass: tips lean away from a fighter standing in it.
+      vec3 bend(vec3 world, vec3 bender, float push) {
         vec3 away = world - bender; away.y = 0.0;
         float d = length(away);
-        return d < 0.9 && d > 0.001 ? away / d * (0.9 - d) * h * 0.9 : vec3(0.0);
+        return d > 0.001 ? away / d * push * max(0.0, 1.0 - d / 0.55) : vec3(0.0);
       }
-      void main() {
-        vHeight = uv.y;
-        vTint = instanceColor;
-        vec4 world = modelMatrix * instanceMatrix * vec4(position, 1.0);
-        float h = uv.y * uv.y;
-        float gust = sin(uTime * 1.7 + world.x * 0.35 + world.z * 0.22) + 0.5 * sin(uTime * 3.1 + world.z * 0.9);
-        world.x += gust * 0.09 * h;
-        world.z += gust * 0.05 * h;
-        world.xyz += bend(world.xyz, uBenderA, h) + bend(world.xyz, uBenderB, h);
-        vec4 mvPosition = viewMatrix * world;
-        gl_Position = projectionMatrix * mvPosition;
-        #include <fog_vertex>
-      }`,
-    fragmentShader: /* glsl */ `
-      uniform vec3 uBase, uTip;
-      varying float vHeight;
-      varying vec3 vTint;
-      #include <common>
-      #include <fog_pars_fragment>
-      void main() {
-        vec3 col = mix(uBase, uTip, smoothstep(0.0, 1.0, vHeight)) * vTint;
-        gl_FragColor = vec4(col, 1.0);
-        #include <tonemapping_fragment>
-        #include <colorspace_fragment>
-        #include <fog_fragment>
-      }`,
-  });
-  material.uniforms.uTime = time;
-  material.uniforms.uBenderA = { value: benders.a };
-  material.uniforms.uBenderB = { value: benders.b };
+      ${shader.vertexShader}`.replace(
+      '#include <project_vertex>',
+      /* glsl */ `
+      vec4 world = modelMatrix * instanceMatrix * vec4(transformed, 1.0);
+      float tip = position.y * position.y * length(instanceMatrix[1].xyz);
+      float gust = sin(uTime * 1.7 + world.x * 0.35 + world.z * 0.22) + 0.5 * sin(uTime * 3.1 + world.z * 0.9);
+      world.xz += vec2(0.35, 0.2) * gust * tip;
+      world.xyz += bend(world.xyz, uBenderA, tip * 1.3) + bend(world.xyz, uBenderB, tip * 1.3);
+      // A passing gust lifts the tips into the light.
+      vColor *= 1.0 + 0.1 * max(gust, 0.0) * position.y;
+      vec4 mvPosition = viewMatrix * world;
+      gl_Position = projectionMatrix * mvPosition;`,
+    );
+    // Both faces keep the upward normal: a back-facing blade is lit like a front-facing one.
+    shader.fragmentShader = `#undef DOUBLE_SIDED\n${shader.fragmentShader}`;
+  };
 
+  const count = 300000;
   const grass = new THREE.InstancedMesh(blade, material, count);
   const matrix = new THREE.Matrix4();
   const quaternion = new THREE.Quaternion();
@@ -325,31 +300,29 @@ function createGrass(rng: () => number, time: { value: number }, benders: GrassB
   const tint = new THREE.Color();
   let placed = 0;
   while (placed < count) {
-    // Denser near the arena, sparse on the far slopes.
-    const r = Math.pow(rng(), 0.85) * 55;
+    // A dense carpet across the playable meadow, thinning out where the camera never reaches.
+    const r = Math.sqrt(rng()) * 36;
+    if (rng() > 1 - THREE.MathUtils.smoothstep(r, 18, 36)) continue;
     const angle = rng() * Math.PI * 2;
-    spot.set(Math.cos(angle) * r * 1.0, 0, Math.sin(angle) * r);
+    spot.set(Math.cos(angle) * r, 0, Math.sin(angle) * r);
     const dirt = Math.hypot(spot.x / 4.6, spot.z / 3.6) + (fbm(spot.x * 0.3, spot.z * 0.3) - 0.5) * 0.6;
     if (dirt < 1 && rng() > (dirt - 0.6) * 2.5) continue;
     spot.y = groundHeight(spot.x, spot.z);
-    // Short, trampled grass where they fight; long grass past the boulder ring.
-    const tall = THREE.MathUtils.smoothstep(r, 10, 15) * 0.5 + fbm(spot.x * 0.2, spot.z * 0.2) * 0.2;
-    const height = 0.1 + tall * 0.8 + rng() * 0.1;
-    euler.set((rng() - 0.5) * 0.5, rng() * Math.PI, (rng() - 0.5) * 0.5);
+    // Ankle-high, a little longer in soft patches.
+    const height = 0.1 + fbm(spot.x * 0.25, spot.z * 0.25) * 0.14 + rng() * 0.06;
+    euler.set((rng() - 0.5) * 0.7, rng() * Math.PI * 2, (rng() - 0.5) * 0.7);
     quaternion.setFromEuler(euler);
-    scale.set(0.6 + rng() * 0.5, height, 1);
-    matrix.compose(spot, quaternion, scale);
-    grass.setMatrixAt(placed, matrix);
-    const warm = THREE.MathUtils.smoothstep(r, 14, 45) * 0.45 + fbm(spot.x * 0.12 + 5, spot.z * 0.12) * 0.35;
-    const shade = 0.75 + rng() * 0.3;
-    tint.setRGB(shade * (0.85 + warm * 0.45), shade * (0.92 + warm * 0.12), shade * (0.85 - warm * 0.25), THREE.SRGBColorSpace);
-    grass.setColorAt(placed, tint);
+    scale.set(0.7 + rng() * 0.6, height, 1);
+    grass.setMatrixAt(placed, matrix.compose(spot, quaternion, scale));
+    grass.setColorAt(placed, groundColor(spot.x, spot.z, tint).multiplyScalar(0.88 + rng() * 0.24));
     placed += 1;
   }
   grass.frustumCulled = false;
+  grass.receiveShadow = true;
   return grass;
 }
 
+/** A soft five-petal head, white so each instance tints it. */
 function petalTexture(): THREE.CanvasTexture {
   const canvas = document.createElement('canvas');
   canvas.width = canvas.height = 64;
@@ -357,66 +330,48 @@ function petalTexture(): THREE.CanvasTexture {
   ctx.translate(32, 32);
   for (let i = 0; i < 5; i += 1) {
     ctx.rotate((Math.PI * 2) / 5);
-    const g = ctx.createRadialGradient(0, -14, 2, 0, -14, 16);
+    const g = ctx.createRadialGradient(0, -6, 2, 0, -14, 18);
     g.addColorStop(0, '#ffffff');
-    g.addColorStop(1, '#d8d8d8');
+    g.addColorStop(1, '#ece4dc');
     ctx.fillStyle = g;
     ctx.beginPath();
-    ctx.ellipse(0, -14, 11, 16, 0, 0, Math.PI * 2);
+    ctx.ellipse(0, -15, 12, 16, 0, 0, Math.PI * 2);
     ctx.fill();
   }
-  ctx.fillStyle = '#3b2a12';
+  const heart = ctx.createRadialGradient(-1, -1, 0, 0, 0, 8);
+  heart.addColorStop(0, '#fff3b0');
+  heart.addColorStop(1, '#e8b850');
+  ctx.fillStyle = heart;
   ctx.beginPath();
-  ctx.arc(0, 0, 6, 0, Math.PI * 2);
+  ctx.arc(0, 0, 7, 0, Math.PI * 2);
   ctx.fill();
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
   return texture;
 }
 
-/** Poppies, buttercups and daisies as tilted petal cards; lupines as spikes. Clustered like the key art. */
-function createFlowers(rng: () => number): THREE.InstancedMesh[] {
-  const heads = new THREE.InstancedMesh(
-    new THREE.PlaneGeometry(0.22, 0.22).rotateX(-Math.PI / 2),
-    new THREE.MeshLambertMaterial({ map: petalTexture(), alphaTest: 0.5, side: THREE.DoubleSide, emissive: '#3a2a1a' }),
-    1600,
-  );
-  const lupineGeometry = new THREE.ConeGeometry(0.05, 0.42, 6, 4);
-  lupineGeometry.translate(0, 0.21, 0);
-  const lupines = new THREE.InstancedMesh(lupineGeometry, new THREE.MeshLambertMaterial({ emissive: '#2c2050' }), 220);
-  const palette = ['#ff4a26', '#ff4a26', '#ffd23a', '#ffd23a', '#fffaf0'].map((c) => new THREE.Color(c));
-  const matrix = new THREE.Matrix4();
-  const quaternion = new THREE.Quaternion();
-  const euler = new THREE.Euler();
-  const spot = new THREE.Vector3();
-  const scale = new THREE.Vector3();
-
-  const clusters = Array.from({ length: 34 }, () => {
+/** Daisies, buttercups, clover and speedwell in loose drifts: soft dots of colour on the grass tips, as in a painted meadow. */
+function createFlowers(rng: () => number): THREE.Points {
+  const count = 3500;
+  const positions = new Float32Array(count * 3);
+  const colors = new Float32Array(count * 3);
+  const palette = ['#fffaf0', '#fffaf0', '#ffe27a', '#ffc4cf', '#cdd6ff'].map((c) => new THREE.Color(c));
+  let placed = 0;
+  while (placed < count) {
+    const r = 5 + Math.sqrt(rng()) * 30;
     const angle = rng() * Math.PI * 2;
-    const r = 8.5 + rng() * 14;
-    return { x: Math.cos(angle) * r, z: Math.sin(angle) * r, kind: Math.floor(rng() * palette.length) };
-  });
-  for (let i = 0; i < heads.count; i += 1) {
-    const cluster = clusters[i % clusters.length];
-    spot.set(cluster.x + (rng() - 0.5) * 3.2, 0, cluster.z + (rng() - 0.5) * 3.2);
-    spot.y = groundHeight(spot.x, spot.z) + 0.25 + rng() * 0.35;
-    // Heads turn toward the sky at a tilt so they still read from a low camera.
-    euler.set((rng() - 0.5) * 2, rng() * Math.PI * 2, (rng() - 0.5) * 2);
-    quaternion.setFromEuler(euler);
-    scale.setScalar(0.8 + rng() * 0.6);
-    heads.setMatrixAt(i, matrix.compose(spot, quaternion, scale));
-    heads.setColorAt(i, palette[(cluster.kind + (rng() < 0.2 ? 1 : 0)) % palette.length]);
+    const x = Math.cos(angle) * r;
+    const z = Math.sin(angle) * r;
+    // Drifts: flowers gather where the noise rises, each drift mostly one kind.
+    if (rng() > THREE.MathUtils.smoothstep(fbm(x * 0.09 + 31, z * 0.09), 0.5, 0.7)) continue;
+    positions.set([x, groundHeight(x, z) + 0.16 + rng() * 0.12, z], placed * 3);
+    palette[Math.floor(fbm(x * 0.05 - 17, z * 0.05) * 2 * palette.length + rng() * 1.5) % palette.length].toArray(colors, placed * 3);
+    placed += 1;
   }
-  for (let i = 0; i < lupines.count; i += 1) {
-    const cluster = clusters[(i * 7) % clusters.length];
-    spot.set(cluster.x + (rng() - 0.5) * 4, 0, cluster.z + (rng() - 0.5) * 4);
-    spot.y = groundHeight(spot.x, spot.z) + 0.2;
-    quaternion.setFromEuler(euler.set((rng() - 0.5) * 0.2, 0, (rng() - 0.5) * 0.2));
-    scale.set(1, 0.8 + rng() * 0.8, 1);
-    lupines.setMatrixAt(i, matrix.compose(spot, quaternion, scale));
-    lupines.setColorAt(i, new THREE.Color().setHSL(0.72 + rng() * 0.08, 0.5, 0.55 + rng() * 0.15));
-  }
-  return [heads, lupines];
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+  return new THREE.Points(geometry, new THREE.PointsMaterial({ map: petalTexture(), vertexColors: true, size: 0.24, alphaTest: 0.5 }));
 }
 
 function boulderGeometry(rng: () => number, size: number): THREE.BufferGeometry {

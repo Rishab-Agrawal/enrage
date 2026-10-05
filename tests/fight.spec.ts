@@ -19,15 +19,27 @@ async function start(page: Page): Promise<string[]> {
   return errors;
 }
 
-/** Sprint toward him and swing whenever he is in reach, for up to `seconds` or until `stop` holds. */
+/** Keys held to run toward each eighth of the compass around the camera heading, from behind round to the right. */
+const SECTORS = [['KeyS'], ['KeyS', 'KeyD'], ['KeyD'], ['KeyW', 'KeyD'], ['KeyW'], ['KeyW', 'KeyA'], ['KeyA'], ['KeyS', 'KeyA'], ['KeyS']];
+
+/** Sprint toward him, steering by where he is on screen, and swing whenever he is in reach, for up to `seconds` or until `stop` holds. */
 async function brawl(page: Page, seconds: number, stop: (d: Diagnostics) => boolean): Promise<Diagnostics> {
   const box = (await page.locator('#game-canvas').boundingBox())!;
   await page.mouse.move(box.width / 2, box.height / 2);
-  await page.keyboard.down('KeyW');
+  let held: string[] = [];
+  const steer = async (d: Diagnostics) => {
+    const bearing = Math.atan2(d.npc.position.x - d.player.position.x, d.npc.position.z - d.player.position.z) - d.camera.yaw;
+    const keys = SECTORS[Math.round(Math.atan2(Math.sin(bearing), Math.cos(bearing)) / (Math.PI / 4)) + 4];
+    for (const key of held) if (!keys.includes(key)) await page.keyboard.up(key);
+    for (const key of keys) if (!held.includes(key)) await page.keyboard.down(key);
+    held = keys;
+  };
+  let d = await read(page);
+  await steer(d); // a direction before Shift, or Shift dashes
   await page.keyboard.down('ShiftLeft');
   const end = Date.now() + seconds * 1000;
-  let d = await read(page);
   while (Date.now() < end && !d.outcome && !stop(d)) {
+    await steer(d);
     if (distance(d) < 2.2) {
       await page.mouse.down();
       await page.mouse.up();
@@ -36,7 +48,7 @@ async function brawl(page: Page, seconds: number, stop: (d: Diagnostics) => bool
     d = await read(page);
   }
   await page.keyboard.up('ShiftLeft');
-  await page.keyboard.up('KeyW');
+  for (const key of held) await page.keyboard.up(key);
   return d;
 }
 

@@ -35,6 +35,8 @@ export class Player {
   private buffered: 'strike' | 'dodge' | null = null;
   private bufferTimer = 0;
   private readonly move = new THREE.Vector2();
+  private readonly held = new THREE.Vector2();
+  private readonly frame = new THREE.Vector3();
   private readonly wish = new THREE.Vector3();
   private readonly toNpc = new THREE.Vector3();
 
@@ -64,7 +66,7 @@ export class Player {
     this.toMove();
   }
 
-  /** `forward` is the camera's ground-plane forward; input is camera-relative. */
+  /** `forward` is the camera's ground-plane forward, which input is relative to. */
   update(delta: number, input: Input | null, forward: THREE.Vector3, npc: THREE.Vector3, events: FightEvent[]): void {
     this.timer += delta;
     this.dodgeCooldown -= delta;
@@ -78,8 +80,12 @@ export class Player {
     } else {
       this.move.set(0, 0);
     }
-    // Camera-relative wish direction; right = forward × up.
-    this.wish.set(forward.x * this.move.y - forward.z * this.move.x, 0, forward.z * this.move.y + forward.x * this.move.x);
+    // Input reads in the camera frame from when the keys last changed, so a held direction runs straight
+    // while the camera swings in behind her. Right = forward × up.
+    if (!this.move.equals(this.held)) this.frame.copy(forward);
+    this.held.copy(this.move);
+    const { x, z } = this.frame;
+    this.wish.set(x * this.move.y - z * this.move.x, 0, z * this.move.y + x * this.move.x);
     this.toNpc.subVectors(npc, this.position).setY(0);
 
     if (this.bufferTimer <= 0) this.buffered = null;
@@ -90,9 +96,8 @@ export class Player {
     switch (this.state) {
       case 'move': {
         this.velocity.lerp(this.wish.multiplyScalar(input?.sprinting ? tuning.playerSprintSpeed : tuning.playerWalkSpeed), 1 - Math.exp(-14 * delta));
-        // Face where the body is actually going; standing, face him.
-        const { moving, velocity } = this.character;
-        turnToward(this.character.root, yawTo(moving ? velocity : this.toNpc), moving ? 12 : 5, delta);
+        // Face where the body is actually going; standing, keep facing that way.
+        if (this.character.moving) turnToward(this.character.root, yawTo(this.character.velocity), 12, delta);
         break;
       }
       case 'strike': {
