@@ -22,14 +22,9 @@ export class Character {
   readonly flash = { value: 0 };
   /** Ground velocity over the last frame, m/s. */
   readonly velocity = new THREE.Vector3();
-  /** Rad/s the turn clips depict: turning the body at it keeps the pivoting feet planted. 0 without turn clips. */
-  readonly turnRate: number;
   private readonly last = new THREE.Vector3();
   private readonly hip: THREE.Object3D;
-  /**
-   * What the body turns about, on the ground in the root's frame: under the hips, which poses can hold well off the root,
-   * or the foot a turn clip pivots on.
-   */
+  /** The ground under the hips, in the root's frame: what the body turns about. Poses can hold it well off the root. */
   private readonly pivot = new THREE.Vector3();
   private readonly mixer: THREE.AnimationMixer;
   private readonly actions = new Map<string, THREE.AnimationAction>();
@@ -37,11 +32,6 @@ export class Character {
   private readonly gaits: Map<string, number>;
   /** The same for gaits that walk backwards, which the bake records as negative speeds. */
   private readonly backGaits: Map<string, number>;
-  /** Turn-on-the-spot clip -> the rate it turns at at rate 1, rad/s, positive turning left, and where it pivots. */
-  private readonly turns = new Map<string, { speed: number; pivot: THREE.Vector3 }>();
-  /** Yaw rate over the last frame, rad/s, positive turning left. */
-  private spin = 0;
-  private lastYaw = 0;
   /** Set while locomoting: the clip for standing still. */
   private idle: string | null = null;
   /** Blend weight each clip eases toward; clips not listed fade out. */
@@ -61,7 +51,6 @@ export class Character {
       addOutline(mesh, 0.006);
     }
     this.root.add(model);
-    model.updateMatrix();
 
     this.mixer = new THREE.AnimationMixer(model);
     const gaits: [string, number][] = [];
@@ -69,23 +58,19 @@ export class Character {
       this.actions.set(clip.name, this.mixer.clipAction(clip).setEffectiveWeight(0));
       const groundSpeed = clip.userData.groundSpeed as number | undefined;
       if (groundSpeed) gaits.push([clip.name, groundSpeed * model.scale.x]);
-      const { turnSpeed, pivot } = clip.userData as { turnSpeed?: number; pivot?: [number, number] };
-      if (turnSpeed) this.turns.set(clip.name, { speed: turnSpeed, pivot: new THREE.Vector3(pivot![0], 0, pivot![1]).applyMatrix4(model.matrix) });
     }
     gaits.sort((a, b) => Math.abs(a[1]) - Math.abs(b[1]));
     this.gaits = new Map(gaits.filter(([, s]) => s > 0));
     this.backGaits = new Map(gaits.filter(([, s]) => s < 0).map(([name, s]) => [name, -s]));
-    this.turnRate = Math.max(0, ...[...this.turns.values()].map(({ speed }) => Math.abs(speed)));
     this.hip = model.getObjectByName('Hip')!;
   }
 
   /** Teleport: moves the body without that counting as motion. */
   place(x: number, z: number, yaw: number): void {
     this.root.position.set(x, 0, z);
-    this.root.rotation.y = this.lastYaw = yaw;
+    this.root.rotation.y = yaw;
     this.last.copy(this.root.position);
     this.velocity.set(0, 0, 0);
-    this.spin = 0;
   }
 
   /** Turn on the spot by `angle`, about the hips: the root swings round them, which isn't motion. */
@@ -131,12 +116,8 @@ export class Character {
 
   /** Call once the body's position is final for the frame. */
   update(delta: number): void {
-    if (delta > 0) {
-      this.velocity.subVectors(this.root.position, this.last).setY(0).divideScalar(delta);
-      this.spin = (this.root.rotation.y - this.lastYaw) / delta;
-    }
+    if (delta > 0) this.velocity.subVectors(this.root.position, this.last).setY(0).divideScalar(delta);
     this.last.copy(this.root.position);
-    this.lastYaw = this.root.rotation.y;
     if (this.idle) this.animateGait();
     // Ease every weight toward its target; renormalise so the pose never mixes in the bind pose.
     const k = 1 - Math.exp((-3 * delta) / this.fade);
@@ -146,15 +127,13 @@ export class Character {
     this.mixer.update(delta);
     this.root.updateMatrixWorld(true);
     this.root.worldToLocal(this.hip.getWorldPosition(this.pivot)).setY(0);
-    for (const [name, { pivot }] of this.turns) this.pivot.lerp(pivot, this.action(name).weight);
     this.flash.value = Math.max(0, this.flash.value - delta * 8);
   }
 
   /**
    * Below the slowest gait, blend it with standing at its own cadence, so stopping settles rather than
    * freezing mid-stride; above, the gait nearest the speed, played at it. Moving against the facing
-   * shows the backward gaits, if the clip set has any. Standing, turning pivots with the turn clip that turns
-   * the same way, blended and paced by the turn rate just as gaits are by speed.
+   * shows the backward gaits, if the clip set has any.
    */
   private animateGait(): void {
     const speed = this.velocity.length();
@@ -167,16 +146,7 @@ export class Character {
     const weight = Math.min(1, speed / slowestSpeed);
     const action = this.action(gait);
     action.timeScale = Math.max(speed, slowestSpeed) / groundSpeed;
-    const targets = new Map([[this.action(this.idle!), 1 - weight], [action, weight]]);
-    for (const [name, { speed: turnSpeed }] of this.turns) {
-      const rate = this.spin / turnSpeed;
-      if (rate <= 0) continue;
-      const turn = this.action(name);
-      turn.timeScale = Math.max(rate, 1);
-      targets.set(turn, (1 - weight) * Math.min(1, rate));
-      targets.set(this.action(this.idle!), (1 - weight) * (1 - Math.min(1, rate)));
-    }
-    this.blend(targets, GAIT_FADE);
+    this.blend(new Map([[this.action(this.idle!), 1 - weight], [action, weight]]), GAIT_FADE);
   }
 
   private blend(targets: Map<THREE.AnimationAction, number>, fade: number): void {

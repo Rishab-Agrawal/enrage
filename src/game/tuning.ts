@@ -5,7 +5,7 @@ export const tuning = {
   playerWalkSpeed: 1.5,
   playerSprintSpeed: 4.6,
   playerBackSpeed: 1.2,
-  /** Rad/s while A or D is held on the move. */
+  /** Rad/s while A or D is held. */
   playerTurnRate: 1.15,
   strikeDamage: 9,
   npcMaxHealth: 400,

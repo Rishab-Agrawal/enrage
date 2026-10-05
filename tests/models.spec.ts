@@ -14,16 +14,15 @@ function jerk(v: ArrayLike<number>, size: number, before: number, i: number, aft
   return Math.sqrt(sum);
 }
 
-// Locomotion is drawn from the body's measured motion, so each clip must loop in place, without a hitch, and record
-// what it depicts: a ground speed for gaits, negative walking backwards; a turn rate for turns, positive turning left.
-const LOCOMOTION = { player: { run: 1, walk: 1, walkBack: -1, turnLeft: 1, turnRight: -1 }, npc: { run: 1, walk: 1 } };
-for (const [model, clips] of Object.entries(LOCOMOTION)) {
-  test(`${model} locomotion loops in place`, async () => {
+// Gaits are drawn at the body's measured speed, so each must loop in place, without a hitch, and record the ground
+// speed it depicts: negative walking backwards.
+const GAITS = { player: { run: 1, walk: 1, walkBack: -1 }, npc: { run: 1, walk: 1 } };
+for (const [model, gaits] of Object.entries(GAITS)) {
+  test(`${model} gaits loop in place`, async () => {
     const doc = await new NodeIO().read(`public/models/${model}.glb`);
-    for (const [name, sign] of Object.entries(clips)) {
+    for (const [name, sign] of Object.entries(gaits)) {
       const animation = doc.getRoot().listAnimations().find((a) => a.getName() === name)!;
-      const { groundSpeed, turnSpeed } = animation.getExtras() as { groundSpeed?: number; turnSpeed?: number };
-      expect(Math.sign((groundSpeed ?? turnSpeed)!), `${model}/${name} speed`).toBe(sign);
+      expect(Math.sign(animation.getExtras().groundSpeed as number), `${model}/${name} ground speed`).toBe(sign);
       let swing = 0;
       for (const channel of animation.listChannels()) {
         const bone = `${model}/${name} ${channel.getTargetNode()!.getName()} ${channel.getTargetPath()}`;
@@ -38,8 +37,7 @@ for (const [model, clips] of Object.entries(LOCOMOTION)) {
         let inside = 0;
         for (let i = 1; i < n - 1; i++) inside = Math.max(inside, jerk(v, size, i - 1, i, i + 1));
         expect(jerk(v, size, n - 2, 0, 1), `${bone} loop seam`).toBeLessThanOrEqual(1.5 * inside + 1e-4);
-        // A gait's hips sway over the body's origin; a turn's stand where the idle's do.
-        if (groundSpeed && channel.getTargetPath() === 'translation' && channel.getTargetNode()!.getName() === 'Hip') {
+        if (channel.getTargetPath() === 'translation' && channel.getTargetNode()!.getName() === 'Hip') {
           let farthest = 0;
           for (let i = 0; i < v.length; i += 3) farthest = Math.max(farthest, Math.hypot(v[i], v[i + 1]));
           expect(farthest, `${bone} travel`).toBeLessThan(0.25); // gait sway, not travel
