@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import type { Character } from './Character';
 
 /** Yaw that points a model's +Z forward along `direction`. */
 export const yawTo = (direction: THREE.Vector3): number => Math.atan2(direction.x, direction.z);
@@ -6,7 +7,7 @@ export const yawTo = (direction: THREE.Vector3): number => Math.atan2(direction.
 /** Signed shortest-arc turn from yaw `from` to yaw `to`, in [-π, π). */
 export const angleTo = (from: number, to: number): number => THREE.MathUtils.euclideanModulo(to - from + Math.PI, Math.PI * 2) - Math.PI;
 
-/** Rotate toward `target` yaw by at most `rate` rad/s along the shortest arc. */
-export function turnToward(object: THREE.Object3D, target: number, rate: number, delta: number): void {
-  object.rotation.y += THREE.MathUtils.clamp(angleTo(object.rotation.y, target), -rate * delta, rate * delta);
+/** Turn toward `target` yaw by at most `rate` rad/s along the shortest arc. */
+export function turnToward(character: Character, target: number, rate: number, delta: number): void {
+  character.turn(THREE.MathUtils.clamp(angleTo(character.root.rotation.y, target), -rate * delta, rate * delta));
 }

@@ -92,7 +92,7 @@ export class Player {
         // A/D only turn her and W/S only walk her along her facing, so held together she walks an arc.
         // Shift hurries her forward only.
         this.turn += (this.move.x - this.turn) * (1 - Math.exp(-12 * delta));
-        this.character.root.rotation.y -= this.turn * this.character.turnRate * delta;
+        this.character.turn(-this.turn * tuning.playerTurnRate * delta);
         const speed = this.move.y < 0 ? tuning.playerBackSpeed : input?.sprinting ? tuning.playerSprintSpeed : tuning.playerWalkSpeed;
         this.wish.set(Math.sin(this.yaw), 0, Math.cos(this.yaw)).multiplyScalar(this.move.y * speed);
         this.velocity.lerp(this.wish, 1 - Math.exp(-14 * delta));
@@ -101,7 +101,7 @@ export class Player {
       case 'strike': {
         this.velocity.multiplyScalar(Math.exp(-12 * delta));
         // Through the wind-up, square up to him and close the last half-metre, so strikes connect instead of whiffing.
-        if (this.contactAt > 0 && this.toNpc.lengthSq() < 36) turnToward(this.character.root, yawTo(this.toNpc), 10, delta);
+        if (this.contactAt > 0 && this.toNpc.lengthSq() < 36) turnToward(this.character, yawTo(this.toNpc), 10, delta);
         const gap = this.toNpc.length() - 1.45;
         if (this.timer < this.contactAt && gap > 0 && gap < 1.2) this.position.addScaledVector(this.toNpc.normalize(), Math.min(gap, 3 * delta));
         if (this.contactAt > 0 && this.timer >= this.contactAt) {

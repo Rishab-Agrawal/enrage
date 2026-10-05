@@ -309,6 +309,7 @@ export class Game {
       player: {
         position: { x: this.player.position.x, y: this.player.position.y, z: this.player.position.z },
         yaw: this.player.yaw,
+        ankles: this.player.character.ankles.map(({ x, y, z }) => ({ x, y, z })),
         speed: this.player.character.velocity.length(),
         stride: this.player.character.stride,
         health: this.player.health,

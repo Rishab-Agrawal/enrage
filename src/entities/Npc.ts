@@ -79,7 +79,6 @@ export class Npc {
     this.shoveCooldown -= delta;
     this.toPlayer.subVectors(player, this.position).setY(0);
     const distance = this.toPlayer.length();
-    const root = this.character.root;
 
     switch (this.state) {
       case 'calm':
@@ -88,11 +87,11 @@ export class Npc {
         } else if (distance < COMFORT_DISTANCE) {
           this.walk(this.retreatHeading(), WALK_SPEED, delta);
         } else {
-          turnToward(root, yawTo(this.toPlayer), 1.5, delta);
+          turnToward(this.character, yawTo(this.toPlayer), 1.5, delta);
         }
         break;
       case 'shove':
-        turnToward(root, yawTo(this.toPlayer), 8, delta);
+        turnToward(this.character, yawTo(this.toPlayer), 8, delta);
         if (this.contactAt > 0 && this.timer >= this.contactAt) {
           this.contactAt = 0;
           events.push({ type: 'shove' });
@@ -100,7 +99,7 @@ export class Npc {
         if (this.timer >= this.endAt) this.enter('calm');
         break;
       case 'roar':
-        turnToward(root, yawTo(this.toPlayer), 4, delta);
+        turnToward(this.character, yawTo(this.toPlayer), 4, delta);
         if (this.timer >= ROAR_TIME) this.enter('chase');
         break;
       case 'chase':
@@ -109,7 +108,7 @@ export class Npc {
         break;
       case 'attack':
         // Tracks the player through the wind-up, committed after contact: sidestepping late works.
-        if (this.contactAt > 0) turnToward(root, yawTo(this.toPlayer), 2.6, delta);
+        if (this.contactAt > 0) turnToward(this.character, yawTo(this.toPlayer), 2.6, delta);
         if (this.contactAt > 0 && this.timer >= this.contactAt) {
           this.contactAt = 0;
           const { reach, knockback } = ATTACKS[this.attack];
@@ -186,6 +185,6 @@ export class Npc {
 
   private walk(direction: THREE.Vector3, speed: number, delta: number): void {
     this.position.addScaledVector(direction, speed * delta);
-    turnToward(this.character.root, yawTo(direction), 7, delta);
+    turnToward(this.character, yawTo(direction), 7, delta);
   }
 }
