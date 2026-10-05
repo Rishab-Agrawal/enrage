@@ -170,6 +170,7 @@ export class Game {
   /** Combat rules: a blow lands only where the fist meets the other's body, and only an enraged NPC is hurt; bodies don't overlap. */
   private resolve(): void {
     for (const event of this.events) {
+      if (event.type === 'shove') this.player.shove(this.npc.position);
       if (event.type !== 'contact') continue;
       if (event.who === 'player') {
         if (this.npc.mood === 'enraged' && this.npc.state !== 'down' && reaches(this.player.position, event.at, this.npc)) {
@@ -177,7 +178,7 @@ export class Game {
           this.events.push({ type: 'hit', who: 'npc', at: event.at, damage: event.damage });
         }
       } else if (reaches(this.npc.position, event.at, this.player) && this.player.takeHit(event.damage, this.npc.position, event.knockback)) {
-        this.events.push(event.damage ? { type: 'hit', who: 'player', at: event.at, damage: event.damage } : { type: 'shove' });
+        this.events.push({ type: 'hit', who: 'player', at: event.at, damage: event.damage });
       }
     }
 

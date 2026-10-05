@@ -32,7 +32,7 @@ The player strikes to empty the NPC's health. His heavy attacks create risk, and
 
 `Npc.mood` (`'calm' | 'enraged'`) is the one piece of state a future system (the LLM) sets, through `Fight.setMood`. For now the debug panel sets it.
 
-- **Calm:** arms folded, never attacks. He walks off to keep at least 6 m away; if she gets within arm's reach anyway, he shoves her off without damage. Her blows don't hurt him while he is calm. This is the player's rest window. He turns as she does: head first, hips following in a step.
+- **Calm:** arms folded, never attacks. He walks off to keep at least 6 m away; the moment she gets within arm's reach anyway, he shoves her off without damage. No dash avoids the shove, and she reels back out of control, so she never touches him. Her blows don't hurt him while he is calm. This is the player's rest window. He turns as she does: head first, hips following in a step.
 - **Enraged:** roars (a 1.2 s telegraph), then chases and attacks with a punch or a haymaker. Each attack has a visible wind-up, through which he keeps stepping in faster than she can back away; the haymaker knocks her back hard.
 
 ## Contact

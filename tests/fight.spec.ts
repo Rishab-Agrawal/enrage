@@ -156,15 +156,41 @@ test('legs settle on the speed the body actually moves at', async ({ page }) => 
   expect(errors).toEqual([]);
 });
 
-test('a calm NPC shoves off a player who closes in, and cannot be hurt', async ({ page }) => {
+test('a calm NPC shoves off a player who rushes him, dashing too, before she can touch him', async ({ page }) => {
   const errors = await start(page);
-  let shoved = false;
-  const d = await brawl(page, 6, (now) => {
-    shoved ||= now.player.state === 'hurt';
-    return false;
+  // Every frame: how close she ever got, and how many shoves she took.
+  await page.evaluate(() => {
+    const w = window as unknown as { closest: number; shoves: number };
+    [w.closest, w.shoves] = [Infinity, 0];
+    let reeling = false;
+    const sample = () => {
+      const d = window.__THREE_GAME_DIAGNOSTICS__!;
+      w.closest = Math.min(w.closest, Math.hypot(d.player.position.x - d.npc.position.x, d.player.position.z - d.npc.position.z));
+      if (d.player.state === 'reel' && !reeling) w.shoves += 1;
+      reeling = d.player.state === 'reel';
+      requestAnimationFrame(sample);
+    };
+    sample();
   });
+  let rushing = true;
+  const dashes = (async () => {
+    while (rushing) {
+      await page.mouse.down({ button: 'right' });
+      await page.mouse.up({ button: 'right' });
+      await page.waitForTimeout(750);
+    }
+  })();
+  const d = await brawl(page, 10, () => false);
+  rushing = false;
+  await dashes;
+  const { closest, shoves } = await page.evaluate(() => {
+    const { closest, shoves } = window as unknown as { closest: number; shoves: number };
+    return { closest, shoves };
+  });
+  console.log(`closest=${closest.toFixed(2)} shoves=${shoves}`);
   expect(d.npc.mood).toBe('calm');
-  expect(shoved).toBe(true);
+  expect(shoves).toBeGreaterThan(2);
+  expect(closest).toBeGreaterThan(1.45); // out of reach of his body (0.9) and of her strikes
   expect(d.npc.health).toBe(400);
   expect(d.player.health).toBe(100);
   expect(errors).toEqual([]);

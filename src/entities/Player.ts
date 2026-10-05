@@ -15,11 +15,14 @@ const DODGE_TIME = 0.32;
 const DODGE_SPEED = 10;
 const DODGE_COOLDOWN = 0.7;
 const HURT_TIME = 0.42;
+/** A shove sends her reeling back this fast, m/s, out of control for REEL_TIME. */
+const SHOVE_SPEED = 14;
+const REEL_TIME = 0.6;
 const BUFFER_TIME = 0.25;
 /** Seconds a strike blends in over, and her stance back in once she's done. */
 const STRIKE_FADE = 0.15;
 const RECOVER_FADE = 0.5;
-type State = 'move' | 'strike' | 'dodge' | 'hurt' | 'down';
+type State = 'move' | 'strike' | 'dodge' | 'hurt' | 'reel' | 'down';
 
 export class Player {
   readonly character: Character;
@@ -104,7 +107,7 @@ export class Player {
 
     if (this.state === 'dodge') {
       this.velocity.setLength(DODGE_SPEED * (0.35 + 0.65 * (1 - this.timer / DODGE_TIME)));
-    } else if (this.state === 'down') {
+    } else if (this.state === 'down' || this.state === 'reel') {
       this.velocity.multiplyScalar(Math.exp(-6 * delta));
     } else if (this.state === 'strike') {
       this.velocity.multiplyScalar(Math.exp(-12 * delta));
@@ -141,6 +144,17 @@ export class Player {
       this.character.gesture('hurt', { speed: 1.5, fade: 0.06 });
     }
     return true;
+  }
+
+  /** Shoved off by the calm NPC at `from`: no dodge avoids it, and she reels away whatever she was doing. */
+  shove(from: THREE.Vector3): void {
+    this.state = 'reel';
+    this.timer = 0;
+    this.endAt = REEL_TIME;
+    this.velocity.set(0, 0, 0);
+    this.knock.subVectors(this.position, from).setY(0).setLength(SHOVE_SPEED);
+    this.character.locomote('idle');
+    this.character.gesture('hurt', { speed: 1.5, fade: 0.06 });
   }
 
   private buffer(action: 'strike' | 'dodge'): void {
