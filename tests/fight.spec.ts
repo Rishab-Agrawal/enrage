@@ -82,15 +82,22 @@ test('W walks, Shift sprints, S backs up, A/D only turn, and Shift alone dashes'
   expect(errors).toEqual([]);
 });
 
-test('turning on the spot covers no ground', async ({ page }) => {
+test('turning on the spot, her upper body leads and her hips pivot to catch up', async ({ page }) => {
   const errors = await start(page);
   await page.keyboard.down('KeyD');
-  let fastest = 0;
+  let [fastest, lead] = [0, 0];
   for (const end = Date.now() + 1500; Date.now() < end; ) {
     await page.waitForTimeout(40);
-    fastest = Math.max(fastest, (await read(page)).player.speed);
+    const d = await read(page);
+    fastest = Math.max(fastest, d.player.speed);
+    lead = Math.max(lead, Math.abs(turn(d.player.facing, d.player.yaw)));
   }
   await page.keyboard.up('KeyD');
+  await page.waitForTimeout(600);
+  const settled = await read(page);
+  expect(lead).toBeGreaterThan(0.5); // her hips hold while she twists
+  expect(lead).toBeLessThan(0.95); // and pivot before the twist goes past what a spine can
+  expect(Math.abs(turn(settled.player.facing, settled.player.yaw))).toBeLessThan(0.21); // then square up
   expect(fastest).toBeLessThan(0.05); // she turns about her hips, so no walking legs
   expect(errors).toEqual([]);
 });

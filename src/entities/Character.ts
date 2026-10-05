@@ -10,6 +10,9 @@ const STANDING = 0.3;
 /** Seconds for locomotion blends to settle. */
 const GAIT_FADE = 0.2;
 const UP = new THREE.Vector3(0, 1, 0);
+/** Bones that share a twist, hips to head: the legs stay put. */
+const SPINE = ['Waist', 'Spine01', 'Spine02', 'NeckTwist01', 'Head'];
+const [turn, parent] = [new THREE.Quaternion(), new THREE.Quaternion()];
 
 /**
  * A Tripo-baked GLB as a cel-shaded, animated fighter with a rim-light and hit-flash channel.
@@ -22,6 +25,12 @@ export class Character {
   readonly flash = { value: 0 };
   /** Ground velocity over the last frame, m/s. */
   readonly velocity = new THREE.Vector3();
+  /** Twist of the upper body over the hips, rad, positive left: where it looks ahead of where it faces. */
+  twist = 0;
+  /** Height the whole body is lifted, m: a hop. */
+  lift = 0;
+  private readonly model: THREE.Object3D;
+  private readonly spine: THREE.Object3D[];
   private readonly last = new THREE.Vector3();
   private readonly hip: THREE.Object3D;
   /** The ground under the hips, in the root's frame: what the body turns about. Poses can hold it well off the root. */
@@ -63,6 +72,8 @@ export class Character {
     this.gaits = new Map(gaits.filter(([, s]) => s > 0));
     this.backGaits = new Map(gaits.filter(([, s]) => s < 0).map(([name, s]) => [name, -s]));
     this.hip = model.getObjectByName('Hip')!;
+    this.spine = SPINE.map((name) => model.getObjectByName(name)!);
+    this.model = model;
   }
 
   /** Teleport: moves the body without that counting as motion. */
@@ -125,6 +136,12 @@ export class Character {
     for (const action of this.actions.values()) total += action.weight += ((this.targets.get(action) ?? 0) - action.weight) * k;
     for (const action of this.actions.values()) action.weight /= total || 1;
     this.mixer.update(delta);
+    this.model.position.y = this.lift;
+    // Each bone turns its share about the vertical, so the head ends up turned by the whole twist.
+    for (const bone of this.twist ? this.spine : []) {
+      bone.parent!.getWorldQuaternion(parent);
+      bone.quaternion.premultiply(turn.setFromAxisAngle(UP, this.twist / this.spine.length).multiply(parent).premultiply(parent.invert()));
+    }
     this.root.updateMatrixWorld(true);
     this.root.worldToLocal(this.hip.getWorldPosition(this.pivot)).setY(0);
     this.flash.value = Math.max(0, this.flash.value - delta * 8);

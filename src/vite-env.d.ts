@@ -10,8 +10,8 @@ interface ThreeGameDiagnostics {
   frame: number;
   elapsed: number;
   outcome: 'victory' | 'defeat' | null;
-  /** `yaw` is her facing, which W walks along; `speed` is measured ground speed; `stride` the ground speed the legs show, null mid-action. */
-  player: { position: Vec3; yaw: number; speed: number; stride: number | null; health: number; state: string };
+  /** `yaw` is where she steers, which W walks along and the camera looks along; `facing` her hips' yaw; `speed` is measured ground speed; `stride` the ground speed the legs show, null mid-action. */
+  player: { position: Vec3; yaw: number; facing: number; speed: number; stride: number | null; health: number; state: string };
   npc: { position: Vec3; stride: number | null; health: number; mood: 'calm' | 'enraged'; state: string };
   renderer: { calls: number; triangles: number; geometries: number; textures: number };
   canvas: { clientWidth: number; clientHeight: number; width: number; height: number; dpr: number };
