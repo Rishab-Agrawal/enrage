@@ -30,7 +30,7 @@ A bug, bloat or over-engineering usually points to something larger: weak design
 ## Assets
 
 - Submit Tripo jobs one at a time: parallel submits get HTTP 429 and create no task.
-- The `preset:biped:*` names are listed in ComfyUI's `comfy_api_nodes/apis/tripo.py`. The library has one walk, Gorran's; Mixamo fills such gaps. Download Mixamo clips with In Place unchecked: the bake measures ground speed from their travel. One FBX per clip folder: the bake reads the first it finds.
+- The `preset:biped:*` names are listed in ComfyUI's `comfy_api_nodes/apis/tripo.py`. The library has one walk, Gorran's; Mixamo fills such gaps. Download Mixamo clips with In Place unchecked: the bake measures ground speed from their travel. One FBX per clip folder: the bake reads the first it finds. Neither library has a two-handed push: the bake keys Gorran's (`shove`) with IK.
 
 ## Environment
 

@@ -13,8 +13,14 @@ const ATTACKS = {
 /** He closes to this before swinging, and keeps stepping in through the wind-up, faster than she can back away. */
 const ATTACK_RANGE = 1.3;
 const STEP_IN_SPEED = 1.6;
-/** A calm NPC shoves off a player the moment she comes within arm's reach, dashing or not, so she never touches him. */
-const SHOVE_REACH = 1.7;
+/**
+ * A calm NPC shoves off a player closing on him, dashing or not: he wheels round at SHOVE_TURN rad/s and pushes, starting
+ * so his palms are out, SHOVE_LAND s into the push, as she reaches SHOVE_REACH. She is shoved the moment she gets
+ * there, so she never touches him.
+ */
+const SHOVE_REACH = 1.3;
+const SHOVE_TURN = 14;
+const SHOVE_LAND = 0.12;
 /** Shorter than her reel, so he's ready again before she can come back. */
 const SHOVE_TIME = 0.5;
 /** A calm NPC starts walking off inside COMFORT_DISTANCE and, once going, stops only at RETREAT_TO: no shuffling at the edge. */
@@ -41,6 +47,7 @@ export class Npc {
   private attack: keyof typeof ATTACKS = 'punch';
   private poise = 0;
   private retreating = false;
+  private readonly lastPlayer = new THREE.Vector3(NaN);
   private readonly toPlayer = new THREE.Vector3();
   private readonly heading = new THREE.Vector3();
 
@@ -59,6 +66,7 @@ export class Npc {
   reset(): void {
     this.health = tuning.npcMaxHealth;
     this.character.place(0, -4, 0);
+    this.lastPlayer.setX(NaN);
     this.mood = 'calm';
     this.enter('calm');
   }
@@ -81,12 +89,15 @@ export class Npc {
     this.poise -= delta;
     this.toPlayer.subVectors(player, this.position).setY(0);
     const distance = this.toPlayer.length();
+    // Her own speed toward him, whatever he is doing.
+    const closing = (this.lastPlayer.sub(player).dot(this.toPlayer) / distance / delta) || 0;
+    this.lastPlayer.copy(player);
+    const facing = Math.abs(angleTo(this.character.root.rotation.y, yawTo(this.toPlayer)));
 
     switch (this.state) {
       case 'calm':
-        if (distance < SHOVE_REACH) {
+        if (distance - Math.max(0, closing) * (SHOVE_LAND + facing / SHOVE_TURN) < SHOVE_REACH) {
           this.enter('shove');
-          events.push({ type: 'shove' });
         } else if (distance < (this.retreating ? RETREAT_TO : COMFORT_DISTANCE)) {
           this.retreating = true;
           this.walk(this.retreatHeading(), WALK_SPEED, delta);
@@ -96,8 +107,17 @@ export class Npc {
         }
         break;
       case 'shove':
-        turnToward(this.character, yawTo(this.toPlayer), 14, delta);
-        if (this.timer >= SHOVE_TIME) this.enter('calm');
+        turnToward(this.character, yawTo(this.toPlayer), SHOVE_TURN, delta);
+        // He wheels round with his palms chambered, endAt unset, then drives them out.
+        if (!this.endAt && facing < 0.2) {
+          this.endAt = this.timer + SHOVE_TIME;
+          this.character.play('push', { loop: false, fade: 0.08 });
+        }
+        if (this.contactAt > 0 && distance < SHOVE_REACH) {
+          this.contactAt = 0;
+          events.push({ type: 'shove' });
+        }
+        if (this.endAt && this.timer >= this.endAt) this.enter('calm');
         break;
       case 'roar':
         turnToward(this.character, yawTo(this.toPlayer), 4, delta);
@@ -152,8 +172,9 @@ export class Npc {
     if (state === 'calm') this.character.locomote('calm');
     if (state === 'chase' || state === 'recover') this.character.locomote('idle');
     if (state === 'shove') {
-      this.character.aim = yawTo(this.toPlayer);
-      play('punch', { loop: false, from: 0.5, speed: 1.4, fade: 0.08 });
+      this.contactAt = 1; // pending: it lands when she reaches his palms
+      this.endAt = 0;
+      play('push', { loop: false, speed: 0, fade: 0.08 });
     }
     if (state === 'roar') play('roar', { loop: false, from: 1.2, fade: 0.15 });
     if (state === 'flinch') play('hurt', { loop: false, from: 0.1, speed: 1.6, fade: 0.06 });

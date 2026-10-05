@@ -189,8 +189,8 @@ test('a calm NPC shoves off a player who rushes him, dashing too, before she can
   });
   console.log(`closest=${closest.toFixed(2)} shoves=${shoves}`);
   expect(d.npc.mood).toBe('calm');
-  expect(shoves).toBeGreaterThan(2);
-  expect(closest).toBeGreaterThan(1.45); // out of reach of his body (0.9) and of her strikes
+  expect(shoves).toBeGreaterThan(1);
+  expect(closest).toBeGreaterThan(1.1); // she meets his palms, never his body (0.9)
   expect(d.npc.health).toBe(400);
   expect(d.player.health).toBe(100);
   expect(errors).toEqual([]);

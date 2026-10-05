@@ -13,7 +13,7 @@ globalThis.document = { createElementNS: () => ({ addEventListener() {}, removeE
 const { FBXLoader } = await import('three/examples/jsm/loaders/FBXLoader.js');
 
 const ARTIFACTS = 'artifacts';
-// Clip name -> FBX dir. Both rigs are Tripo's normalised v1.0 skeleton, so
+// Clip name -> FBX dir, or a function keying the clip on the rig's nodes. Both rigs are Tripo's normalised v1.0 skeleton, so
 // clips transfer between them (Gorran's haymaker is Wren's cross; both collapse the same way).
 const CHARACTERS = {
   player: {
@@ -23,14 +23,15 @@ const CHARACTERS = {
   npc: {
     calm: 'tripo/npc-anim/fold_arms', idle: 'tripo/player-anim/idle', roar: 'tripo/npc-anim/angry_01', walk: 'tripo/npc-anim/walk', run: 'tripo/npc-anim/run',
     punch: 'tripo/npc-anim/box_03', haymaker: 'tripo/player-anim/box_02', hurt: 'tripo/npc-anim/hit_to_stomach', defeat: 'tripo/npc-anim/defeat_03',
+    push: shove,
   },
 };
 // Seconds to keep: the defeat take stands back up at the end.
 const TRIM = { 'tripo/npc-anim/defeat_03': 4.6 };
 // Locomotion plays in place: the game moves the body, and the clip records the ground speed it depicts.
 const IN_PLACE = new Set(['run', 'walk', 'walkBack']);
-// Standing clips sway in place under the body; every other clip is an action.
-const STANDING = new Set(['idle', 'calm']);
+// Standing clips sway in place under the body, as the push's step out and back does; every other clip is an action.
+const STANDING = new Set(['idle', 'calm', 'push']);
 // Seconds either side of a gait's loop seam over which its velocity jump is eased out.
 const SEAM_EASE = 0.2;
 const PATHS = { position: 'translation', quaternion: 'rotation', scale: 'scale' };
@@ -251,6 +252,121 @@ function rootMotion(clip, nodes) {
   return travel;
 }
 
+/** Turns `bone` so its world rotation is `rotation`. */
+function setWorld(bone, rotation) {
+  bone.quaternion.copy(bone.parent.getWorldQuaternion(new THREE.Quaternion()).invert().multiply(rotation));
+  bone.updateMatrixWorld(true);
+}
+
+/** Bends the chain `upper` -> `lower` -> `end` so `end` reaches `target`, the middle joint bowing toward `pole`. */
+function reach(upper, lower, end, target, pole) {
+  const [a, b, c] = [upper, lower, end].map((bone) => bone.getWorldPosition(new THREE.Vector3()));
+  const [l1, l2] = [a.distanceTo(b), b.distanceTo(c)];
+  const d = Math.min(a.distanceTo(target), (l1 + l2) * 0.999);
+  const along = target.clone().sub(a).normalize();
+  const bow = pole.clone().addScaledVector(along, -pole.dot(along)).normalize();
+  const x = (l1 * l1 - l2 * l2 + d * d) / (2 * d);
+  const joint = a.clone().addScaledVector(along, x).addScaledVector(bow, Math.sqrt(Math.max(0, l1 * l1 - x * x)));
+  const aim = (bone, from, to, child) => {
+    const at = bone.getWorldPosition(new THREE.Vector3());
+    const turn = new THREE.Quaternion().setFromUnitVectors(from.clone().sub(at).normalize(), to.clone().sub(at).normalize());
+    setWorld(bone, turn.multiply(bone.getWorldQuaternion(new THREE.Quaternion())));
+    return child.getWorldPosition(new THREE.Vector3());
+  };
+  aim(upper, b, joint, lower);
+  aim(lower, end.getWorldPosition(new THREE.Vector3()), a.addScaledVector(along, d), end);
+}
+
+/** Rotation taking the frame (`x`, `y`) to (`toX`, `toY`); each pair orthogonal unit vectors. */
+const frameTurn = (x, y, toX, toY) => {
+  const basis = (u, v) => new THREE.Matrix4().makeBasis(u, v, u.clone().cross(v));
+  return new THREE.Quaternion().setFromRotationMatrix(basis(toX, toY).multiply(basis(x, y).transpose()));
+};
+
+const smooth = (t, from, to) => THREE.MathUtils.smoothstep(t, from, to);
+
+/**
+ * Gorran's two-handed shove, which no take covers, keyed here over his folded-arms stance (+X forward, +Y up, left -Z).
+ * His palms chamber at his chest and drive out at clip second 0.12 as he leans in and steps through with his left
+ * foot; he holds, then folds his arms again by 0.75.
+ */
+function shove(nodes) {
+  const bones = new Map([...nodes].map(([name, node]) => {
+    const bone = new THREE.Object3D();
+    bone.name = name;
+    bone.position.fromArray(node.getTranslation());
+    bone.quaternion.fromArray(node.getRotation());
+    return [name, bone];
+  }));
+  for (const [name, node] of nodes) for (const child of node.listChildren()) bones.get(name).add(bones.get(child.getName()));
+  const bone = (name) => bones.get(name);
+  const rig = bone('Armature');
+  rig.updateMatrixWorld(true);
+  // Each palm in its hand's frame, from the rest T-pose: fingers out along the arm, palm down.
+  const palms = Object.fromEntries(['L', 'R'].map((side) => {
+    const hand = bone(`${side}_Hand`), inverse = hand.getWorldQuaternion(new THREE.Quaternion()).invert();
+    const fingers = hand.getWorldPosition(new THREE.Vector3()).sub(bone(`${side}_Forearm`).getWorldPosition(new THREE.Vector3()));
+    fingers.normalize().applyQuaternion(inverse);
+    const palm = new THREE.Vector3(0, -1, 0).applyQuaternion(inverse);
+    return [side, [fingers, palm.addScaledVector(fingers, -palm.dot(fingers)).normalize()]];
+  }));
+
+  const take = takeOf(readFbx(fileIn(join(ARTIFACTS, 'tripo/npc-anim/fold_arms'), '.fbx')));
+  take.tracks = take.tracks.filter((t) => !t.name.endsWith('.scale'));
+  const mixer = new THREE.AnimationMixer(rig);
+  mixer.clipAction(take).play().time = 8.5; // arms folded
+  mixer.update(0);
+  rig.updateMatrixWorld(true);
+  const base = new Map([...bones.values()].map((b) => [b, [b.position.clone(), b.quaternion.clone()]]));
+  const at = (name) => bone(name).getWorldPosition(new THREE.Vector3());
+  const arm = at('L_Upperarm').distanceTo(at('L_Forearm')) + at('L_Forearm').distanceTo(at('L_Hand'));
+  const [feet, soles] = [['L_Foot', 'R_Foot'].map(at), ['L_Foot', 'R_Foot'].map((n) => bone(n).getWorldQuaternion(new THREE.Quaternion()))];
+  const hip = at('Hip');
+  const lateral = new THREE.Vector3(0, 0, 1);
+
+  const pose = (t) => {
+    for (const [b, [position, quaternion]] of base) b.position.copy(position), b.quaternion.copy(quaternion);
+    rig.updateMatrixWorld(true);
+    const [drive, step, back] = [smooth(t, 0, 0.12), smooth(t, 0, 0.14), smooth(t, 0.32, 0.75)];
+    // Weight onto the front foot: hips forward and down, the chest leaning in further, the head holding level.
+    bone('Hip').position.copy(bone('Hip').parent.worldToLocal(hip.clone().add(new THREE.Vector3(0.24, -0.08, 0).multiplyScalar(arm * step))));
+    for (const [name, angle] of [['Waist', -0.18], ['Spine01', -0.2], ['NeckTwist01', 0.24]]) {
+      const b = bone(name);
+      setWorld(b, new THREE.Quaternion().setFromAxisAngle(lateral, angle * step).multiply(b.getWorldQuaternion(new THREE.Quaternion())));
+    }
+    ['L', 'R'].forEach((side, i) => {
+      const foot = feet[i].clone();
+      if (side === 'L') foot.add(new THREE.Vector3(0.5 * step, 0.2 * Math.sin(Math.PI * step), 0).multiplyScalar(arm));
+      reach(bone(`${side}_Thigh`), bone(`${side}_Calf`), bone(`${side}_Foot`), foot, new THREE.Vector3(1, 0, 0));
+      setWorld(bone(`${side}_Foot`), soles[i]);
+    });
+    ['L', 'R'].forEach((side) => {
+      const outward = side === 'L' ? -1 : 1; // along Z
+      const shoulder = at(`${side}_Upperarm`);
+      const chambered = new THREE.Vector3(0.3, -0.62, -0.2 * outward).multiplyScalar(arm);
+      const extended = new THREE.Vector3(0.74, -0.52, -0.16 * outward).multiplyScalar(arm);
+      const pole = new THREE.Vector3(-0.6, -1, 0.6 * outward).lerp(new THREE.Vector3(0, -1, 0.5 * outward), drive);
+      reach(bone(`${side}_Upperarm`), bone(`${side}_Forearm`), bone(`${side}_Hand`), shoulder.add(chambered.lerp(extended, drive)), pole);
+      // Palm forward, fingers up and a little in.
+      const fingers = new THREE.Vector3(0.15, 1, -0.3 * outward).normalize();
+      const palm = new THREE.Vector3(1, 0, 0).addScaledVector(fingers, -fingers.x).normalize();
+      setWorld(bone(`${side}_Hand`), frameTurn(...palms[side], fingers, palm));
+    });
+    for (const [b, [position, quaternion]] of base) b.position.lerp(position, back), b.quaternion.slerp(quaternion, back);
+  };
+
+  const times = Array.from({ length: 24 }, (_, i) => i / 30);
+  const tracks = take.tracks.map((track) => [track, []]);
+  for (const t of times) {
+    pose(t);
+    for (const [track, values] of tracks) {
+      const [name, property] = track.name.split('.');
+      values.push(...bone(name)[property].toArray());
+    }
+  }
+  return new THREE.AnimationClip('push', -1, tracks.map(([track, values]) => new track.constructor(track.name, times, values)));
+}
+
 const io = new NodeIO();
 for (const [character, clips] of Object.entries(CHARACTERS)) {
   const doc = await io.read(fileIn(join(ARTIFACTS, 'tripo', `${character}-rig`, 'rig'), '.glb'));
@@ -259,8 +375,8 @@ for (const [character, clips] of Object.entries(CHARACTERS)) {
   const nodes = new Map(root.listNodes().map((n) => [n.getName(), n]));
 
   for (const [name, source] of Object.entries(clips)) {
-    const fbx = readFbx(fileIn(join(ARTIFACTS, source), '.fbx'));
-    const clip = fbx.getObjectByName('mixamorigHips') ? retarget(fbx, nodes) : takeOf(fbx);
+    const fbx = typeof source === 'string' && readFbx(fileIn(join(ARTIFACTS, source), '.fbx'));
+    const clip = !fbx ? source(nodes) : fbx.getObjectByName('mixamorigHips') ? retarget(fbx, nodes) : takeOf(fbx);
     if (TRIM[source]) {
       for (const track of clip.tracks) track.trim(0, TRIM[source]);
       clip.resetDuration();
@@ -285,7 +401,7 @@ for (const [character, clips] of Object.entries(CHARACTERS)) {
         doc.createAnimationChannel().setTargetNode(node).setTargetPath(PATHS[property]).setSampler(sampler),
       );
     }
-    console.log(`${character}/${name} <- ${source}: ${animation.listChannels().length} channels, ${clip.duration.toFixed(2)}s`);
+    console.log(`${character}/${name} <- ${fbx ? source : 'keyed'}: ${animation.listChannels().length} channels, ${clip.duration.toFixed(2)}s`);
   }
 
   // Cel shading reads only colour and normals.
