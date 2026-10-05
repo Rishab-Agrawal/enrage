@@ -21,8 +21,8 @@ const BUFFER_TIME = 0.25;
 const MAX_TWIST = 0.8;
 /** Once she stops turning, a twist past this, rad, settles with a pivot too. */
 const SETTLE = 0.2;
-/** Seconds a pivot takes: quick and light. */
-const PIVOT_TIME = 0.26;
+/** Seconds a pivot takes: unhurried and light. */
+const PIVOT_TIME = 0.42;
 
 type State = 'move' | 'strike' | 'dodge' | 'hurt' | 'down';
 

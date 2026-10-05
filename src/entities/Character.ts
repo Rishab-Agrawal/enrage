@@ -13,9 +13,9 @@ const UP = new THREE.Vector3(0, 1, 0);
 /** Bones that share a twist, hips to head: the legs stay put. */
 const SPINE = ['Waist', 'Spine01', 'Spine02', 'NeckTwist01', 'Head'];
 /** How far a fully raised knee swings the thigh forward, bends the knee and opens outward, rad. */
-const KNEE_FLEX = 0.8;
-const KNEE_BEND = 1.3;
-const KNEE_OPEN = 0.4;
+const KNEE_FLEX = 0.45;
+const KNEE_BEND = 0.75;
+const KNEE_OPEN = 0.2;
 const [turn, parent] = [new THREE.Quaternion(), new THREE.Quaternion()];
 const side = new THREE.Vector3();
 

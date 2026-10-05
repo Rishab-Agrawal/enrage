@@ -61,8 +61,9 @@ const ARMATURE = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0,
 
 /**
  * Re-expresses a Mixamo take on a Tripo rig. Both rest in a T-pose, so each Tripo bone turns, in world space, as its
- * Mixamo bone turns from rest; the hips travel scaled by hip height. Wrists hold their rest bend: Mixamo walks flap
- * them ~40°, which reads as flailing on rigid gloved fists.
+ * Mixamo bone turns from rest; the hips travel scaled by hip height. Legs first take Mixamo's rest stance: Tripo's
+ * stand splayed ~7°, which every step would carry, landing the feet three times as wide. Wrists hold their rest bend:
+ * Mixamo walks flap them ~40°, which reads as flailing on rigid gloved fists.
  */
 function retarget(fbx, nodes) {
   const take = takeOf(fbx);
@@ -79,6 +80,12 @@ function retarget(fbx, nodes) {
   const [root, hip] = [world(nodes.get('Root')), world(nodes.get('Hip'))];
   const scale = hip.position.y / hipsRest.y;
   const tripo = new Map(Object.entries(MIXAMO).filter(([from]) => !from.endsWith('Hand')).map(([from, to]) => [to, from]));
+  const stance = new Map(['Left', 'Right'].flatMap((side) => [['UpLeg', 'Leg'], ['Leg', 'Foot']].map(([from, to]) => {
+    const [a, b] = [MIXAMO[side + from], MIXAMO[side + to]];
+    const splayed = world(nodes.get(b)).position.sub(world(nodes.get(a)).position).normalize();
+    const straight = bone(side + to).getWorldPosition(new THREE.Vector3()).sub(bone(side + from).getWorldPosition(new THREE.Vector3()));
+    return [a, new THREE.Quaternion().setFromUnitVectors(splayed, straight.applyQuaternion(TO_TRIPO).normalize())];
+  })));
 
   const times = take.tracks.find((t) => t.name === 'mixamorigHips.position').times;
   const values = new Map([...tripo.keys()].map((name) => [name, []]));
@@ -101,7 +108,7 @@ function retarget(fbx, nodes) {
       if (from) {
         bone(from).getWorldQuaternion(turn).multiply(q.copy(rest.get(from)).invert());
         turn.premultiply(TO_TRIPO).multiply(q.copy(TO_TRIPO).invert());
-        rotation = turn.clone().multiply(world(node).rotation);
+        rotation = turn.clone().multiply(stance.get(node.getName()) ?? q.identity()).multiply(world(node).rotation);
         values.get(node.getName()).push(...q.copy(parent).invert().multiply(rotation).toArray());
       } else {
         rotation = parent.clone().multiply(new THREE.Quaternion(...node.getRotation()));
