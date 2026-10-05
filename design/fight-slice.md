@@ -11,8 +11,8 @@ The first playable slice: one fight, one NPC, one hilltop arena. No levels, no c
 - **Across 1–3 min:** you can't win one long exchange, so the fight becomes enrage → fight → calm → rest, repeated.
 - **Lose, learn, restart:** your bar empties → defeat card showing his remaining health → instant rematch (R).
 - **Risk and reward:** staying in to land one more hit against getting caught by his punch. Calming him early is safe but slow.
-- **A better player:** dodges through his wind-ups, lands full combos, and rests less.
-- **Communicating the next decision:** his mood badge, the colour of his ground ring, his roar on enrage, and the arm wind-up before each attack.
+- **A better player:** dodges through his wind-ups, keeps her jabs landing, and rests less.
+- **Communicating the next decision:** his mood badge, his rage embers and rim light, his roar on enrage, and the wind-up before each attack.
 - **Non-goals:** levels, multiple NPCs, chat/voice, LLM, mobile/touch, gamepad.
 
 ## Core loop contract
@@ -32,16 +32,20 @@ The player strikes to empty the NPC's health. His heavy attacks create risk, and
 
 `Npc.mood` (`'calm' | 'enraged'`) is the one piece of state a future system (the LLM) sets, through `Fight.setMood`. For now the debug panel sets it.
 
-- **Calm:** arms folded, never attacks. He walks off to keep at least 6 m away and enforces a hard 3 m personal-space ring. Inside it the player gets kicked back without damage. His strike reach is 1.6 m, so a calm NPC can't be hit. This is the player's rest window. He turns as she does: head first, hips following in a step.
-- **Enraged:** roars (a 1.2 s telegraph), then chases and attacks with a punch or a kick. Each attack has a visible wind-up, and the kick knocks the player back.
+- **Calm:** arms folded, never attacks. He walks off to keep at least 6 m away; if she gets within arm's reach anyway, he shoves her off without damage. Her blows don't hurt him while he is calm. This is the player's rest window. He turns as she does: head first, hips following in a step.
+- **Enraged:** roars (a 1.2 s telegraph), then chases and attacks with a punch or a haymaker. Each attack has a visible wind-up, through which he keeps stepping in faster than she can back away; the haymaker knocks her back hard.
+
+## Contact
+
+Everything physical happens on touch. A blow lands only if the striking fist, sampled from its bone at full stretch, reaches the other's body; there are no invisible walls or ranged pushes. Knockback is an impulse on top of her own movement, never a loss of control. She strikes and flinches with her upper body, so her legs answer input at all times except mid-dodge or once down.
 
 ## Tuning (live in the debug panel)
 
 | | Player | NPC |
 | --- | --- | --- |
 | Health | 100, regen 3/s only while he is calm | 400, never heals |
-| Damage | 9 per strike (jab/cross alternate) | punch 24, kick 18 + knockback |
-| Rhythm | strike every ~0.45 s, dodge 0.35 s with i-frames, 0.7 s cooldown | wind-up ~0.5 s, ~1.4 s attack cycle |
+| Damage | 9 per jab | punch 16, haymaker 30 + knockback |
+| Rhythm | a jab every ~0.6 s, guard to guard; dodge 0.32 s with i-frames, 0.7 s cooldown | wind-up 0.5–0.9 s, ~1.5 s attack cycle |
 
 Rough maths: a straight trade drains the player in about 12 s while dealing at most ~200 damage, so winning takes about two rests.
 

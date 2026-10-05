@@ -16,5 +16,3 @@ export const tuning = {
 
 /** Radius of the playable circle, metres. */
 export const ARENA_RADIUS = 15;
-/** A calm NPC never lets the player inside this distance. */
-export const PERSONAL_SPACE = 3;

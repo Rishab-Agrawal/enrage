@@ -13,9 +13,20 @@ import { Vfx } from '../systems/Vfx';
 import { createSeededRandom } from '../utils/random';
 import { Arena, SUN_DIRECTION } from '../world/Arena';
 import type { FightEvent, Mood } from './events';
-import { ARENA_RADIUS, PERSONAL_SPACE, tuning } from './tuning';
+import { ARENA_RADIUS, tuning } from './tuning';
 
 const STEP = 1 / 60;
+/** Radius of a fist, m. */
+const FIST = 0.1;
+const arm = new THREE.Line3();
+const nearest = new THREE.Vector3();
+
+/** Whether the arm from `from` to the fist `at` meets `body`'s upright cylinder, seen from above. */
+function reaches(from: THREE.Vector3, at: THREE.Vector3, body: { position: THREE.Vector3; radius: number }): boolean {
+  arm.start.copy(from).setY(0);
+  arm.end.copy(at).setY(0);
+  return arm.closestPointToPoint(body.position, true, nearest).distanceTo(body.position) <= body.radius + FIST;
+}
 const PLAYER_RIM = new THREE.Color('#ffd9a0').multiplyScalar(0.3);
 const RAGE_RIM = new THREE.Color('#ff3a14').multiplyScalar(0.75);
 
@@ -128,9 +139,9 @@ export class Game {
     this.hitstop -= delta;
     const fightDelta = this.hitstop > 0 ? delta * 0.06 : delta;
     const live = !this.outcome;
-    this.player.update(fightDelta, live ? this.input : null, this.npc.position, this.npc.mood === 'calm', this.events);
+    this.player.update(fightDelta, live ? this.input : null, this.npc.mood === 'calm', this.events);
     if (live) this.npc.update(fightDelta, this.player.position, this.events);
-    this.resolve(live);
+    this.resolve();
     // Animate once bodies are where they end up this frame: locomotion shows the actual displacement.
     this.player.character.update(fightDelta);
     this.npc.character.update(fightDelta);
@@ -139,7 +150,7 @@ export class Game {
 
     const rage = this.npc.mood === 'enraged' && this.npc.state !== 'down';
     this.npc.character.rim.value.lerp(rage ? RAGE_RIM : PLAYER_RIM, 1 - Math.exp(-5 * delta));
-    this.vfx.update(delta, this.npc.position, rage ? 'enraged' : 'calm', this.elapsed);
+    this.vfx.update(delta, this.npc.position, rage ? 'enraged' : 'calm');
     this.arena.update(this.elapsed);
     this.cameraRig.update(delta, this.player.position, this.player.yaw);
     this.hud.update(
@@ -156,40 +167,24 @@ export class Game {
     );
   }
 
-  /** Combat rules: blows land within reach and in front of the attacker; bodies don't overlap. */
-  private resolve(live: boolean): void {
-    const toNpc = this.offset.subVectors(this.npc.position, this.player.position).setY(0);
-    const distance = toNpc.length();
+  /** Combat rules: a blow lands only where the fist meets the other's body, and only an enraged NPC is hurt; bodies don't overlap. */
+  private resolve(): void {
     for (const event of this.events) {
-      if (event.type === 'contact' && event.who === 'player') {
-        const facing = new THREE.Vector3(Math.sin(this.player.yaw), 0, Math.cos(this.player.yaw));
-        const inFront = facing.dot(toNpc) > distance * 0.25;
-        if (this.npc.mood === 'enraged' && this.npc.state !== 'down' && distance <= event.reach && inFront) {
+      if (event.type !== 'contact') continue;
+      if (event.who === 'player') {
+        if (this.npc.mood === 'enraged' && this.npc.state !== 'down' && reaches(this.player.position, event.at, this.npc)) {
           this.npc.takeHit(event.damage);
-          const at = this.player.position.clone().addScaledVector(toNpc, 0.55 / Math.max(distance, 0.01)).setY(1.35);
-          this.events.push({ type: 'hit', who: 'npc', at, damage: event.damage });
+          this.events.push({ type: 'hit', who: 'npc', at: event.at, damage: event.damage });
         }
+      } else if (reaches(this.npc.position, event.at, this.player) && this.player.takeHit(event.damage, this.npc.position, event.knockback)) {
+        this.events.push(event.damage ? { type: 'hit', who: 'player', at: event.at, damage: event.damage } : { type: 'shove' });
       }
-      if (event.type === 'contact' && event.who === 'npc') {
-        const facing = new THREE.Vector3(Math.sin(this.npc.yaw), 0, Math.cos(this.npc.yaw));
-        const inFront = -facing.dot(toNpc) > distance * 0.4;
-        if (distance <= event.reach && inFront && this.player.takeHit(event.damage, this.npc.position, event.knockback)) {
-          const at = this.npc.position.clone().addScaledVector(toNpc, -0.9 / Math.max(distance, 0.01)).setY(1.2);
-          this.events.push({ type: 'hit', who: 'player', at, damage: event.damage });
-        }
-      }
-      if (event.type === 'shove' && distance < PERSONAL_SPACE + 1.2) this.player.push(this.npc.position, 9);
-      // His roar blasts away anyone standing at his feet: enraging him up close isn't free damage.
-      if (event.type === 'mood' && event.mood === 'enraged' && distance < PERSONAL_SPACE + 0.5) this.player.push(this.npc.position, 8);
     }
 
-    // A calm NPC keeps the player out of reach; otherwise bodies just don't overlap.
-    const calm = live && this.npc.mood === 'calm';
-    const minimum = calm ? PERSONAL_SPACE : this.player.radius + this.npc.radius;
-    if (distance < minimum && distance > 0.001) {
-      const push = calm ? Math.min(minimum - distance, 0.15) : minimum - distance;
-      this.player.position.addScaledVector(toNpc, -push / distance);
-    }
+    const toNpc = this.offset.subVectors(this.npc.position, this.player.position).setY(0);
+    const distance = toNpc.length();
+    const minimum = this.player.radius + this.npc.radius;
+    if (distance < minimum && distance > 0.001) this.player.position.addScaledVector(toNpc, (distance - minimum) / distance);
     for (const body of [this.player.position, this.npc.position]) {
       const r = Math.hypot(body.x, body.z);
       if (r > ARENA_RADIUS) body.multiplyScalar(ARENA_RADIUS / r);

@@ -17,7 +17,7 @@ const ARTIFACTS = 'artifacts';
 // clips transfer between them (Gorran's haymaker is Wren's cross; both collapse the same way).
 const CHARACTERS = {
   player: {
-    idle: 'tripo/player-anim/idle', walk: 'mixamo/walk', walkBack: 'mixamo/walk-back', run: 'tripo/player-anim/run', jab: 'tripo/player-anim/box_01', cross: 'tripo/player-anim/box_02',
+    idle: 'tripo/player-anim/idle', walk: 'mixamo/walk', walkBack: 'mixamo/walk-back', run: 'tripo/player-anim/run', jab: 'tripo/player-anim/box_01',
     hurt: 'tripo/player-anim/hit_to_body_01', defeat: 'tripo/npc-anim/defeat_03',
   },
   npc: {
@@ -223,6 +223,16 @@ function inPlace(clip) {
   return (Math.sign(-travel[1]) * Math.hypot(travel[0], travel[1])) / period;
 }
 
+/** Shifts a take's hip travel to set off from the rig's rest hips: some takes start with them half a metre aside. */
+function setOffFromRest(clip, rest) {
+  const hip = clip.tracks.find((t) => t.name === 'Hip.position');
+  const [dx, dy] = [rest[0] - hip.values[0], rest[1] - hip.values[1]]; // Z is up
+  for (let i = 0; i < hip.values.length; i += 3) {
+    hip.values[i] += dx;
+    hip.values[i + 1] += dy;
+  }
+}
+
 const io = new NodeIO();
 for (const [character, clips] of Object.entries(CHARACTERS)) {
   const doc = await io.read(fileIn(join(ARTIFACTS, 'tripo', `${character}-rig`, 'rig'), '.glb'));
@@ -239,6 +249,7 @@ for (const [character, clips] of Object.entries(CHARACTERS)) {
     }
     const animation = doc.createAnimation(name);
     if (IN_PLACE.has(name)) animation.setExtras({ groundSpeed: inPlace(clip) });
+    else setOffFromRest(clip, nodes.get('Hip').getTranslation());
     for (const track of clip.tracks) {
       const [nodeName, property] = track.name.split('.');
       const values = Float32Array.from(track.values);

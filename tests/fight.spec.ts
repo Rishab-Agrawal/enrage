@@ -22,7 +22,7 @@ async function start(page: Page): Promise<string[]> {
 /** Signed shortest turn from yaw `a` to yaw `b`. */
 const turn = (a: number, b: number) => Math.atan2(Math.sin(b - a), Math.cos(b - a));
 
-/** Sprint at him, turning toward him with A/D, and swing whenever he is in reach, for up to `seconds` or until `stop` holds. */
+/** Sprint at him, turning toward him with A/D, then stand and swing while he is in reach, for up to `seconds` or until `stop` holds. */
 async function brawl(page: Page, seconds: number, stop: (d: Diagnostics) => boolean): Promise<Diagnostics> {
   const box = (await page.locator('#game-canvas').boundingBox())!;
   await page.mouse.move(box.width / 2, box.height / 2);
@@ -35,21 +35,26 @@ async function brawl(page: Page, seconds: number, stop: (d: Diagnostics) => bool
     if (key) await page.keyboard.down(key);
     turning = key;
   };
-  await page.keyboard.down('KeyW'); // before Shift, or Shift dashes
-  await page.keyboard.down('ShiftLeft');
+  let closing = false;
+  const close = async (on: boolean) => {
+    if (on === closing) return;
+    closing = on;
+    if (on) for (const key of ['KeyW', 'ShiftLeft']) await page.keyboard.down(key); // W first, or Shift dashes
+    else for (const key of ['ShiftLeft', 'KeyW']) await page.keyboard.up(key);
+  };
   const end = Date.now() + seconds * 1000;
   let d = await read(page);
   while (Date.now() < end && !d.outcome && !stop(d)) {
     await steer(d);
-    if (distance(d) < 2.2) {
+    await close(distance(d) > 1.1);
+    if (distance(d) < 1.3) {
       await page.mouse.down();
       await page.mouse.up();
     }
     await page.waitForTimeout(120);
     d = await read(page);
   }
-  await page.keyboard.up('ShiftLeft');
-  await page.keyboard.up('KeyW');
+  await close(false);
   if (turning) await page.keyboard.up(turning);
   return d;
 }
@@ -79,6 +84,27 @@ test('W walks, Shift sprints, S backs up, A/D only turn, and Shift alone dashes'
   for (const { turned } of [walked, sprinted, backed]) expect(Math.abs(turned)).toBeLessThan(1e-6);
   expect(turned.turned).toBeLessThan(-0.5); // D turns her right: clockwise from above
   expect((await travel(['ShiftLeft'], 100)).moved).toBeGreaterThan(1.5);
+  expect(errors).toEqual([]);
+});
+
+test('she walks on while she strikes', async ({ page }) => {
+  const errors = await start(page);
+  const box = (await page.locator('#game-canvas').boundingBox())!;
+  await page.mouse.move(box.width / 2, box.height / 2);
+  const before = await read(page);
+  let struck = false;
+  await page.keyboard.down('KeyW');
+  for (let i = 0; i < 8; i++) {
+    await page.mouse.down();
+    await page.mouse.up();
+    await page.waitForTimeout(150);
+    struck ||= (await read(page)).player.state === 'strike';
+  }
+  await page.keyboard.up('KeyW');
+  const after = await read(page);
+  const walked = Math.hypot(after.player.position.x - before.player.position.x, after.player.position.z - before.player.position.z);
+  expect(struck).toBe(true);
+  expect(walked / (after.elapsed - before.elapsed)).toBeGreaterThan(1.2); // near her 1.5 m/s walk
   expect(errors).toEqual([]);
 });
 
@@ -151,15 +177,15 @@ test('legs settle on the speed the body actually moves at', async ({ page }) => 
   expect(errors).toEqual([]);
 });
 
-test('a calm NPC keeps the player out of reach and cannot be hurt', async ({ page }) => {
+test('a calm NPC shoves off a player who closes in, and cannot be hurt', async ({ page }) => {
   const errors = await start(page);
-  let closest = Infinity;
+  let shoved = false;
   const d = await brawl(page, 6, (now) => {
-    closest = Math.min(closest, distance(now));
+    shoved ||= now.player.state === 'hurt';
     return false;
   });
   expect(d.npc.mood).toBe('calm');
-  expect(closest).toBeGreaterThan(2.6);
+  expect(shoved).toBe(true);
   expect(d.npc.health).toBe(400);
   expect(d.player.health).toBe(100);
   expect(errors).toEqual([]);

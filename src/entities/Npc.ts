@@ -1,16 +1,21 @@
 import * as THREE from 'three';
 import type { GLTF } from 'three/addons/loaders/GLTFLoader.js';
 import type { FightEvent, Mood } from '../game/events';
-import { ARENA_RADIUS, PERSONAL_SPACE, tuning } from '../game/tuning';
+import { ARENA_RADIUS, tuning } from '../game/tuning';
 import { Character } from './Character';
 import { angleTo, turnToward, yawTo } from './steering';
 
-/** Clip-second windows; `contact` is when the blow lands. The haymaker's long crouch is its telegraph. */
+/** Clip-second windows; `contact` is when the striking `hand` is at full stretch. The haymaker's long crouch is its telegraph. */
 const ATTACKS = {
-  punch: { from: 0.1, contact: 0.56, to: 1.3, speed: 1.2, reach: 2.15, knockback: 3 },
-  haymaker: { from: 0.9, contact: 2.3, to: 2.65, speed: 1.6, reach: 2.35, knockback: 8 },
+  punch: { from: 0.1, contact: 0.7, to: 1.3, speed: 1.2, hand: 'L_Hand', knockback: 5.5 },
+  haymaker: { from: 0.9, contact: 2.3, to: 2.65, speed: 1.6, hand: 'R_Hand', knockback: 10.5 },
 };
-const ATTACK_RANGE = 1.9;
+/** He closes to this before swinging, and keeps stepping in through the wind-up, faster than she can back away. */
+const ATTACK_RANGE = 1.3;
+const STEP_IN_SPEED = 1.6;
+/** A calm NPC shoves off a player who comes within arm's reach, without hurting her. */
+const SHOVE_RANGE = 1.5;
+const SHOVE_KNOCKBACK = 9;
 /** A calm NPC starts walking off inside COMFORT_DISTANCE and, once going, stops only at RETREAT_TO: no shuffling at the edge. */
 const COMFORT_DISTANCE = 6;
 const RETREAT_TO = 7.5;
@@ -52,10 +57,6 @@ export class Npc {
     return this.character.root.position;
   }
 
-  get yaw(): number {
-    return this.character.root.rotation.y;
-  }
-
   reset(): void {
     this.health = tuning.npcMaxHealth;
     this.character.place(0, -4, 0);
@@ -85,7 +86,7 @@ export class Npc {
 
     switch (this.state) {
       case 'calm':
-        if (distance < PERSONAL_SPACE + 0.35 && this.shoveCooldown <= 0) {
+        if (distance < SHOVE_RANGE && this.shoveCooldown <= 0) {
           this.enter('shove');
         } else if (distance < (this.retreating ? RETREAT_TO : COMFORT_DISTANCE)) {
           this.retreating = true;
@@ -99,7 +100,7 @@ export class Npc {
         turnToward(this.character, yawTo(this.toPlayer), 8, delta);
         if (this.contactAt > 0 && this.timer >= this.contactAt) {
           this.contactAt = 0;
-          events.push({ type: 'shove' });
+          events.push({ type: 'contact', who: 'npc', damage: 0, knockback: SHOVE_KNOCKBACK, at: this.character.joint(ATTACKS.punch.hand) });
         }
         if (this.timer >= this.endAt) this.enter('calm');
         break;
@@ -113,12 +114,15 @@ export class Npc {
         break;
       case 'attack':
         // Tracks the player through the wind-up, committed after contact: sidestepping late works.
-        if (this.contactAt > 0) turnToward(this.character, yawTo(this.toPlayer), 2.6, delta);
+        if (this.contactAt > 0) {
+          turnToward(this.character, yawTo(this.toPlayer), 2.6, delta);
+          if (distance > ATTACK_RANGE) this.position.addScaledVector(this.toPlayer.normalize(), STEP_IN_SPEED * delta);
+        }
         if (this.contactAt > 0 && this.timer >= this.contactAt) {
           this.contactAt = 0;
-          const { reach, knockback } = ATTACKS[this.attack];
+          const { hand, knockback } = ATTACKS[this.attack];
           const damage = this.attack === 'punch' ? tuning.punchDamage : tuning.haymakerDamage;
-          events.push({ type: 'contact', who: 'npc', damage, reach, knockback });
+          events.push({ type: 'contact', who: 'npc', damage, knockback, at: this.character.joint(hand) });
         }
         if (this.timer >= this.endAt) this.enter('recover');
         break;

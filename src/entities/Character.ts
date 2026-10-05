@@ -39,6 +39,16 @@ function bend(bone: THREE.Object3D, axis: THREE.Vector3, angle: number): void {
   bone.quaternion.premultiply(turn.setFromAxisAngle(axis, angle).multiply(parent).premultiply(parent.invert()));
 }
 
+/** Rewinds `action` to clip second `from` at `speed`, looping or holding its last frame. */
+function cue(action: THREE.AnimationAction, { loop = true, speed = 1, from = 0 }: PlayOptions): THREE.AnimationAction {
+  action.reset();
+  action.time = from;
+  action.timeScale = speed;
+  action.setLoop(loop ? THREE.LoopRepeat : THREE.LoopOnce, Infinity);
+  action.clampWhenFinished = !loop;
+  return action;
+}
+
 /**
  * A pivot under way: which of STEPS it is on and that step's progress, 0 to 1; the hips' yaw the step set off from, the
  * ball of the foot it turns on and the leg stepping round (positive the left); and how large its steps are, up to 1.
@@ -82,6 +92,12 @@ export class Character {
   /** Blend weight each clip eases toward; clips not listed fade out. */
   private targets = new Map<THREE.AnimationAction, number>();
   private fade = GAIT_FADE;
+  /** Upper-body layer: a second mixer plays clips' Waist-up rotations, laid over the full-body pose by `layer.weight`. */
+  private readonly upper: THREE.AnimationMixer;
+  private readonly gestures = new Map<string, THREE.AnimationAction>();
+  private readonly upperBones: THREE.Object3D[] = [];
+  private readonly upperPose: THREE.Quaternion[];
+  private readonly layer = { weight: 0, target: 0, fade: 0.1 };
 
   constructor(gltf: GLTF, height: number) {
     const model = cloneSkinned(gltf.scene);
@@ -110,6 +126,15 @@ export class Character {
     this.hip = model.getObjectByName('Hip')!;
     this.spine = SPINE.map((name) => model.getObjectByName(name)!);
     this.legs = ['L', 'R'].map((leg) => ['Thigh', 'Calf', 'ToeBase'].map((name) => model.getObjectByName(`${leg}_${name}`)!));
+
+    model.getObjectByName('Waist')!.traverse((bone) => void this.upperBones.push(bone));
+    this.upperPose = this.upperBones.map(() => new THREE.Quaternion());
+    const upper = new Set(this.upperBones.map((bone) => `${bone.name}.quaternion`));
+    this.upper = new THREE.AnimationMixer(model);
+    for (const clip of gltf.animations) {
+      const tracks = clip.tracks.filter((track) => upper.has(track.name));
+      this.gestures.set(clip.name, this.upper.clipAction(new THREE.AnimationClip(clip.name, clip.duration, tracks)));
+    }
   }
 
   /** Teleport: moves the body without that counting as motion. */
@@ -137,6 +162,11 @@ export class Character {
     return this.legs[leg > 0 ? 0 : 1][2].getWorldPosition(new THREE.Vector3()).setY(0);
   }
 
+  /** Where a bone is, world. */
+  joint(name: string): THREE.Vector3 {
+    return this.root.getObjectByName(name)!.getWorldPosition(new THREE.Vector3());
+  }
+
   get moving(): boolean {
     return this.velocity.lengthSq() > STANDING ** 2;
   }
@@ -157,15 +187,23 @@ export class Character {
     this.idle = idle;
   }
 
-  /** Crossfade to an action clip, ending locomotion. */
-  play(name: string, { loop = true, fade = 0.18, speed = 1, from = 0 }: PlayOptions = {}): void {
+  /** Crossfade to an action clip, ending locomotion and any gesture. */
+  play(name: string, { fade = 0.18, ...options }: PlayOptions = {}): void {
     this.idle = null;
-    const action = this.action(name).reset();
-    action.time = from;
-    action.timeScale = speed;
-    action.setLoop(loop ? THREE.LoopRepeat : THREE.LoopOnce, Infinity);
-    action.clampWhenFinished = !loop;
-    this.blend(new Map([[action, 1]]), fade);
+    this.endGesture(fade);
+    this.blend(new Map([[cue(this.action(name), options), 1]]), fade);
+  }
+
+  /** Play a clip once on the upper body alone, over whatever the legs are doing. */
+  gesture(name: string, { fade = 0.1, ...options }: PlayOptions = {}): void {
+    this.upper.stopAllAction();
+    cue(this.gestures.get(name)!, { ...options, loop: false }).play();
+    Object.assign(this.layer, { target: 1, fade });
+  }
+
+  /** Hand the upper body back to the full-body pose. */
+  endGesture(fade = 0.2): void {
+    Object.assign(this.layer, { target: 0, fade });
   }
 
   /** Call once the body's position is final for the frame. */
@@ -180,6 +218,11 @@ export class Character {
     for (const action of this.actions.values()) total += action.weight += ((this.targets.get(action) ?? 0) - action.weight) * k;
     for (const action of this.actions.values()) action.weight /= total || 1;
     this.mixer.update(delta);
+    this.upperBones.forEach((bone, i) => this.upperPose[i].copy(bone.quaternion));
+    this.upper.update(delta);
+    const { layer } = this;
+    layer.weight += (layer.target - layer.weight) * (1 - Math.exp((-3 * delta) / layer.fade));
+    this.upperBones.forEach((bone, i) => bone.quaternion.copy(this.upperPose[i].slerp(bone.quaternion, layer.weight)));
     // Each bone turns its share about the vertical, so the head ends up turned by the whole twist.
     for (const bone of this.twist ? this.spine : []) bend(bone, UP, this.twist / this.spine.length);
     if (this.knee) {

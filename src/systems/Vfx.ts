@@ -1,6 +1,5 @@
 import * as THREE from 'three';
 import type { Mood } from '../game/events';
-import { PERSONAL_SPACE } from '../game/tuning';
 
 const EMBERS = 60;
 const EMBER_HEIGHT = 2.6;
@@ -40,26 +39,18 @@ function radialTexture(stops: [number, string][], spikes = 0): THREE.CanvasTextu
   return texture;
 }
 
-/** Event-driven effects (impact stars, dust) plus the NPC's mood ring and rage embers. */
+/** Event-driven effects (impact stars, dust, his roar's shockwave) plus the NPC's rage embers. */
 export class Vfx {
   readonly group = new THREE.Group();
   private readonly bursts: Burst[] = [];
   private readonly impact = radialTexture([[0, '#ffffff'], [0.35, '#fff2b0'], [1, 'rgba(255,170,60,0)']], 12);
   private readonly dust = radialTexture([[0, 'rgba(226,205,170,0.9)'], [1, 'rgba(226,205,170,0)']]);
-  private readonly ring: THREE.Mesh<THREE.RingGeometry, THREE.MeshBasicMaterial>;
   private readonly shock: THREE.Mesh<THREE.RingGeometry, THREE.MeshBasicMaterial>;
   private readonly embers: THREE.Points<THREE.BufferGeometry, THREE.PointsMaterial>;
-  private readonly calmColor = new THREE.Color('#d6fff4');
-  private readonly rageColor = new THREE.Color('#ff4a24');
   private rage = 0;
   private shockAge = 1;
 
   constructor() {
-    this.ring = new THREE.Mesh(
-      new THREE.RingGeometry(0.94, 1, 96),
-      new THREE.MeshBasicMaterial({ transparent: true, depthWrite: false, opacity: 0.5 }),
-    );
-    this.ring.rotation.x = -Math.PI / 2;
     this.shock = new THREE.Mesh(
       new THREE.RingGeometry(0.8, 1, 64),
       new THREE.MeshBasicMaterial({ color: '#ffb070', transparent: true, depthWrite: false, opacity: 0 }),
@@ -81,7 +72,7 @@ export class Vfx {
         blending: THREE.AdditiveBlending,
       }),
     );
-    this.group.add(this.ring, this.shock, this.embers);
+    this.group.add(this.shock, this.embers);
   }
 
   hit(at: THREE.Vector3, heavy: boolean): void {
@@ -100,14 +91,8 @@ export class Vfx {
     this.shockAge = 0;
   }
 
-  update(delta: number, npc: THREE.Vector3, mood: Mood, elapsed: number): void {
+  update(delta: number, npc: THREE.Vector3, mood: Mood): void {
     this.rage = THREE.MathUtils.damp(this.rage, mood === 'enraged' ? 1 : 0, 4, delta);
-    // Calm: his personal space. Enraged: the ring tightens to his striking reach and throbs.
-    const pulse = 1 + Math.sin(elapsed * 9) * 0.04 * this.rage;
-    this.ring.position.set(npc.x, 0.22, npc.z);
-    this.ring.scale.setScalar(THREE.MathUtils.lerp(PERSONAL_SPACE, 2.1, this.rage) * pulse);
-    this.ring.material.color.lerpColors(this.calmColor, this.rageColor, this.rage);
-    this.ring.material.opacity = 0.35 + 0.25 * this.rage;
 
     this.shockAge += delta;
     const s = Math.min(this.shockAge / 0.6, 1);
