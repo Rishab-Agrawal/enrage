@@ -37,7 +37,7 @@ The player strikes to empty the NPC's health. His heavy attacks create risk, and
 
 ## Contact
 
-Everything physical happens on touch. A blow lands only if the striking fist, sampled from its bone at full stretch, reaches the other's body; there are no invisible walls or ranged pushes. Knockback is an impulse on top of her own movement, never a loss of control. A flinch plays on her upper body, so a blow never takes her legs; only her own strikes and dodges commit them.
+Everything physical happens on touch. A blow lands only if the striking fist, sampled from its bone at full stretch, reaches the other's body; there are no invisible walls or ranged pushes. Knockback is an impulse on top of her own movement, never a loss of control. A flinch plays on her upper body, so a blow never takes her legs; only her own strikes and dodges commit them. An action's step moves the fighter's body (root motion; its clip plays in place), so a lunging jab carries her into the cross instead of snapping back.
 
 ## Tuning (live in the debug panel)
 

@@ -29,6 +29,8 @@ const CHARACTERS = {
 const TRIM = { 'tripo/npc-anim/defeat_03': 4.6 };
 // Locomotion plays in place: the game moves the body, and the clip records the ground speed it depicts.
 const IN_PLACE = new Set(['run', 'walk', 'walkBack']);
+// Standing clips sway in place under the body; every other clip is an action.
+const STANDING = new Set(['idle', 'calm']);
 // Seconds either side of a gait's loop seam over which its velocity jump is eased out.
 const SEAM_EASE = 0.2;
 const PATHS = { position: 'translation', quaternion: 'rotation', scale: 'scale' };
@@ -224,23 +226,29 @@ function inPlace(clip) {
 }
 
 /**
- * Moves a take, unturned, so its hips set off from where the rig's rest hips stand: some start them half a metre aside,
- * which a crossfade into the take would slide across.
+ * Plays an action take in place: its hips keep their height and turn but stand over the rig's rest hips. Returns the
+ * ground they covered as travel, [time, x, z, ...] in the model's frame, for the game to move the body by: a step
+ * then carries on into whatever plays next instead of snapping back.
  */
-function setOffFromRest(clip, nodes) {
+function rootMotion(clip, nodes) {
   const track = (name) => clip.tracks.find((t) => t.name === name);
   const rest = (name) => new THREE.Quaternion(...nodes.get(name).getRotation());
+  const armature = new THREE.Quaternion().fromArray(track('Armature.quaternion').values);
+  // Root's rest turn as the take keys it: the take's Armature turn differs from the rig's.
+  const restRoot = armature.clone().invert().multiply(rest('Armature')).multiply(rest('Root'));
+  const stand = new THREE.Vector3(...nodes.get('Hip').getTranslation()).applyQuaternion(restRoot);
   const hip = track('Hip.position');
   const turns = track('Root.quaternion').createInterpolant();
-  const at = (i) => new THREE.Quaternion().fromArray(turns.evaluate(hip.times[i]));
-  // Root's rest turn as the take keys it: the take's Armature turn differs from the rig's.
-  const restRoot = new THREE.Quaternion().fromArray(track('Armature.quaternion').values).invert().multiply(rest('Armature')).multiply(rest('Root'));
-  const shift = new THREE.Vector3(...nodes.get('Hip').getTranslation()).applyQuaternion(restRoot);
-  shift.sub(new THREE.Vector3().fromArray(hip.values).applyQuaternion(at(0))).setZ(0); // Z is up
-  const p = new THREE.Vector3();
-  for (let i = 0; i < hip.times.length; i++) {
-    p.fromArray(hip.values, i * 3).add(shift.clone().applyQuaternion(at(i).invert())).toArray(hip.values, i * 3);
-  }
+  const [q, p, moved] = [new THREE.Quaternion(), new THREE.Vector3(), new THREE.Vector3()];
+  const travel = [];
+  hip.times.forEach((t, i) => {
+    q.fromArray(turns.evaluate(t));
+    p.fromArray(hip.values, i * 3).applyQuaternion(q); // the Armature's frame: Z is up
+    moved.set(p.x - stand.x, p.y - stand.y, 0).applyQuaternion(armature);
+    travel.push(t, moved.x, moved.z);
+    p.setX(stand.x).setY(stand.y).applyQuaternion(q.invert()).toArray(hip.values, i * 3);
+  });
+  return travel;
 }
 
 const io = new NodeIO();
@@ -259,7 +267,7 @@ for (const [character, clips] of Object.entries(CHARACTERS)) {
     }
     const animation = doc.createAnimation(name);
     if (IN_PLACE.has(name)) animation.setExtras({ groundSpeed: inPlace(clip) });
-    else setOffFromRest(clip, nodes);
+    else if (!STANDING.has(name)) animation.setExtras({ travel: rootMotion(clip, nodes) });
     for (const track of clip.tracks) {
       const [nodeName, property] = track.name.split('.');
       const values = Float32Array.from(track.values);

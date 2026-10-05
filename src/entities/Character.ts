@@ -31,7 +31,7 @@ const STEPS = [
   { share: 1, time: 0.3, lift: 0.6 },
 ];
 const [turn, parent] = [new THREE.Quaternion(), new THREE.Quaternion()];
-const side = new THREE.Vector3();
+const [side, step] = [new THREE.Vector3(), new THREE.Vector3()];
 
 /** Turns `bone` by `angle` about the world `axis`, at its own origin. */
 function bend(bone: THREE.Object3D, axis: THREE.Vector3, angle: number): void {
@@ -89,6 +89,8 @@ export class Character {
   private readonly backGaits: Map<string, number>;
   /** Set while locomoting: the clip for standing still. */
   private idle: string | null = null;
+  /** Seconds standing settles in over until the body next moves: longer after an action, to ease back from it. */
+  private settle = GAIT_FADE;
   /** Blend weight each clip eases toward; clips not listed fade out. */
   private targets = new Map<THREE.AnimationAction, number>();
   private fade = GAIT_FADE;
@@ -98,6 +100,9 @@ export class Character {
   private readonly upperBones: THREE.Object3D[] = [];
   private readonly upperPose: THREE.Quaternion[];
   private readonly layer = { weight: 0, target: 0, fade: 0.1 };
+  /** Action -> the ground its take covers by clip time, in the model's frame: the clip plays in place and moves the body by this. */
+  private readonly travels = new Map<THREE.AnimationAction, THREE.Interpolant>();
+  private readonly model: THREE.Object3D;
 
   constructor(gltf: GLTF, height: number) {
     const model = cloneSkinned(gltf.scene);
@@ -112,11 +117,19 @@ export class Character {
       addOutline(mesh, 0.006);
     }
     this.root.add(model);
+    this.model = model;
 
     this.mixer = new THREE.AnimationMixer(model);
     const gaits: [string, number][] = [];
     for (const clip of gltf.animations) {
-      this.actions.set(clip.name, this.mixer.clipAction(clip).setEffectiveWeight(0));
+      const action = this.mixer.clipAction(clip).setEffectiveWeight(0);
+      this.actions.set(clip.name, action);
+      const travel = clip.userData.travel as number[] | undefined;
+      if (travel) {
+        const at = (k: number) => travel.filter((_, i) => i % 3 === k);
+        const ground = at(1).flatMap((x, i) => [x, at(2)[i]]);
+        this.travels.set(action, new THREE.LinearInterpolant(at(0), ground, 2, new Float32Array(2)));
+      }
       const groundSpeed = clip.userData.groundSpeed as number | undefined;
       if (groundSpeed) gaits.push([clip.name, groundSpeed * model.scale.x]);
     }
@@ -183,8 +196,9 @@ export class Character {
   }
 
   /** Hand animation to locomotion, which shows the measured speed with `idle` and the gaits. */
-  locomote(idle: string): void {
+  locomote(idle: string, settle = GAIT_FADE): void {
     this.idle = idle;
+    this.settle = settle;
   }
 
   /** Crossfade to an action clip, ending locomotion and any gesture. */
@@ -217,7 +231,16 @@ export class Character {
     let total = 0;
     for (const action of this.actions.values()) total += action.weight += ((this.targets.get(action) ?? 0) - action.weight) * k;
     for (const action of this.actions.values()) action.weight /= total || 1;
+    const from = [...this.travels].map(([action, path]) => [...path.evaluate(action.time)]);
     this.mixer.update(delta);
+    // Actions carry the body over the ground as their takes did.
+    step.set(0, 0, 0);
+    [...this.travels].forEach(([action, path], i) => {
+      const [x, z] = path.evaluate(action.time);
+      step.x += (x - from[i][0]) * action.weight;
+      step.z += (z - from[i][1]) * action.weight;
+    });
+    this.root.position.add(step.applyQuaternion(this.model.quaternion).multiplyScalar(this.model.scale.x).applyAxisAngle(UP, this.root.rotation.y));
     this.upperBones.forEach((bone, i) => this.upperPose[i].copy(bone.quaternion));
     this.upper.update(delta);
     const { layer } = this;
@@ -291,7 +314,8 @@ export class Character {
     const weight = Math.min(1, speed / slowestSpeed);
     const action = this.action(gait);
     action.timeScale = Math.max(speed, slowestSpeed) / groundSpeed;
-    this.blend(new Map([[this.action(this.idle!), 1 - weight], [action, weight]]), GAIT_FADE);
+    if (this.moving) this.settle = GAIT_FADE;
+    this.blend(new Map([[this.action(this.idle!), 1 - weight], [action, weight]]), this.settle);
   }
 
   private blend(targets: Map<THREE.AnimationAction, number>, fade: number): void {

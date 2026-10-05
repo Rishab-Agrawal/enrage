@@ -16,6 +16,9 @@ const DODGE_SPEED = 10;
 const DODGE_COOLDOWN = 0.7;
 const HURT_TIME = 0.42;
 const BUFFER_TIME = 0.25;
+/** Seconds a strike blends in over, and her stance back in once she's done. */
+const STRIKE_FADE = 0.15;
+const RECOVER_FADE = 0.5;
 type State = 'move' | 'strike' | 'dodge' | 'hurt' | 'down';
 
 export class Player {
@@ -107,7 +110,7 @@ export class Player {
       this.velocity.multiplyScalar(Math.exp(-12 * delta));
       // Through the wind-up, square up to him and close the last half-metre, so strikes connect instead of whiffing.
       if (this.contactAt > 0 && this.toNpc.lengthSq() < 36) turnToward(this.character, yawTo(this.toNpc), 10, delta);
-      const gap = this.toNpc.length() - 1.3;
+      const gap = this.toNpc.length() - 1.45;
       if (this.timer < this.contactAt && gap > 0 && gap < 1.2) this.position.addScaledVector(this.toNpc.normalize(), Math.min(gap, 3 * delta));
     } else {
       // A/D only turn her and W/S only walk her along her facing, so held together she walks an arc.
@@ -154,7 +157,7 @@ export class Player {
     this.contactAt = (strike.contact - strike.from) / strike.speed;
     this.cancelAt = this.contactAt + 0.08;
     this.endAt = (strike.to - strike.from) / strike.speed;
-    this.character.play(strike.clip, { loop: false, from: strike.from, speed: strike.speed, fade: 0.06 });
+    this.character.play(strike.clip, { loop: false, from: strike.from, speed: strike.speed, fade: STRIKE_FADE });
     events.push({ type: 'swing', who: 'player', heavy: false });
   }
 
@@ -176,6 +179,6 @@ export class Player {
     this.timer = 0;
     this.combo = 0;
     this.character.endGesture();
-    this.character.locomote('idle');
+    this.character.locomote('idle', RECOVER_FADE);
   }
 }
