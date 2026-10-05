@@ -21,9 +21,8 @@ const BUFFER_TIME = 0.25;
 const MAX_TWIST = 0.8;
 /** Once she stops turning, a twist past this, rad, settles with a pivot too. */
 const SETTLE = 0.2;
-/** Seconds a pivot takes, and its hop at the peak for a full twist, m: quick and light. */
-const PIVOT_TIME = 0.16;
-const HOP = 0.03;
+/** Seconds a pivot takes: quick and light. */
+const PIVOT_TIME = 0.26;
 
 type State = 'move' | 'strike' | 'dodge' | 'hurt' | 'down';
 
@@ -46,8 +45,11 @@ export class Player {
   private turn = 0;
   /** Where she heads: A/D steer it, W walks along it and the camera looks along it. Her hips catch up with it. */
   private aim = 0;
-  /** A pivot under way: the hips' yaw it set off from and its progress, 0 to 1. */
-  private pivot: { from: number; t: number } | null = null;
+  /**
+   * A pivot under way: the hips' yaw it set off from and turns them by, the ball of the foot it turns on, the leg that
+   * steps round (positive the left), and its progress, 0 to 1.
+   */
+  private pivot: { from: number; by: number; about: THREE.Vector3; leg: number; t: number } | null = null;
   private readonly wish = new THREE.Vector3();
   private readonly toNpc = new THREE.Vector3();
 
@@ -144,7 +146,8 @@ export class Player {
 
   /**
    * Her hips follow her aim: closely on the move; standing, her upper body leads and her hips hold until it has
-   * twisted as far as it goes, then catch up in a quick hop-pivot. Mid-action her aim eases after her hips instead.
+   * twisted as far as it goes, then catch up in a quick step: they pivot on the ball of the inner foot while the outer
+   * knee lifts and swings round. Mid-action her aim eases after her hips instead.
    */
   private follow(delta: number): void {
     const { character } = this;
@@ -158,15 +161,19 @@ export class Player {
       this.pivot = null;
     } else if (this.pivot) {
       this.pivot.t = Math.min(1, this.pivot.t + delta / PIVOT_TIME);
-      const { from, t } = this.pivot;
-      character.turn(angleTo(facing, from + angleTo(from, this.aim) * THREE.MathUtils.smootherstep(t, 0, 1)));
+      const { from, by, about, t } = this.pivot;
+      character.turn(angleTo(facing, from + by * THREE.MathUtils.smootherstep(t, 0, 1)), about);
       if (t === 1) this.pivot = null;
     } else if (Math.abs(lag) > MAX_TWIST || (Math.abs(this.turn) < 0.05 && Math.abs(lag) > SETTLE)) {
-      this.pivot = { from: facing, t: 0 };
+      // Turn by as much as her aim will be ahead when the step lands; step out with the leg on the turning side.
+      const by = lag - this.turn * tuning.playerTurnRate * PIVOT_TIME;
+      const leg = Math.sign(by);
+      this.pivot = { from: facing, by, about: character.ball(-leg), leg, t: 0 };
     }
     const twist = this.state === 'move' ? angleTo(character.root.rotation.y, this.aim) : 0;
     character.twist += (twist - character.twist) * (1 - Math.exp(-20 * delta));
-    character.lift = this.pivot ? HOP * Math.min(1, Math.abs(angleTo(this.pivot.from, this.aim)) / MAX_TWIST) * Math.sin(Math.PI * this.pivot.t) : 0;
+    const knee = this.pivot ? this.pivot.leg * Math.min(1, Math.abs(this.pivot.by) / MAX_TWIST) * Math.sin(Math.PI * this.pivot.t) : 0;
+    character.knee += (knee - character.knee) * (1 - Math.exp(-40 * delta));
   }
 
   /** Returns false when the blow is avoided. */

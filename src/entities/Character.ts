@@ -12,7 +12,18 @@ const GAIT_FADE = 0.2;
 const UP = new THREE.Vector3(0, 1, 0);
 /** Bones that share a twist, hips to head: the legs stay put. */
 const SPINE = ['Waist', 'Spine01', 'Spine02', 'NeckTwist01', 'Head'];
+/** How far a fully raised knee swings the thigh forward, bends the knee and opens outward, rad. */
+const KNEE_FLEX = 0.8;
+const KNEE_BEND = 1.3;
+const KNEE_OPEN = 0.4;
 const [turn, parent] = [new THREE.Quaternion(), new THREE.Quaternion()];
+const side = new THREE.Vector3();
+
+/** Turns `bone` by `angle` about the world `axis`, at its own origin. */
+function bend(bone: THREE.Object3D, axis: THREE.Vector3, angle: number): void {
+  bone.parent!.getWorldQuaternion(parent);
+  bone.quaternion.premultiply(turn.setFromAxisAngle(axis, angle).multiply(parent).premultiply(parent.invert()));
+}
 
 /**
  * A Tripo-baked GLB as a cel-shaded, animated fighter with a rim-light and hit-flash channel.
@@ -27,10 +38,11 @@ export class Character {
   readonly velocity = new THREE.Vector3();
   /** Twist of the upper body over the hips, rad, positive left: where it looks ahead of where it faces. */
   twist = 0;
-  /** Height the whole body is lifted, m: a hop. */
-  lift = 0;
-  private readonly model: THREE.Object3D;
+  /** One knee raised and opened outward, as in a quick step: positive the left, negative the right, up to 1 at full height. */
+  knee = 0;
   private readonly spine: THREE.Object3D[];
+  /** Thigh, calf and ball of the foot, left leg then right. */
+  private readonly legs: THREE.Object3D[][];
   private readonly last = new THREE.Vector3();
   private readonly hip: THREE.Object3D;
   /** The ground under the hips, in the root's frame: what the body turns about. Poses can hold it well off the root. */
@@ -73,7 +85,7 @@ export class Character {
     this.backGaits = new Map(gaits.filter(([, s]) => s < 0).map(([name, s]) => [name, -s]));
     this.hip = model.getObjectByName('Hip')!;
     this.spine = SPINE.map((name) => model.getObjectByName(name)!);
-    this.model = model;
+    this.legs = ['L', 'R'].map((leg) => ['Thigh', 'Calf', 'ToeBase'].map((name) => model.getObjectByName(`${leg}_${name}`)!));
   }
 
   /** Teleport: moves the body without that counting as motion. */
@@ -84,14 +96,19 @@ export class Character {
     this.velocity.set(0, 0, 0);
   }
 
-  /** Turn on the spot by `angle`, about the hips: the root swings round them, which isn't motion. */
-  turn(angle: number): void {
+  /** Turn on the spot by `angle`, about the hips or a world point `about`: the root swings round it, which isn't motion. */
+  turn(angle: number, about?: THREE.Vector3): void {
     const { position, rotation } = this.root;
-    const pivot = this.pivot.clone().applyAxisAngle(UP, rotation.y).add(position);
+    const pivot = about ?? this.pivot.clone().applyAxisAngle(UP, rotation.y).add(position);
     const before = position.clone();
     position.sub(pivot).applyAxisAngle(UP, angle).add(pivot);
     this.last.add(position).sub(before);
     rotation.y += angle;
+  }
+
+  /** The ball of a foot on the ground, world: positive the left, negative the right. */
+  ball(leg: number): THREE.Vector3 {
+    return this.legs[leg > 0 ? 0 : 1][2].getWorldPosition(new THREE.Vector3()).setY(0);
   }
 
   get moving(): boolean {
@@ -136,11 +153,15 @@ export class Character {
     for (const action of this.actions.values()) total += action.weight += ((this.targets.get(action) ?? 0) - action.weight) * k;
     for (const action of this.actions.values()) action.weight /= total || 1;
     this.mixer.update(delta);
-    this.model.position.y = this.lift;
     // Each bone turns its share about the vertical, so the head ends up turned by the whole twist.
-    for (const bone of this.twist ? this.spine : []) {
-      bone.parent!.getWorldQuaternion(parent);
-      bone.quaternion.premultiply(turn.setFromAxisAngle(UP, this.twist / this.spine.length).multiply(parent).premultiply(parent.invert()));
+    for (const bone of this.twist ? this.spine : []) bend(bone, UP, this.twist / this.spine.length);
+    if (this.knee) {
+      // About the body's right: the thigh swings forward and the shin folds back under it; then the knee opens out.
+      const [thigh, calf] = this.legs[this.knee > 0 ? 0 : 1];
+      side.set(-Math.cos(this.root.rotation.y), 0, Math.sin(this.root.rotation.y));
+      bend(thigh, side, KNEE_FLEX * Math.abs(this.knee));
+      bend(calf, side, -KNEE_BEND * Math.abs(this.knee));
+      bend(thigh, UP, KNEE_OPEN * this.knee);
     }
     this.root.updateMatrixWorld(true);
     this.root.worldToLocal(this.hip.getWorldPosition(this.pivot)).setY(0);
