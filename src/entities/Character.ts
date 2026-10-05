@@ -94,6 +94,8 @@ export class Character {
   /** Blend weight each clip eases toward; clips not listed fade out. */
   private targets = new Map<THREE.AnimationAction, number>();
   private fade = GAIT_FADE;
+  /** How fast each clip's weight is changing, per second. */
+  private readonly rates = new Map<THREE.AnimationAction, number>();
   /** Upper-body layer: a second mixer plays clips' Waist-up rotations, laid over the full-body pose by `layer.weight`. */
   private readonly upper: THREE.AnimationMixer;
   private readonly gestures = new Map<string, THREE.AnimationAction>();
@@ -226,10 +228,18 @@ export class Character {
     if (delta > 0) this.velocity.subVectors(this.root.position, this.last).setY(0).divideScalar(delta);
     this.last.copy(this.root.position);
     if (this.idle) this.animateGait();
-    // Ease every weight toward its target; renormalise so the pose never mixes in the bind pose.
-    const k = 1 - Math.exp((-3 * delta) / this.fade);
+    // Ease every weight toward its target as a critically damped spring, 95% there in `fade` s: a blend eases in as well
+    // as out, so no change of pose starts with a jolt. Renormalise so the pose never mixes in the bind pose.
+    const stiffness = 4.74 / this.fade;
+    const decay = Math.exp(-stiffness * delta);
     let total = 0;
-    for (const action of this.actions.values()) total += action.weight += ((this.targets.get(action) ?? 0) - action.weight) * k;
+    for (const action of this.actions.values()) {
+      const target = this.targets.get(action) ?? 0;
+      const [off, rate] = [action.weight - target, this.rates.get(action) ?? 0];
+      const kick = (rate + stiffness * off) * delta;
+      this.rates.set(action, (rate - stiffness * kick) * decay);
+      total += action.weight = target + (off + kick) * decay;
+    }
     for (const action of this.actions.values()) action.weight /= total || 1;
     const from = [...this.travels].map(([action, path]) => [...path.evaluate(action.time)]);
     this.mixer.update(delta);
