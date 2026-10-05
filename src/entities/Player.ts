@@ -18,7 +18,7 @@ const HURT_TIME = 0.42;
 const BUFFER_TIME = 0.25;
 /** Seconds a strike blends in over, and her stance back in once she's done. */
 const STRIKE_FADE = 0.15;
-const RECOVER_FADE = 0.9;
+const RECOVER_FADE = 0.6;
 type State = 'move' | 'strike' | 'dodge' | 'hurt' | 'down';
 
 export class Player {

@@ -64,7 +64,7 @@ export class Character {
   readonly root = new THREE.Group();
   readonly rim = { value: new THREE.Color(0, 0, 0) };
   readonly flash = { value: 0 };
-  /** Ground velocity over the last frame, m/s. */
+  /** Ground velocity over the last frame, m/s, beyond what action clips carried the body: that motion is theirs to show. */
   readonly velocity = new THREE.Vector3();
   /** Yaw the body looks toward: the head turns to it, the hips follow. */
   aim = 0;
@@ -250,7 +250,9 @@ export class Character {
       step.x += (x - from[i][0]) * action.weight;
       step.z += (z - from[i][1]) * action.weight;
     });
-    this.root.position.add(step.applyQuaternion(this.model.quaternion).multiplyScalar(this.model.scale.x).applyAxisAngle(UP, this.root.rotation.y));
+    step.applyQuaternion(this.model.quaternion).multiplyScalar(this.model.scale.x).applyAxisAngle(UP, this.root.rotation.y);
+    this.root.position.add(step);
+    this.last.add(step);
     this.upperBones.forEach((bone, i) => this.upperPose[i].copy(bone.quaternion));
     this.upper.update(delta);
     const { layer } = this;
