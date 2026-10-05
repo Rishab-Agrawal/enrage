@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import type { GLTF } from 'three/addons/loaders/GLTFLoader.js';
 import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
 import { addOutline, toonGradient } from '../world/toon';
+import { angleTo } from './steering';
 
 type PlayOptions = { loop?: boolean; fade?: number; speed?: number; from?: number };
 
@@ -16,6 +17,19 @@ const SPINE = ['Waist', 'Spine01', 'Spine02', 'NeckTwist01', 'Head'];
 const KNEE_FLEX = 0.3;
 const KNEE_BEND = 0.5;
 const KNEE_OPEN = 0.13;
+/** Standing, the upper body twists toward the aim up to this, rad, before the hips pivot round to catch up. */
+const MAX_TWIST = 0.8;
+/** Once the aim comes to rest, below AIM_REST rad/s, a twist past SETTLE, rad, settles with a pivot too. */
+const AIM_REST = 0.06;
+const SETTLE = 0.2;
+/**
+ * A pivot's steps: the outer foot steps round as the hips turn on the ball of the inner, then the inner follows in a
+ * smaller step. Each turns the hips its share of the way to the aim over its seconds, its knee lifting up to `lift`.
+ */
+const STEPS = [
+  { share: 0.7, time: 0.42, lift: 1 },
+  { share: 1, time: 0.3, lift: 0.6 },
+];
 const [turn, parent] = [new THREE.Quaternion(), new THREE.Quaternion()];
 const side = new THREE.Vector3();
 
@@ -24,6 +38,12 @@ function bend(bone: THREE.Object3D, axis: THREE.Vector3, angle: number): void {
   bone.parent!.getWorldQuaternion(parent);
   bone.quaternion.premultiply(turn.setFromAxisAngle(axis, angle).multiply(parent).premultiply(parent.invert()));
 }
+
+/**
+ * A pivot under way: which of STEPS it is on and that step's progress, 0 to 1; the hips' yaw the step set off from, the
+ * ball of the foot it turns on and the leg stepping round (positive the left); and how large its steps are, up to 1.
+ */
+type Pivot = { step: number; t: number; from: number; about: THREE.Vector3; leg: number; size: number };
 
 /**
  * A Tripo-baked GLB as a cel-shaded, animated fighter with a rim-light and hit-flash channel.
@@ -36,10 +56,14 @@ export class Character {
   readonly flash = { value: 0 };
   /** Ground velocity over the last frame, m/s. */
   readonly velocity = new THREE.Vector3();
+  /** Yaw the body looks toward: the head turns to it, the hips follow. */
+  aim = 0;
   /** Twist of the upper body over the hips, rad, positive left: where it looks ahead of where it faces. */
-  twist = 0;
+  private twist = 0;
   /** One knee raised and opened outward, as in a quick step: positive the left, negative the right, up to 1 at full height. */
-  knee = 0;
+  private knee = 0;
+  private pivoting: Pivot | null = null;
+  private lastAim = 0;
   private readonly spine: THREE.Object3D[];
   /** Thigh, calf and ball of the foot, left leg then right. */
   private readonly legs: THREE.Object3D[][];
@@ -92,6 +116,8 @@ export class Character {
   place(x: number, z: number, yaw: number): void {
     this.root.position.set(x, 0, z);
     this.root.rotation.y = yaw;
+    this.aim = this.lastAim = yaw;
+    this.pivoting = null;
     this.last.copy(this.root.position);
     this.velocity.set(0, 0, 0);
   }
@@ -144,6 +170,7 @@ export class Character {
 
   /** Call once the body's position is final for the frame. */
   update(delta: number): void {
+    this.face(delta);
     if (delta > 0) this.velocity.subVectors(this.root.position, this.last).setY(0).divideScalar(delta);
     this.last.copy(this.root.position);
     if (this.idle) this.animateGait();
@@ -166,6 +193,43 @@ export class Character {
     this.root.updateMatrixWorld(true);
     this.root.worldToLocal(this.hip.getWorldPosition(this.pivot)).setY(0);
     this.flash.value = Math.max(0, this.flash.value - delta * 8);
+  }
+
+  /**
+   * The hips follow the aim: closely on the move; standing, the upper body leads and the hips hold until it has
+   * twisted as far as it goes, then catch up in a pivot's two steps. Mid-action the aim eases after the hips instead.
+   */
+  private face(delta: number): void {
+    const facing = this.root.rotation.y;
+    const lag = angleTo(facing, this.aim);
+    if (!this.idle) {
+      this.aim += angleTo(this.aim, facing) * (1 - Math.exp(-10 * delta));
+      this.pivoting = null;
+    } else if (this.moving) {
+      this.turn(lag * (1 - Math.exp(-20 * delta)));
+      this.pivoting = null;
+    } else if (this.pivoting) {
+      const { step, from, about, leg, size } = this.pivoting;
+      const { share, time } = STEPS[step];
+      const t = Math.min(1, this.pivoting.t + delta / time);
+      this.pivoting.t = t;
+      this.turn(angleTo(facing, from + share * angleTo(from, this.aim) * THREE.MathUtils.smootherstep(t, 0, 1)), about);
+      if (t === 1) this.pivoting = STEPS[step + 1] ? this.stepOff(step + 1, -leg, size) : null;
+    } else if (Math.abs(lag) > MAX_TWIST || (Math.abs(angleTo(this.lastAim, this.aim)) < AIM_REST * delta && Math.abs(lag) > SETTLE)) {
+      // Step out first with the leg on the turning side; the further it has to turn, the larger the steps.
+      this.pivoting = this.stepOff(0, Math.sign(lag), Math.min(1, Math.abs(lag) / MAX_TWIST));
+    }
+    this.lastAim = this.aim;
+    const twist = this.idle ? angleTo(this.root.rotation.y, this.aim) : 0;
+    this.twist += (twist - this.twist) * (1 - Math.exp(-20 * delta));
+    const { pivoting: p } = this;
+    const knee = p ? p.leg * p.size * STEPS[p.step].lift * Math.sin(Math.PI * p.t) : 0;
+    this.knee += (knee - this.knee) * (1 - Math.exp(-40 * delta));
+  }
+
+  /** Starts a pivot's `step`: `leg` steps round while the hips turn on the ball of the other foot. */
+  private stepOff(step: number, leg: number, size: number): Pivot {
+    return { step, t: 0, from: this.root.rotation.y, about: this.ball(-leg), leg, size };
   }
 
   /**

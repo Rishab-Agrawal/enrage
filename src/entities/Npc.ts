@@ -3,7 +3,7 @@ import type { GLTF } from 'three/addons/loaders/GLTFLoader.js';
 import type { FightEvent, Mood } from '../game/events';
 import { ARENA_RADIUS, PERSONAL_SPACE, tuning } from '../game/tuning';
 import { Character } from './Character';
-import { turnToward, yawTo } from './steering';
+import { angleTo, turnToward, yawTo } from './steering';
 
 /** Clip-second windows; `contact` is when the blow lands. The haymaker's long crouch is its telegraph. */
 const ATTACKS = {
@@ -92,7 +92,7 @@ export class Npc {
           this.walk(this.retreatHeading(), WALK_SPEED, delta);
         } else {
           this.retreating = false;
-          turnToward(this.character, yawTo(this.toPlayer), 1.5, delta);
+          this.look(this.toPlayer, 1.5, delta);
         }
         break;
       case 'shove':
@@ -190,6 +190,12 @@ export class Npc {
 
   private walk(direction: THREE.Vector3, speed: number, delta: number): void {
     this.position.addScaledVector(direction, speed * delta);
-    turnToward(this.character, yawTo(direction), 7, delta);
+    this.look(direction, 7, delta);
+  }
+
+  /** Turns his aim toward `direction` by at most `rate` rad/s: his head leads and his hips follow. */
+  private look(direction: THREE.Vector3, rate: number, delta: number): void {
+    const step = rate * delta;
+    this.character.aim += THREE.MathUtils.clamp(angleTo(this.character.aim, yawTo(direction)), -step, step);
   }
 }

@@ -17,25 +17,7 @@ const DODGE_SPEED = 10;
 const DODGE_COOLDOWN = 0.7;
 const HURT_TIME = 0.42;
 const BUFFER_TIME = 0.25;
-/** Standing, her upper body twists toward her aim up to this, rad, before her hips pivot round to catch up. */
-const MAX_TWIST = 0.8;
-/** Once she stops turning, a twist past this, rad, settles with a pivot too. */
-const SETTLE = 0.2;
-/**
- * A pivot's steps: the outer foot steps round as the hips turn on the ball of the inner, then the inner follows in a
- * smaller step. Each turns the hips its share of the way to her aim over its seconds, its knee lifting up to `lift`.
- */
-const STEPS = [
-  { share: 0.7, time: 0.42, lift: 1 },
-  { share: 1, time: 0.3, lift: 0.6 },
-];
-
 type State = 'move' | 'strike' | 'dodge' | 'hurt' | 'down';
-/**
- * A pivot under way: which of STEPS it is on and that step's progress, 0 to 1; the hips' yaw the step set off from, the
- * ball of the foot it turns on and the leg stepping round (positive the left); and how large its steps are, up to 1.
- */
-type Pivot = { step: number; t: number; from: number; about: THREE.Vector3; leg: number; size: number };
 
 export class Player {
   readonly character: Character;
@@ -54,9 +36,6 @@ export class Player {
   private readonly move = new THREE.Vector2();
   /** Turn input eased toward the held A/D, so turning (and the camera locked behind her) starts and stops softly. */
   private turn = 0;
-  /** Where she heads: A/D steer it, W walks along it and the camera looks along it. Her hips catch up with it. */
-  private aim = 0;
-  private pivot: Pivot | null = null;
   private readonly wish = new THREE.Vector3();
   private readonly toNpc = new THREE.Vector3();
 
@@ -69,8 +48,9 @@ export class Player {
     return this.character.root.position;
   }
 
+  /** Where she heads: A/D steer it, W walks along it and the camera looks along it. */
   get yaw(): number {
-    return this.aim;
+    return this.character.aim;
   }
 
   get invulnerable(): boolean {
@@ -80,8 +60,6 @@ export class Player {
   reset(): void {
     this.health = tuning.playerMaxHealth;
     this.character.place(0, 6, Math.PI);
-    this.aim = Math.PI;
-    this.pivot = null;
     this.velocity.set(0, 0, 0);
     this.dodgeCooldown = 0;
     this.turn = 0;
@@ -114,7 +92,7 @@ export class Player {
         // A/D only turn her and W/S only walk her along her facing, so held together she walks an arc.
         // Shift hurries her forward only.
         this.turn += (this.move.x - this.turn) * (1 - Math.exp(-12 * delta));
-        this.aim -= this.turn * tuning.playerTurnRate * delta;
+        this.character.aim -= this.turn * tuning.playerTurnRate * delta;
         const speed = this.move.y < 0 ? tuning.playerBackSpeed : input?.sprinting ? tuning.playerSprintSpeed : tuning.playerWalkSpeed;
         this.wish.set(Math.sin(this.yaw), 0, Math.cos(this.yaw)).multiplyScalar(this.move.y * speed);
         this.velocity.lerp(this.wish, 1 - Math.exp(-14 * delta));
@@ -148,45 +126,6 @@ export class Player {
         break;
     }
     this.position.addScaledVector(this.velocity, delta);
-    this.follow(delta);
-  }
-
-  /**
-   * Her hips follow her aim: closely on the move; standing, her upper body leads and her hips hold until it has
-   * twisted as far as it goes, then catch up in a pivot's two steps. Mid-action her aim eases after her hips instead.
-   */
-  private follow(delta: number): void {
-    const { character } = this;
-    const facing = character.root.rotation.y;
-    const lag = angleTo(facing, this.aim);
-    if (this.state !== 'move') {
-      this.aim += angleTo(this.aim, facing) * (1 - Math.exp(-10 * delta));
-      this.pivot = null;
-    } else if (character.moving) {
-      character.turn(lag * (1 - Math.exp(-20 * delta)));
-      this.pivot = null;
-    } else if (this.pivot) {
-      const { step, from, about, leg, size } = this.pivot;
-      const { share, time } = STEPS[step];
-      const t = Math.min(1, this.pivot.t + delta / time);
-      this.pivot.t = t;
-      character.turn(angleTo(facing, from + share * angleTo(from, this.aim) * THREE.MathUtils.smootherstep(t, 0, 1)), about);
-      if (t === 1) this.pivot = STEPS[step + 1] ? this.stepOff(step + 1, -leg, size) : null;
-    } else if (Math.abs(lag) > MAX_TWIST || (Math.abs(this.turn) < 0.05 && Math.abs(lag) > SETTLE)) {
-      // Step out first with the leg on the turning side; the further she has to turn, the larger the steps.
-      this.pivot = this.stepOff(0, Math.sign(lag), Math.min(1, Math.abs(lag) / MAX_TWIST));
-    }
-    const twist = this.state === 'move' ? angleTo(character.root.rotation.y, this.aim) : 0;
-    character.twist += (twist - character.twist) * (1 - Math.exp(-20 * delta));
-    const { pivot } = this;
-    const knee = pivot ? pivot.leg * pivot.size * STEPS[pivot.step].lift * Math.sin(Math.PI * pivot.t) : 0;
-    character.knee += (knee - character.knee) * (1 - Math.exp(-40 * delta));
-  }
-
-  /** Starts a pivot's `step`: `leg` steps round while the hips turn on the ball of the other foot. */
-  private stepOff(step: number, leg: number, size: number): Pivot {
-    const { character } = this;
-    return { step, t: 0, from: character.root.rotation.y, about: character.ball(-leg), leg, size };
   }
 
   /** Returns false when the blow is avoided. */
@@ -219,7 +158,7 @@ export class Player {
   private startStrike(events: FightEvent[]): void {
     const strike = STRIKES[this.combo++ % STRIKES.length];
     this.buffered = null;
-    this.character.turn(angleTo(this.character.root.rotation.y, this.aim));
+    this.character.turn(angleTo(this.character.root.rotation.y, this.yaw));
     this.state = 'strike';
     this.timer = 0;
     this.contactAt = (strike.contact - strike.from) / strike.speed;
@@ -234,7 +173,7 @@ export class Player {
     this.state = 'dodge';
     this.timer = 0;
     this.dodgeCooldown = DODGE_COOLDOWN;
-    this.character.turn(angleTo(this.character.root.rotation.y, this.aim));
+    this.character.turn(angleTo(this.character.root.rotation.y, this.yaw));
     this.velocity.set(Math.sin(this.yaw), 0, Math.cos(this.yaw)).multiplyScalar(DODGE_SPEED);
     this.character.locomote('idle');
     events.push({ type: 'dodge', at: this.position.clone() });

@@ -32,7 +32,7 @@ The player strikes to empty the NPC's health. His heavy attacks, and a regen rat
 
 `Npc.mood` (`'calm' | 'enraged'`) is the one piece of state a future system (the LLM) sets, through `Fight.setMood`. For now the debug panel sets it.
 
-- **Calm:** arms folded, never attacks. He walks off to keep at least 6 m away and enforces a hard 3 m personal-space ring. Inside it the player gets kicked back without damage. His strike reach is 1.6 m, so a calm NPC can't be hit. This is the player's rest window.
+- **Calm:** arms folded, never attacks. He walks off to keep at least 6 m away and enforces a hard 3 m personal-space ring. Inside it the player gets kicked back without damage. His strike reach is 1.6 m, so a calm NPC can't be hit. This is the player's rest window. He turns as she does: head first, hips following in a step.
 - **Enraged:** roars (a 1.2 s telegraph), then chases and attacks with a punch or a kick. Each attack has a visible wind-up, and the kick knocks the player back.
 
 ## Tuning (live in the debug panel)
