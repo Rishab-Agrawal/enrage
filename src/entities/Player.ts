@@ -90,9 +90,10 @@ export class Player {
     switch (this.state) {
       case 'move': {
         // A/D only turn her and W/S only walk her along her facing, so held together she walks an arc.
-        // Shift hurries her forward only.
+        // Shift hurries her forward only. Standing, she pivots at the rate her turn clips step.
         this.turn += (this.move.x - this.turn) * (1 - Math.exp(-12 * delta));
-        this.character.turn(-this.turn * tuning.playerTurnRate * delta);
+        const rate = this.character.moving ? tuning.playerTurnRate : this.character.turnRate;
+        this.character.turn(-this.turn * rate * delta);
         const speed = this.move.y < 0 ? tuning.playerBackSpeed : input?.sprinting ? tuning.playerSprintSpeed : tuning.playerWalkSpeed;
         this.wish.set(Math.sin(this.yaw), 0, Math.cos(this.yaw)).multiplyScalar(this.move.y * speed);
         this.velocity.lerp(this.wish, 1 - Math.exp(-14 * delta));

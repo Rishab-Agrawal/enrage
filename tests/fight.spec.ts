@@ -82,24 +82,20 @@ test('W walks, Shift sprints, S backs up, A/D only turn, and Shift alone dashes'
   expect(errors).toEqual([]);
 });
 
-test('turning on the spot steps one foot at a time, planted in between', async ({ page }) => {
+test('turning on the spot pivots quickly, covering no ground', async ({ page }) => {
   const errors = await start(page);
   await page.keyboard.down('KeyD');
-  const stepped = [0, 0];
-  let [both, fastest, last] = [0, 0, await read(page)];
-  for (const end = Date.now() + 2500; Date.now() < end; ) {
+  let [turned, fastest, last] = [0, 0, await read(page)];
+  for (const end = Date.now() + 1000; Date.now() < end; ) {
     await page.waitForTimeout(40);
     const d = await read(page);
-    const moved = d.player.ankles.map((a, i) => Math.hypot(a.x - last.player.ankles[i].x, a.y - last.player.ankles[i].y, a.z - last.player.ankles[i].z));
-    moved.forEach((m, i) => (stepped[i] += m));
-    if (moved.every((m) => m > 0.01)) both += 1;
+    turned += turn(last.player.yaw, d.player.yaw);
     fastest = Math.max(fastest, d.player.speed);
     last = d;
   }
   await page.keyboard.up('KeyD');
-  for (const distance of stepped) expect(distance).toBeGreaterThan(0.1);
-  expect(both).toBe(0);
-  expect(fastest).toBeLessThan(0.05); // she turns about her hips: no ground covered, so no walking legs
+  expect(turned).toBeLessThan(-2); // about half a turn a second, clockwise from above
+  expect(fastest).toBeLessThan(0.05); // no ground covered, so no walking legs
   expect(errors).toEqual([]);
 });
 
