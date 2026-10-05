@@ -28,6 +28,11 @@ export class Character {
   private readonly gaits: Map<string, number>;
   /** The same for gaits that walk backwards, which the bake records as negative speeds. */
   private readonly backGaits: Map<string, number>;
+  /** Turn-on-the-spot clip -> the rate it turns at at rate 1, rad/s, positive turning left. */
+  private readonly turns = new Map<string, number>();
+  /** Yaw rate over the last frame, rad/s, positive turning left. */
+  private spin = 0;
+  private lastYaw = 0;
   /** Set while locomoting: the clip for standing still. */
   private idle: string | null = null;
   /** Blend weight each clip eases toward; clips not listed fade out. */
@@ -54,6 +59,8 @@ export class Character {
       this.actions.set(clip.name, this.mixer.clipAction(clip).setEffectiveWeight(0));
       const groundSpeed = clip.userData.groundSpeed as number | undefined;
       if (groundSpeed) gaits.push([clip.name, groundSpeed * model.scale.x]);
+      const turnSpeed = clip.userData.turnSpeed as number | undefined;
+      if (turnSpeed) this.turns.set(clip.name, turnSpeed);
     }
     gaits.sort((a, b) => Math.abs(a[1]) - Math.abs(b[1]));
     this.gaits = new Map(gaits.filter(([, s]) => s > 0));
@@ -63,9 +70,10 @@ export class Character {
   /** Teleport: moves the body without that counting as motion. */
   place(x: number, z: number, yaw: number): void {
     this.root.position.set(x, 0, z);
-    this.root.rotation.y = yaw;
+    this.root.rotation.y = this.lastYaw = yaw;
     this.last.copy(this.root.position);
     this.velocity.set(0, 0, 0);
+    this.spin = 0;
   }
 
   get moving(): boolean {
@@ -101,8 +109,12 @@ export class Character {
 
   /** Call once the body's position is final for the frame. */
   update(delta: number): void {
-    if (delta > 0) this.velocity.subVectors(this.root.position, this.last).setY(0).divideScalar(delta);
+    if (delta > 0) {
+      this.velocity.subVectors(this.root.position, this.last).setY(0).divideScalar(delta);
+      this.spin = (this.root.rotation.y - this.lastYaw) / delta;
+    }
     this.last.copy(this.root.position);
+    this.lastYaw = this.root.rotation.y;
     if (this.idle) this.animateGait();
     // Ease every weight toward its target; renormalise so the pose never mixes in the bind pose.
     const k = 1 - Math.exp((-3 * delta) / this.fade);
@@ -116,7 +128,8 @@ export class Character {
   /**
    * Below the slowest gait, blend it with standing at its own cadence, so stopping settles rather than
    * freezing mid-stride; above, the gait nearest the speed, played at it. Moving against the facing
-   * shows the backward gaits, if the clip set has any.
+   * shows the backward gaits, if the clip set has any. Standing, turning steps round with the turn clip
+   * that turns the same way, blended and paced by the turn rate just as gaits are by speed.
    */
   private animateGait(): void {
     const speed = this.velocity.length();
@@ -129,7 +142,16 @@ export class Character {
     const weight = Math.min(1, speed / slowestSpeed);
     const action = this.action(gait);
     action.timeScale = Math.max(speed, slowestSpeed) / groundSpeed;
-    this.blend(new Map([[this.action(this.idle!), 1 - weight], [action, weight]]), GAIT_FADE);
+    const targets = new Map([[this.action(this.idle!), 1 - weight], [action, weight]]);
+    for (const [name, turnSpeed] of this.turns) {
+      const rate = this.spin / turnSpeed;
+      if (rate <= 0) continue;
+      const turn = this.action(name);
+      turn.timeScale = Math.max(rate, 1);
+      targets.set(turn, (1 - weight) * Math.min(1, rate));
+      targets.set(this.action(this.idle!), (1 - weight) * (1 - Math.min(1, rate)));
+    }
+    this.blend(targets, GAIT_FADE);
   }
 
   private blend(targets: Map<THREE.AnimationAction, number>, fade: number): void {

@@ -14,16 +14,16 @@ function jerk(v: ArrayLike<number>, size: number, before: number, i: number, aft
   return Math.sqrt(sum);
 }
 
-// Gaits are drawn at the body's measured speed, so each must loop in place, without a hitch, and record the speed it
-// depicts: negative for walking backwards.
-const GAITS = { player: ['run', 'walk', 'walkBack'], npc: ['run', 'walk'] };
-for (const [model, gaits] of Object.entries(GAITS)) {
-  test(`${model} gaits loop in place`, async () => {
+// Locomotion is drawn from the body's measured motion, so each clip must loop in place, without a hitch, and record
+// what it depicts: a ground speed for gaits, negative walking backwards; a turn rate for turns, positive turning left.
+const LOCOMOTION = { player: { run: 1, walk: 1, walkBack: -1, turnLeft: 1, turnRight: -1 }, npc: { run: 1, walk: 1 } };
+for (const [model, clips] of Object.entries(LOCOMOTION)) {
+  test(`${model} locomotion loops in place`, async () => {
     const doc = await new NodeIO().read(`public/models/${model}.glb`);
-    for (const name of gaits) {
+    for (const [name, sign] of Object.entries(clips)) {
       const animation = doc.getRoot().listAnimations().find((a) => a.getName() === name)!;
-      const groundSpeed = animation.getExtras().groundSpeed as number;
-      expect(Math.sign(groundSpeed), `${model}/${name} ground speed`).toBe(name === 'walkBack' ? -1 : 1);
+      const { groundSpeed, turnSpeed } = animation.getExtras() as { groundSpeed?: number; turnSpeed?: number };
+      expect(Math.sign((groundSpeed ?? turnSpeed)!), `${model}/${name} speed`).toBe(sign);
       for (const channel of animation.listChannels()) {
         const bone = `${model}/${name} ${channel.getTargetNode()!.getName()} ${channel.getTargetPath()}`;
         const output = channel.getSampler()!.getOutput()!;

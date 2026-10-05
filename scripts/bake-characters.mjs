@@ -18,7 +18,7 @@ const ARTIFACTS = 'artifacts';
 const CHARACTERS = {
   player: {
     idle: 'tripo/player-anim/idle', walk: 'mixamo/walk', walkBack: 'mixamo/walk-back', run: 'tripo/player-anim/run', jab: 'tripo/player-anim/box_01', cross: 'tripo/player-anim/box_02',
-    hurt: 'tripo/player-anim/hit_to_body_01', defeat: 'tripo/npc-anim/defeat_03',
+    hurt: 'tripo/player-anim/hit_to_body_01', defeat: 'tripo/npc-anim/defeat_03', turnLeft: 'mixamo/left-turn', turnRight: 'mixamo/right-turn',
   },
   npc: {
     calm: 'tripo/npc-anim/fold_arms', idle: 'tripo/player-anim/idle', roar: 'tripo/npc-anim/angry_01', walk: 'tripo/npc-anim/walk', run: 'tripo/npc-anim/run',
@@ -28,7 +28,9 @@ const CHARACTERS = {
 // Seconds to keep: the defeat take stands back up at the end.
 const TRIM = { 'player/defeat': 4.6, 'npc/defeat': 4.6 };
 // Locomotion plays in place: the game moves the body, and the clip records the ground speed it depicts.
-const IN_PLACE = new Set(['run', 'walk', 'walkBack']);
+const IN_PLACE = new Set(['run', 'walk', 'walkBack', 'turnLeft', 'turnRight']);
+// Turns step round on the spot: the game turns the body, and the clip records the turn rate it depicts instead.
+const TURNS = new Set(['turnLeft', 'turnRight']);
 // Seconds either side of a gait's loop seam over which its velocity jump is eased out.
 const SEAM_EASE = 0.2;
 const PATHS = { position: 'translation', quaternion: 'rotation', scale: 'scale' };
@@ -62,9 +64,10 @@ const ARMATURE = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0,
 /**
  * Re-expresses a Mixamo take on a Tripo rig. Both rest in a T-pose, so each Tripo bone turns, in world space, as its
  * Mixamo bone turns from rest; the hips travel scaled by hip height. Wrists hold their rest bend: Mixamo walks flap
- * them ~40°, which reads as flailing on rigid gloved fists.
+ * them ~40°, which reads as flailing on rigid gloved fists. `unturn` takes out the take's net spin at its average
+ * rate, recorded as `userData.turnSpeed` (rad/s, positive turning left).
  */
-function retarget(fbx, nodes) {
+function retarget(fbx, nodes, unturn) {
   const take = takeOf(fbx);
   const world = (node) => {
     const m = new THREE.Matrix4().fromArray(node.getWorldMatrix());
@@ -86,15 +89,26 @@ function retarget(fbx, nodes) {
   const mixer = new THREE.AnimationMixer(fbx);
   mixer.clipAction(take).setLoop(THREE.LoopOnce).play().clampWhenFinished = true; // sample the last key, not a wrap to the first
   const turn = new THREE.Quaternion(), q = new THREE.Quaternion(), p = new THREE.Vector3();
+  const hipsYaw = (t) => {
+    mixer.setTime(t);
+    fbx.updateMatrixWorld(true);
+    const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(bone('Hips').getWorldQuaternion(q));
+    return Math.atan2(forward.x, forward.z);
+  };
+  const [start, duration] = [times[0], times.at(-1) - times[0]];
+  const spinning = unturn ? hipsYaw(times.at(-1)) - hipsYaw(start) : 0;
+  const turnSpeed = Math.atan2(Math.sin(spinning), Math.cos(spinning)) / duration;
+  const spin = new THREE.Quaternion();
   for (const t of times) {
     mixer.setTime(t);
     fbx.updateMatrixWorld(true);
+    spin.setFromAxisAngle(new THREE.Vector3(0, 1, 0), -turnSpeed * (t - start));
     // Walk the Tripo tree from Root, carrying each parent's world rotation.
     const visit = (node, parent) => {
       const from = tripo.get(node.getName());
       let rotation;
       if (from) {
-        bone(from).getWorldQuaternion(turn).multiply(q.copy(rest.get(from)).invert());
+        bone(from).getWorldQuaternion(turn).premultiply(spin).multiply(q.copy(rest.get(from)).invert());
         turn.premultiply(TO_TRIPO).multiply(q.copy(TO_TRIPO).invert());
         rotation = turn.clone().multiply(world(node).rotation);
         values.get(node.getName()).push(...q.copy(parent).invert().multiply(rotation).toArray());
@@ -104,19 +118,21 @@ function retarget(fbx, nodes) {
       for (const child of node.listChildren()) visit(child, rotation);
     };
     for (const child of nodes.get('Root').listChildren()) visit(child, root.rotation);
-    bone('Hips').getWorldPosition(p).sub(hipsRest).multiplyScalar(scale).applyQuaternion(TO_TRIPO).add(hip.position);
+    bone('Hips').getWorldPosition(p).sub(hipsRest).applyQuaternion(spin).multiplyScalar(scale).applyQuaternion(TO_TRIPO).add(hip.position);
     hipTravel.push(...p.sub(root.position).applyQuaternion(q.copy(root.rotation).invert()).toArray());
   }
 
   const constant = (name, value) => new THREE.KeyframeTrack(name, [0, times.at(-1)], [...value, ...value]);
   const armatureRoot = new THREE.Quaternion().copy(ARMATURE).invert().multiply(root.rotation);
-  return new THREE.AnimationClip(take.name, -1, [
+  const clip = new THREE.AnimationClip(take.name, -1, [
     constant('Armature.quaternion', ARMATURE.toArray()),
     constant('Root.quaternion', armatureRoot.toArray()),
     constant('Root.position', root.position.clone().applyQuaternion(ARMATURE.clone().invert()).toArray()),
     new THREE.VectorKeyframeTrack('Hip.position', times, hipTravel),
     ...[...values].map(([name, v]) => new THREE.QuaternionKeyframeTrack(`${name}.quaternion`, times, v)),
   ]);
+  clip.userData.turnSpeed = turnSpeed;
+  return clip;
 }
 
 const isConstant = (values, stride) => values.every((v, i) => Math.abs(v - values[i % stride]) < 1e-5);
@@ -143,12 +159,13 @@ function bestCycle(clip, times) {
 
 /**
  * Makes a locomotion take a seamless in-place cycle: trims it to its cleanest cycle (Tripo's run starts
- * mid-stride and accelerating), then spreads every channel's pose mismatch across the loop, the Hip's travel
- * included, and eases out its velocity jump at the seam. Returns the ground speed it depicted, in armature units per second.
+ * mid-stride and accelerating) unless it is `whole`, like a stand-to-stand turn, then spreads every channel's
+ * pose mismatch across the loop, the Hip's travel included, and eases out its velocity jump at the seam.
+ * Returns the ground speed it depicted, in armature units per second.
  */
-function inPlace(clip) {
+function inPlace(clip, whole) {
   const hip = clip.tracks.find((t) => t.name === 'Hip.position');
-  const { a, b } = bestCycle(clip, hip.times);
+  const { a, b } = whole ? { a: 0, b: hip.times.length - 1 } : bestCycle(clip, hip.times);
   const [start, period] = [hip.times[a], hip.times[b] - hip.times[a]];
   const frames = hip.times.slice(a, b + 1);
   for (const track of clip.tracks) {
@@ -203,10 +220,13 @@ for (const [character, clips] of Object.entries(CHARACTERS)) {
 
   for (const [name, source] of Object.entries(clips)) {
     const fbx = readFbx(fileIn(join(ARTIFACTS, source), '.fbx'));
-    const clip = fbx.getObjectByName('mixamorigHips') ? retarget(fbx, nodes) : takeOf(fbx);
+    const clip = fbx.getObjectByName('mixamorigHips') ? retarget(fbx, nodes, TURNS.has(name)) : takeOf(fbx);
     if (TRIM[`${character}/${name}`]) clip.trim(0, TRIM[`${character}/${name}`]);
     const animation = doc.createAnimation(name);
-    if (IN_PLACE.has(name)) animation.setExtras({ groundSpeed: inPlace(clip) });
+    if (IN_PLACE.has(name)) {
+      const groundSpeed = inPlace(clip, TURNS.has(name));
+      animation.setExtras(TURNS.has(name) ? { turnSpeed: clip.userData.turnSpeed } : { groundSpeed });
+    }
     for (const track of clip.tracks) {
       const [nodeName, property] = track.name.split('.');
       const values = Float32Array.from(track.values);
