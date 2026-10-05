@@ -165,6 +165,18 @@ test('a calm NPC keeps the player out of reach and cannot be hurt', async ({ pag
   expect(errors).toEqual([]);
 });
 
+test('a calm NPC nudged inside his comfort distance walks well clear of it', async ({ page }) => {
+  const errors = await start(page);
+  await page.keyboard.down('KeyW');
+  await page.waitForFunction(() => {
+    const d = window.__THREE_GAME_DIAGNOSTICS__!;
+    return Math.hypot(d.player.position.x - d.npc.position.x, d.player.position.z - d.npc.position.z) < 5.9;
+  });
+  await page.keyboard.up('KeyW');
+  await expect.poll(async () => distance(await read(page)), { timeout: 5000 }).toBeGreaterThan(7.3);
+  expect(errors).toEqual([]);
+});
+
 test('a straight fight is lost: regen is too slow', async ({ page }) => {
   test.setTimeout(90_000);
   const errors = await start(page);

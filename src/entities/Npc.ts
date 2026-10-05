@@ -11,7 +11,9 @@ const ATTACKS = {
   haymaker: { from: 0.9, contact: 2.3, to: 2.65, speed: 1.6, reach: 2.35, knockback: 8 },
 };
 const ATTACK_RANGE = 1.9;
+/** A calm NPC starts walking off inside COMFORT_DISTANCE and, once going, stops only at RETREAT_TO: no shuffling at the edge. */
 const COMFORT_DISTANCE = 6;
+const RETREAT_TO = 7.5;
 const WALK_SPEED = 1.7;
 const ROAR_TIME = 1.4;
 const RECOVER_TIME = 0.5;
@@ -34,6 +36,7 @@ export class Npc {
   private attack: keyof typeof ATTACKS = 'punch';
   private poise = 0;
   private shoveCooldown = 0;
+  private retreating = false;
   private readonly toPlayer = new THREE.Vector3();
   private readonly heading = new THREE.Vector3();
 
@@ -84,9 +87,11 @@ export class Npc {
       case 'calm':
         if (distance < PERSONAL_SPACE + 0.35 && this.shoveCooldown <= 0) {
           this.enter('shove');
-        } else if (distance < COMFORT_DISTANCE) {
+        } else if (distance < (this.retreating ? RETREAT_TO : COMFORT_DISTANCE)) {
+          this.retreating = true;
           this.walk(this.retreatHeading(), WALK_SPEED, delta);
         } else {
+          this.retreating = false;
           turnToward(this.character, yawTo(this.toPlayer), 1.5, delta);
         }
         break;
