@@ -92,7 +92,7 @@ export class Player {
         // A/D only turn her and W/S only walk her along her facing, so held together she walks an arc.
         // Shift hurries her forward only.
         this.turn += (this.move.x - this.turn) * (1 - Math.exp(-12 * delta));
-        this.character.root.rotation.y -= this.turn * tuning.playerTurnRate * delta;
+        this.character.root.rotation.y -= this.turn * this.character.turnRate * delta;
         const speed = this.move.y < 0 ? tuning.playerBackSpeed : input?.sprinting ? tuning.playerSprintSpeed : tuning.playerWalkSpeed;
         this.wish.set(Math.sin(this.yaw), 0, Math.cos(this.yaw)).multiplyScalar(this.move.y * speed);
         this.velocity.lerp(this.wish, 1 - Math.exp(-14 * delta));

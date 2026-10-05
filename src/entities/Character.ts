@@ -21,6 +21,8 @@ export class Character {
   readonly flash = { value: 0 };
   /** Ground velocity over the last frame, m/s. */
   readonly velocity = new THREE.Vector3();
+  /** Rad/s the turn clips depict: turning the body at it keeps the stepping feet planted. 0 without turn clips. */
+  readonly turnRate: number;
   private readonly last = new THREE.Vector3();
   private readonly mixer: THREE.AnimationMixer;
   private readonly actions = new Map<string, THREE.AnimationAction>();
@@ -65,6 +67,7 @@ export class Character {
     gaits.sort((a, b) => Math.abs(a[1]) - Math.abs(b[1]));
     this.gaits = new Map(gaits.filter(([, s]) => s > 0));
     this.backGaits = new Map(gaits.filter(([, s]) => s < 0).map(([name, s]) => [name, -s]));
+    this.turnRate = Math.max(0, ...[...this.turns.values()].map(Math.abs));
   }
 
   /** Teleport: moves the body without that counting as motion. */

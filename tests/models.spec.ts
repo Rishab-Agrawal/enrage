@@ -24,11 +24,13 @@ for (const [model, clips] of Object.entries(LOCOMOTION)) {
       const animation = doc.getRoot().listAnimations().find((a) => a.getName() === name)!;
       const { groundSpeed, turnSpeed } = animation.getExtras() as { groundSpeed?: number; turnSpeed?: number };
       expect(Math.sign((groundSpeed ?? turnSpeed)!), `${model}/${name} speed`).toBe(sign);
+      let swing = 0;
       for (const channel of animation.listChannels()) {
         const bone = `${model}/${name} ${channel.getTargetNode()!.getName()} ${channel.getTargetPath()}`;
         const output = channel.getSampler()!.getOutput()!;
         const [v, size, n] = [output.getArray()!, output.getElementSize(), output.getCount()];
         if (n < 4) continue;
+        for (let i = 0; i < v.length; i++) swing = Math.max(swing, Math.abs(v[i] - v[i % size]));
         // The last key repeats the first, and motion carries through the wrap as smoothly as anywhere inside the cycle.
         let closing = 0;
         for (let k = 0; k < size; k++) closing = Math.max(closing, Math.abs(Math.abs(v[(n - 1) * size + k]) - Math.abs(v[k])));
@@ -46,6 +48,7 @@ for (const [model, clips] of Object.entries(LOCOMOTION)) {
           expect(steps.at(-1)!, `${bone} lurch`).toBeLessThan(5 * steps[steps.length >> 1]); // sways, never jolts
         }
       }
+      expect(swing, `${model}/${name} motion`).toBeGreaterThan(0.05); // a held pose loops in place trivially
     }
   });
 }

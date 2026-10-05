@@ -27,7 +27,6 @@ export class DebugPanel {
     balance.add(tuning, 'playerWalkSpeed', 0.5, 4, 0.1).name('player walk speed');
     balance.add(tuning, 'playerSprintSpeed', 2, 8, 0.1).name('player sprint speed');
     balance.add(tuning, 'playerBackSpeed', 0.5, 3, 0.1).name('player back speed');
-    balance.add(tuning, 'playerTurnRate', 0.5, 5, 0.1).name('player turn rad/s');
   }
 
   /** Reflect a mood set elsewhere (rematch, test hooks, a future LLM). */

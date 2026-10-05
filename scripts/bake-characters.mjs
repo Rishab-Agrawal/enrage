@@ -87,11 +87,16 @@ function retarget(fbx, nodes, unturn) {
   const values = new Map([...tripo.keys()].map((name) => [name, []]));
   const hipTravel = [];
   const mixer = new THREE.AnimationMixer(fbx);
-  mixer.clipAction(take).setLoop(THREE.LoopOnce).play().clampWhenFinished = true; // sample the last key, not a wrap to the first
+  const action = mixer.clipAction(take).play();
+  // A zero-step update applies `action.time` as given: no wrap to the first key, no pause at the last.
+  const pose = (t) => {
+    action.time = t;
+    mixer.update(0);
+    fbx.updateMatrixWorld(true);
+  };
   const turn = new THREE.Quaternion(), q = new THREE.Quaternion(), p = new THREE.Vector3();
   const hipsYaw = (t) => {
-    mixer.setTime(t);
-    fbx.updateMatrixWorld(true);
+    pose(t);
     const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(bone('Hips').getWorldQuaternion(q));
     return Math.atan2(forward.x, forward.z);
   };
@@ -100,8 +105,7 @@ function retarget(fbx, nodes, unturn) {
   const turnSpeed = Math.atan2(Math.sin(spinning), Math.cos(spinning)) / duration;
   const spin = new THREE.Quaternion();
   for (const t of times) {
-    mixer.setTime(t);
-    fbx.updateMatrixWorld(true);
+    pose(t);
     spin.setFromAxisAngle(new THREE.Vector3(0, 1, 0), -turnSpeed * (t - start));
     // Walk the Tripo tree from Root, carrying each parent's world rotation.
     const visit = (node, parent) => {
