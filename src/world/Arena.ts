@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { ARENA_RADIUS } from '../game/tuning';
 import { createSeededRandom } from '../utils/random';
 import { fbm, noise2 } from './noise';
 import { addOutline, toonGradient } from './toon';
@@ -26,7 +27,7 @@ export class Arena {
 
   constructor(benders: GrassBenders) {
     const rng = createSeededRandom(7);
-    this.group.add(createSky(), createMountains(), ...createClouds(rng), createTerrain(), createDirtPatch());
+    this.group.add(createSky(), createMountains(), ...createClouds(rng), createTerrain());
     this.group.add(createGrass(rng, this.time, benders), createFlowers(rng), ...createRocks(rng));
     this.motes = createMotes(rng);
     this.group.add(this.motes);
@@ -219,47 +220,14 @@ function createTerrain(): THREE.Mesh {
   return terrain;
 }
 
-/** The worn fighting ground in the middle of the meadow. */
-function createDirtPatch(): THREE.Mesh {
-  const size = 512;
-  const canvas = document.createElement('canvas');
-  canvas.width = canvas.height = size;
-  const ctx = canvas.getContext('2d') as CanvasRenderingContext2D;
-  const image = ctx.createImageData(size, size);
-  for (let y = 0; y < size; y += 1) {
-    for (let x = 0; x < size; x += 1) {
-      const u = x / size - 0.5;
-      const v = y / size - 0.5;
-      const edge = Math.hypot(u * 1.15, v) * 2 + (fbm(x * 0.02, y * 0.02) - 0.5) * 0.55;
-      const alpha = THREE.MathUtils.smoothstep(1, 0.72, edge);
-      const grain = fbm(x * 0.09, y * 0.09, 3);
-      const i = (y * size + x) * 4;
-      image.data[i] = 140 + grain * 50;
-      image.data[i + 1] = 108 + grain * 40;
-      image.data[i + 2] = 70 + grain * 26;
-      image.data[i + 3] = alpha * 235;
-    }
-  }
-  ctx.putImageData(image, 0, 0);
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.colorSpace = THREE.SRGBColorSpace;
-  const patch = new THREE.Mesh(
-    new THREE.PlaneGeometry(9.5, 7.5),
-    new THREE.MeshLambertMaterial({ map: texture, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 }),
-  );
-  patch.rotation.x = -Math.PI / 2;
-  patch.position.y = 0.02;
-  patch.receiveShadow = true;
-  return patch;
-}
-
 function createGrass(rng: () => number, time: { value: number }, benders: GrassBenders): THREE.InstancedMesh {
-  // One blade: a single tapered triangle, shaded at the root and sunlit at the tip. Its normals point
-  // up, so it lights exactly like the ground beneath and the blades blend into one carpet.
+  // One blade: a thin strip narrowing to a blunt tip, shaded at the root and sunlit at the tip. Its normals
+  // point up, so it lights exactly like the ground beneath and the blades blend into one carpet.
   const blade = new THREE.BufferGeometry();
-  blade.setAttribute('position', new THREE.Float32BufferAttribute([-0.024, 0, 0, 0.024, 0, 0, 0, 1, 0.1], 3));
-  blade.setAttribute('normal', new THREE.Float32BufferAttribute([0, 1, 0, 0, 1, 0, 0, 1, 0], 3));
-  blade.setAttribute('color', new THREE.Float32BufferAttribute([0.72, 0.76, 0.7, 0.72, 0.76, 0.7, 1.28, 1.26, 0.9], 3));
+  blade.setAttribute('position', new THREE.Float32BufferAttribute([-0.01, 0, 0, 0.01, 0, 0, -0.004, 1, 0.1, 0.004, 1, 0.1], 3));
+  blade.setAttribute('normal', new THREE.Float32BufferAttribute([0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0], 3));
+  blade.setAttribute('color', new THREE.Float32BufferAttribute([0.72, 0.76, 0.7, 0.72, 0.76, 0.7, 1.28, 1.26, 0.9, 1.28, 1.26, 0.9], 3));
+  blade.setIndex([0, 1, 2, 2, 1, 3]);
 
   const material = new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide });
   material.onBeforeCompile = (shader) => {
@@ -290,7 +258,7 @@ function createGrass(rng: () => number, time: { value: number }, benders: GrassB
     shader.fragmentShader = `#undef DOUBLE_SIDED\n${shader.fragmentShader}`;
   };
 
-  const count = 520000;
+  const count = 900000;
   const grass = new THREE.InstancedMesh(blade, material, count);
   const matrix = new THREE.Matrix4();
   const quaternion = new THREE.Quaternion();
@@ -305,8 +273,6 @@ function createGrass(rng: () => number, time: { value: number }, benders: GrassB
     if (rng() > 1 - THREE.MathUtils.smoothstep(r, 16, 30)) continue;
     const angle = rng() * Math.PI * 2;
     spot.set(Math.cos(angle) * r, 0, Math.sin(angle) * r);
-    const dirt = Math.hypot(spot.x / 4.6, spot.z / 3.6) + (fbm(spot.x * 0.3, spot.z * 0.3) - 0.5) * 0.6;
-    if (dirt < 1 && rng() > (dirt - 0.6) * 2.5) continue;
     spot.y = groundHeight(spot.x, spot.z);
     // A few centimetres, a little longer in soft patches.
     const height = 0.06 + fbm(spot.x * 0.25, spot.z * 0.25) * 0.07 + rng() * 0.03;
@@ -416,7 +382,7 @@ function createRocks(rng: () => number): THREE.Mesh[] {
     addOutline(rock, 0.03);
     rocks.push(rock);
   };
-  for (let i = 0; i < 10; i += 1) place(13.6 + rng() * 2.2, (i / 10) * Math.PI * 2 + rng() * 0.4, 0.55 + rng() * 0.6);
+  for (let i = 0; i < 10; i += 1) place(ARENA_RADIUS + 1.6 + rng() * 2.2, (i / 10) * Math.PI * 2 + rng() * 0.4, 0.55 + rng() * 0.6);
   for (let i = 0; i < 7; i += 1) place(20 + rng() * 14, rng() * Math.PI * 2, 1.2 + rng() * 1.4);
   return rocks;
 }
