@@ -49,5 +49,6 @@ Rough maths: a straight trade drains the player in about 12 s while dealing at m
 
 A meadow hilltop, about 24 m across, matching `assets/concepts/key-art.png`. It has golden late-afternoon light, cumulus clouds, layered mountain ranges and rolling hills. Short, dense grass carpets the meadow, drifts of small wildflowers dot it, and mossy boulders ring the circle, with a dirt patch in the centre where the fight happens.
 
-- **Camera:** third person, open-world style: it swings in behind wherever the player faces and shows what she sees, whether or not the NPC is in frame. Standing still, she keeps her last heading. Movement is camera-relative, read in the camera's frame from when the keys last changed, so a held direction runs straight while the camera turns.
+- **Camera:** third person, open-world style: locked behind the player, it turns exactly as she does and shows what she sees, whether or not the NPC is in frame.
+- **Movement:** A/D only turn her and W/S only walk her forward or back along her facing, so holding both walks an arc. Shift sprints forward only; pressed alone, it dashes forward.
 - **Bounds:** a 12 m circle. The boulders mark its edge.

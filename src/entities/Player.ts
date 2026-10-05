@@ -35,8 +35,8 @@ export class Player {
   private buffered: 'strike' | 'dodge' | null = null;
   private bufferTimer = 0;
   private readonly move = new THREE.Vector2();
-  private readonly held = new THREE.Vector2();
-  private readonly frame = new THREE.Vector3();
+  /** Turn input eased toward the held A/D, so turning (and the camera locked behind her) starts and stops softly. */
+  private turn = 0;
   private readonly wish = new THREE.Vector3();
   private readonly toNpc = new THREE.Vector3();
 
@@ -62,12 +62,12 @@ export class Player {
     this.character.place(0, 6, Math.PI);
     this.velocity.set(0, 0, 0);
     this.dodgeCooldown = 0;
+    this.turn = 0;
     this.buffered = null;
     this.toMove();
   }
 
-  /** `forward` is the camera's ground-plane forward, which input is relative to. */
-  update(delta: number, input: Input | null, forward: THREE.Vector3, npc: THREE.Vector3, events: FightEvent[]): void {
+  update(delta: number, input: Input | null, npc: THREE.Vector3, events: FightEvent[]): void {
     this.timer += delta;
     this.dodgeCooldown -= delta;
     this.bufferTimer -= delta;
@@ -80,12 +80,6 @@ export class Player {
     } else {
       this.move.set(0, 0);
     }
-    // Input reads in the camera frame from when the keys last changed, so a held direction runs straight
-    // while the camera swings in behind her. Right = forward × up.
-    if (!this.move.equals(this.held)) this.frame.copy(forward);
-    this.held.copy(this.move);
-    const { x, z } = this.frame;
-    this.wish.set(x * this.move.y - z * this.move.x, 0, z * this.move.y + x * this.move.x);
     this.toNpc.subVectors(npc, this.position).setY(0);
 
     if (this.bufferTimer <= 0) this.buffered = null;
@@ -95,14 +89,19 @@ export class Player {
 
     switch (this.state) {
       case 'move': {
-        this.velocity.lerp(this.wish.multiplyScalar(input?.sprinting ? tuning.playerSprintSpeed : tuning.playerWalkSpeed), 1 - Math.exp(-14 * delta));
-        // Face where the body is actually going; standing, keep facing that way.
-        if (this.character.moving) turnToward(this.character.root, yawTo(this.character.velocity), 12, delta);
+        // A/D only turn her and W/S only walk her along her facing, so held together she walks an arc.
+        // Shift hurries her forward only.
+        this.turn += (this.move.x - this.turn) * (1 - Math.exp(-12 * delta));
+        this.character.root.rotation.y -= this.turn * tuning.playerTurnRate * delta;
+        const speed = this.move.y < 0 ? tuning.playerBackSpeed : input?.sprinting ? tuning.playerSprintSpeed : tuning.playerWalkSpeed;
+        this.wish.set(Math.sin(this.yaw), 0, Math.cos(this.yaw)).multiplyScalar(this.move.y * speed);
+        this.velocity.lerp(this.wish, 1 - Math.exp(-14 * delta));
         break;
       }
       case 'strike': {
         this.velocity.multiplyScalar(Math.exp(-12 * delta));
-        // Close the last half-metre so strikes connect instead of whiffing at max range.
+        // Through the wind-up, square up to him and close the last half-metre, so strikes connect instead of whiffing.
+        if (this.contactAt > 0 && this.toNpc.lengthSq() < 36) turnToward(this.character.root, yawTo(this.toNpc), 10, delta);
         const gap = this.toNpc.length() - 1.45;
         if (this.timer < this.contactAt && gap > 0 && gap < 1.2) this.position.addScaledVector(this.toNpc.normalize(), Math.min(gap, 3 * delta));
         if (this.contactAt > 0 && this.timer >= this.contactAt) {
@@ -164,7 +163,6 @@ export class Player {
     this.contactAt = (strike.contact - strike.from) / strike.speed;
     this.cancelAt = this.contactAt + 0.08;
     this.endAt = (strike.to - strike.from) / strike.speed;
-    if (this.toNpc.lengthSq() < 36) this.character.root.rotation.y = yawTo(this.toNpc);
     this.character.play(strike.clip, { loop: false, from: strike.from, speed: strike.speed, fade: 0.06 });
     events.push({ type: 'swing', who: 'player', heavy: false });
   }
@@ -174,9 +172,7 @@ export class Player {
     this.state = 'dodge';
     this.timer = 0;
     this.dodgeCooldown = DODGE_COOLDOWN;
-    const direction = this.wish.lengthSq() > 0.01 ? this.wish.clone() : new THREE.Vector3(Math.sin(this.yaw), 0, Math.cos(this.yaw));
-    this.velocity.copy(direction.setY(0).normalize()).multiplyScalar(DODGE_SPEED);
-    this.character.root.rotation.y = yawTo(direction);
+    this.velocity.set(Math.sin(this.yaw), 0, Math.cos(this.yaw)).multiplyScalar(DODGE_SPEED);
     this.character.locomote('idle');
     events.push({ type: 'dodge', at: this.position.clone() });
   }

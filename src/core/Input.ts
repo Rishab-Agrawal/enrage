@@ -7,7 +7,7 @@ export class Input {
 
   private readonly onKeyDown = (event: KeyboardEvent) => {
     if (event.repeat) return;
-    // Shift sprints toward the held direction; with none held, it dashes where the body faces.
+    // Shift sprints forward; with no movement key held, it dashes where the body faces.
     if (event.key === 'Shift' && this.movement(new THREE.Vector2()).lengthSq() === 0) this.pressed.add('dodge');
     this.keys.add(event.code);
     if (event.code === 'KeyR') this.pressed.add('rematch');
@@ -29,11 +29,10 @@ export class Input {
     surface.addEventListener('contextmenu', this.onContextMenu);
   }
 
-  /** WASD/arrows as x (right) and y (forward), length ≤ 1. */
+  /** WASD/arrows as x (turn right) and y (forward), each -1, 0 or 1. */
   movement(target: THREE.Vector2): THREE.Vector2 {
     const held = (a: string, b: string) => (this.keys.has(a) || this.keys.has(b) ? 1 : 0);
-    target.set(held('KeyD', 'ArrowRight') - held('KeyA', 'ArrowLeft'), held('KeyW', 'ArrowUp') - held('KeyS', 'ArrowDown'));
-    return target.lengthSq() > 1 ? target.normalize() : target;
+    return target.set(held('KeyD', 'ArrowRight') - held('KeyA', 'ArrowLeft'), held('KeyW', 'ArrowUp') - held('KeyS', 'ArrowDown'));
   }
 
   get sprinting(): boolean {

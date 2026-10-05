@@ -5,7 +5,6 @@ import { Loop } from '../core/Loop';
 import { createRenderer, resizeRenderer } from '../core/Renderer';
 import { Npc } from '../entities/Npc';
 import { Player } from '../entities/Player';
-import { yawTo } from '../entities/steering';
 import { Audio } from '../systems/Audio';
 import { CameraRig } from '../systems/CameraRig';
 import { DebugPanel } from '../systems/DebugPanel';
@@ -129,7 +128,7 @@ export class Game {
     this.hitstop -= delta;
     const fightDelta = this.hitstop > 0 ? delta * 0.06 : delta;
     const live = !this.outcome;
-    this.player.update(fightDelta, live ? this.input : null, this.cameraRig.forward, this.npc.position, this.events);
+    this.player.update(fightDelta, live ? this.input : null, this.npc.position, this.events);
     if (live) this.npc.update(fightDelta, this.player.position, this.events);
     this.resolve(live);
     // Animate once bodies are where they end up this frame: locomotion shows the actual displacement.
@@ -309,6 +308,7 @@ export class Game {
       outcome: this.outcome,
       player: {
         position: { x: this.player.position.x, y: this.player.position.y, z: this.player.position.z },
+        yaw: this.player.yaw,
         speed: this.player.character.velocity.length(),
         stride: this.player.character.stride,
         health: this.player.health,
@@ -321,7 +321,6 @@ export class Game {
         mood: this.npc.mood,
         state: this.npc.state,
       },
-      camera: { yaw: yawTo(this.cameraRig.forward) },
       renderer: {
         calls: info.render.calls,
         triangles: info.render.triangles,

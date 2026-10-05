@@ -26,6 +26,8 @@ export class Character {
   private readonly actions = new Map<string, THREE.AnimationAction>();
   /** Gait clip -> the ground speed it depicts at rate 1, m/s, slowest first. */
   private readonly gaits: Map<string, number>;
+  /** The same for gaits that walk backwards, which the bake records as negative speeds. */
+  private readonly backGaits: Map<string, number>;
   /** Set while locomoting: the clip for standing still. */
   private idle: string | null = null;
   /** Blend weight each clip eases toward; clips not listed fade out. */
@@ -53,7 +55,9 @@ export class Character {
       const groundSpeed = clip.userData.groundSpeed as number | undefined;
       if (groundSpeed) gaits.push([clip.name, groundSpeed * model.scale.x]);
     }
-    this.gaits = new Map(gaits.sort((a, b) => a[1] - b[1]));
+    gaits.sort((a, b) => Math.abs(a[1]) - Math.abs(b[1]));
+    this.gaits = new Map(gaits.filter(([, s]) => s > 0));
+    this.backGaits = new Map(gaits.filter(([, s]) => s < 0).map(([name, s]) => [name, -s]));
   }
 
   /** Teleport: moves the body without that counting as motion. */
@@ -72,7 +76,7 @@ export class Character {
   get stride(): number | null {
     if (!this.idle) return null;
     let stride = 0;
-    for (const [name, groundSpeed] of this.gaits) {
+    for (const [name, groundSpeed] of [...this.gaits, ...this.backGaits]) {
       const action = this.action(name);
       stride += action.weight * action.timeScale * groundSpeed;
     }
@@ -111,13 +115,17 @@ export class Character {
 
   /**
    * Below the slowest gait, blend it with standing at its own cadence, so stopping settles rather than
-   * freezing mid-stride; above, the gait nearest the speed, played at it.
+   * freezing mid-stride; above, the gait nearest the speed, played at it. Moving against the facing
+   * shows the backward gaits, if the clip set has any.
    */
   private animateGait(): void {
     const speed = this.velocity.length();
-    const [[slowest, slowestSpeed]] = this.gaits;
+    const yaw = this.root.rotation.y;
+    const backing = this.backGaits.size > 0 && this.velocity.x * Math.sin(yaw) + this.velocity.z * Math.cos(yaw) < 0;
+    const gaits = backing ? this.backGaits : this.gaits;
+    const [[slowest, slowestSpeed]] = gaits;
     let [gait, groundSpeed] = [slowest, slowestSpeed];
-    for (const [name, s] of this.gaits) if (Math.abs(Math.log(speed / s)) < Math.abs(Math.log(speed / groundSpeed))) [gait, groundSpeed] = [name, s];
+    for (const [name, s] of gaits) if (Math.abs(Math.log(speed / s)) < Math.abs(Math.log(speed / groundSpeed))) [gait, groundSpeed] = [name, s];
     const weight = Math.min(1, speed / slowestSpeed);
     const action = this.action(gait);
     action.timeScale = Math.max(speed, slowestSpeed) / groundSpeed;

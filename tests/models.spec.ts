@@ -14,13 +14,16 @@ function jerk(v: ArrayLike<number>, size: number, before: number, i: number, aft
   return Math.sqrt(sum);
 }
 
-// Gaits are drawn at the body's measured speed, so each must loop in place, without a hitch, and record the speed it depicts.
-for (const model of ['player', 'npc']) {
+// Gaits are drawn at the body's measured speed, so each must loop in place, without a hitch, and record the speed it
+// depicts: negative for walking backwards.
+const GAITS = { player: ['run', 'walk', 'walkBack'], npc: ['run', 'walk'] };
+for (const [model, gaits] of Object.entries(GAITS)) {
   test(`${model} gaits loop in place`, async () => {
     const doc = await new NodeIO().read(`public/models/${model}.glb`);
-    for (const name of ['run', 'walk']) {
+    for (const name of gaits) {
       const animation = doc.getRoot().listAnimations().find((a) => a.getName() === name)!;
-      expect(animation.getExtras().groundSpeed, `${model}/${name} ground speed`).toBeGreaterThan(0);
+      const groundSpeed = animation.getExtras().groundSpeed as number;
+      expect(Math.sign(groundSpeed), `${model}/${name} ground speed`).toBe(name === 'walkBack' ? -1 : 1);
       for (const channel of animation.listChannels()) {
         const bone = `${model}/${name} ${channel.getTargetNode()!.getName()} ${channel.getTargetPath()}`;
         const output = channel.getSampler()!.getOutput()!;

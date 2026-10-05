@@ -257,9 +257,9 @@ function createGrass(rng: () => number, time: { value: number }, benders: GrassB
   // One blade: a single tapered triangle, shaded at the root and sunlit at the tip. Its normals point
   // up, so it lights exactly like the ground beneath and the blades blend into one carpet.
   const blade = new THREE.BufferGeometry();
-  blade.setAttribute('position', new THREE.Float32BufferAttribute([-0.035, 0, 0, 0.035, 0, 0, 0, 1, 0.12], 3));
+  blade.setAttribute('position', new THREE.Float32BufferAttribute([-0.024, 0, 0, 0.024, 0, 0, 0, 1, 0.1], 3));
   blade.setAttribute('normal', new THREE.Float32BufferAttribute([0, 1, 0, 0, 1, 0, 0, 1, 0], 3));
-  blade.setAttribute('color', new THREE.Float32BufferAttribute([0.6, 0.66, 0.6, 0.6, 0.66, 0.6, 1.36, 1.32, 0.86], 3));
+  blade.setAttribute('color', new THREE.Float32BufferAttribute([0.72, 0.76, 0.7, 0.72, 0.76, 0.7, 1.28, 1.26, 0.9], 3));
 
   const material = new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide });
   material.onBeforeCompile = (shader) => {
@@ -290,7 +290,7 @@ function createGrass(rng: () => number, time: { value: number }, benders: GrassB
     shader.fragmentShader = `#undef DOUBLE_SIDED\n${shader.fragmentShader}`;
   };
 
-  const count = 300000;
+  const count = 520000;
   const grass = new THREE.InstancedMesh(blade, material, count);
   const matrix = new THREE.Matrix4();
   const quaternion = new THREE.Quaternion();
@@ -301,15 +301,15 @@ function createGrass(rng: () => number, time: { value: number }, benders: GrassB
   let placed = 0;
   while (placed < count) {
     // A dense carpet across the playable meadow, thinning out where the camera never reaches.
-    const r = Math.sqrt(rng()) * 36;
-    if (rng() > 1 - THREE.MathUtils.smoothstep(r, 18, 36)) continue;
+    const r = Math.sqrt(rng()) * 30;
+    if (rng() > 1 - THREE.MathUtils.smoothstep(r, 16, 30)) continue;
     const angle = rng() * Math.PI * 2;
     spot.set(Math.cos(angle) * r, 0, Math.sin(angle) * r);
     const dirt = Math.hypot(spot.x / 4.6, spot.z / 3.6) + (fbm(spot.x * 0.3, spot.z * 0.3) - 0.5) * 0.6;
     if (dirt < 1 && rng() > (dirt - 0.6) * 2.5) continue;
     spot.y = groundHeight(spot.x, spot.z);
-    // Ankle-high, a little longer in soft patches.
-    const height = 0.1 + fbm(spot.x * 0.25, spot.z * 0.25) * 0.14 + rng() * 0.06;
+    // A few centimetres, a little longer in soft patches.
+    const height = 0.06 + fbm(spot.x * 0.25, spot.z * 0.25) * 0.07 + rng() * 0.03;
     euler.set((rng() - 0.5) * 0.7, rng() * Math.PI * 2, (rng() - 0.5) * 0.7);
     quaternion.setFromEuler(euler);
     scale.set(0.7 + rng() * 0.6, height, 1);
@@ -364,7 +364,7 @@ function createFlowers(rng: () => number): THREE.Points {
     const z = Math.sin(angle) * r;
     // Drifts: flowers gather where the noise rises, each drift mostly one kind.
     if (rng() > THREE.MathUtils.smoothstep(fbm(x * 0.09 + 31, z * 0.09), 0.5, 0.7)) continue;
-    positions.set([x, groundHeight(x, z) + 0.16 + rng() * 0.12, z], placed * 3);
+    positions.set([x, groundHeight(x, z) + 0.08 + rng() * 0.07, z], placed * 3);
     palette[Math.floor(fbm(x * 0.05 - 17, z * 0.05) * 2 * palette.length + rng() * 1.5) % palette.length].toArray(colors, placed * 3);
     placed += 1;
   }

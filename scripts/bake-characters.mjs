@@ -17,7 +17,7 @@ const ARTIFACTS = 'artifacts';
 // clips transfer between them (Gorran's haymaker is Wren's cross; both collapse the same way).
 const CHARACTERS = {
   player: {
-    idle: 'tripo/player-anim/idle', walk: 'mixamo/walk', run: 'tripo/player-anim/run', jab: 'tripo/player-anim/box_01', cross: 'tripo/player-anim/box_02',
+    idle: 'tripo/player-anim/idle', walk: 'mixamo/walk', walkBack: 'mixamo/walk-back', run: 'tripo/player-anim/run', jab: 'tripo/player-anim/box_01', cross: 'tripo/player-anim/box_02',
     hurt: 'tripo/player-anim/hit_to_body_01', defeat: 'tripo/npc-anim/defeat_03',
   },
   npc: {
@@ -28,7 +28,7 @@ const CHARACTERS = {
 // Seconds to keep: the defeat take stands back up at the end.
 const TRIM = { 'player/defeat': 4.6, 'npc/defeat': 4.6 };
 // Locomotion plays in place: the game moves the body, and the clip records the ground speed it depicts.
-const IN_PLACE = new Set(['run', 'walk']);
+const IN_PLACE = new Set(['run', 'walk', 'walkBack']);
 // Seconds either side of a gait's loop seam over which its velocity jump is eased out.
 const SEAM_EASE = 0.2;
 const PATHS = { position: 'translation', quaternion: 'rotation', scale: 'scale' };
@@ -190,7 +190,8 @@ function inPlace(clip) {
     for (let i = k; i < hip.values.length; i += 3) mean += hip.values[i] / hip.times.length;
     for (let i = k; i < hip.values.length; i += 3) hip.values[i] -= mean;
   }
-  return Math.hypot(travel[0], travel[1]) / period;
+  // The body faces -Y in Root space: a backward gait records a negative ground speed.
+  return (Math.sign(-travel[1]) * Math.hypot(travel[0], travel[1])) / period;
 }
 
 const io = new NodeIO();

@@ -19,25 +19,26 @@ async function start(page: Page): Promise<string[]> {
   return errors;
 }
 
-/** Keys held to run toward each eighth of the compass around the camera heading, from behind round to the right. */
-const SECTORS = [['KeyS'], ['KeyS', 'KeyD'], ['KeyD'], ['KeyW', 'KeyD'], ['KeyW'], ['KeyW', 'KeyA'], ['KeyA'], ['KeyS', 'KeyA'], ['KeyS']];
+/** Signed shortest turn from yaw `a` to yaw `b`. */
+const turn = (a: number, b: number) => Math.atan2(Math.sin(b - a), Math.cos(b - a));
 
-/** Sprint toward him, steering by where he is on screen, and swing whenever he is in reach, for up to `seconds` or until `stop` holds. */
+/** Sprint at him, turning toward him with A/D, and swing whenever he is in reach, for up to `seconds` or until `stop` holds. */
 async function brawl(page: Page, seconds: number, stop: (d: Diagnostics) => boolean): Promise<Diagnostics> {
   const box = (await page.locator('#game-canvas').boundingBox())!;
   await page.mouse.move(box.width / 2, box.height / 2);
-  let held: string[] = [];
+  let turning: string | null = null;
   const steer = async (d: Diagnostics) => {
-    const bearing = Math.atan2(d.npc.position.x - d.player.position.x, d.npc.position.z - d.player.position.z) - d.camera.yaw;
-    const keys = SECTORS[Math.round(Math.atan2(Math.sin(bearing), Math.cos(bearing)) / (Math.PI / 4)) + 4];
-    for (const key of held) if (!keys.includes(key)) await page.keyboard.up(key);
-    for (const key of keys) if (!held.includes(key)) await page.keyboard.down(key);
-    held = keys;
+    const bearing = turn(d.player.yaw, Math.atan2(d.npc.position.x - d.player.position.x, d.npc.position.z - d.player.position.z));
+    const key = bearing > 0.15 ? 'KeyA' : bearing < -0.15 ? 'KeyD' : null; // A turns left, raising yaw
+    if (key === turning) return;
+    if (turning) await page.keyboard.up(turning);
+    if (key) await page.keyboard.down(key);
+    turning = key;
   };
-  let d = await read(page);
-  await steer(d); // a direction before Shift, or Shift dashes
+  await page.keyboard.down('KeyW'); // before Shift, or Shift dashes
   await page.keyboard.down('ShiftLeft');
   const end = Date.now() + seconds * 1000;
+  let d = await read(page);
   while (Date.now() < end && !d.outcome && !stop(d)) {
     await steer(d);
     if (distance(d) < 2.2) {
@@ -48,13 +49,14 @@ async function brawl(page: Page, seconds: number, stop: (d: Diagnostics) => bool
     d = await read(page);
   }
   await page.keyboard.up('ShiftLeft');
-  for (const key of held) await page.keyboard.up(key);
+  await page.keyboard.up('KeyW');
+  if (turning) await page.keyboard.up(turning);
   return d;
 }
 
-test('WASD walks, Shift sprints, and Shift alone dashes', async ({ page }) => {
+test('W walks, Shift sprints, S backs up, A/D only turn, and Shift alone dashes', async ({ page }) => {
   const errors = await start(page);
-  /** Metres the player covers while `keys` are held, pressed in order, for `ms`. */
+  /** Metres moved and radians turned while `keys` are held, pressed in order, for `ms`. */
   const travel = async (keys: string[], ms: number) => {
     const before = await read(page);
     for (const key of keys) await page.keyboard.down(key);
@@ -62,13 +64,22 @@ test('WASD walks, Shift sprints, and Shift alone dashes', async ({ page }) => {
     for (const key of keys) await page.keyboard.up(key);
     await page.waitForTimeout(400);
     const after = await read(page);
-    return Math.hypot(after.player.position.x - before.player.position.x, after.player.position.z - before.player.position.z);
+    const moved = Math.hypot(after.player.position.x - before.player.position.x, after.player.position.z - before.player.position.z);
+    return { moved, turned: turn(before.player.yaw, after.player.yaw) };
   };
-  const walked = await travel(['KeyD'], 600);
-  const sprinted = await travel(['KeyA', 'ShiftLeft'], 600);
-  expect(walked).toBeGreaterThan(0.5);
-  expect(sprinted).toBeGreaterThan(2 * walked);
-  expect(await travel(['ShiftLeft'], 100)).toBeGreaterThan(1.5);
+  const walked = await travel(['KeyW'], 600);
+  const sprinted = await travel(['KeyW', 'ShiftLeft'], 600);
+  const backed = await travel(['KeyS', 'ShiftLeft'], 600);
+  const turned = await travel(['KeyD'], 600);
+  expect(walked.moved).toBeGreaterThan(0.5);
+  expect(sprinted.moved).toBeGreaterThan(2 * walked.moved);
+  // Shift doesn't hurry her backwards, and walking either way keeps her facing.
+  expect(backed.moved).toBeGreaterThan(0.4);
+  expect(backed.moved).toBeLessThan(walked.moved);
+  for (const { turned } of [walked, sprinted, backed]) expect(Math.abs(turned)).toBeLessThan(1e-6);
+  expect(turned.moved).toBeLessThan(0.01);
+  expect(turned.turned).toBeLessThan(-0.5); // D turns her right: clockwise from above
+  expect((await travel(['ShiftLeft'], 100)).moved).toBeGreaterThan(1.5);
   expect(errors).toEqual([]);
 });
 
@@ -104,9 +115,10 @@ test('legs settle on the speed the body actually moves at', async ({ page }) => 
   const route: [string[], number][] = [
     [['ShiftLeft'], 1000], // dash where the body faces
     [['KeyW', 'ShiftLeft'], 2500], // sprint into his personal space
-    [['KeyS', 'ShiftLeft'], 3500], // back into the arena edge
-    [['KeyD'], 3000], // walk along the edge
-    [['KeyD', 'ShiftLeft'], 2000], // sprint along it
+    [['KeyS', 'ShiftLeft'], 3000], // back away; Shift doesn't hurry it
+    [['KeyD'], 800], // turn on the spot
+    [['KeyW', 'KeyD'], 3000], // walk an arc
+    [['KeyW', 'KeyD', 'ShiftLeft'], 2000], // sprint an arc
   ];
   for (const [keys, ms] of route) {
     for (const key of keys) await page.keyboard.down(key);
