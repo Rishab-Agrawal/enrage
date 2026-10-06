@@ -68,7 +68,7 @@ type Pivot = { step: number; t: number; from: number; about: THREE.Vector3; leg:
 /**
  * A Tripo-baked GLB as a cel-shaded, animated fighter with a rim-light and hit-flash channel.
  * Locomotion is drawn from the root's measured displacement, never from intent, so the legs
- * always show what the body actually did, whatever moved it.
+ * always show what the body actually did, whatever moved it; only whether they walk or run is the owner's call.
  */
 export class Character {
   readonly root = new THREE.Group();
@@ -78,6 +78,8 @@ export class Character {
   readonly velocity = new THREE.Vector3();
   /** Yaw the body looks toward: the head turns to it, the hips follow. */
   aim = 0;
+  /** Whether locomotion shows each heading's fastest gait, a run, over its slowest, a walk, at whatever speed the body moves. */
+  running = false;
   /** Twist of the upper body over the hips, rad, positive left: where it looks ahead of where it faces. */
   private twist = 0;
   /** One knee raised and opened outward, as in a quick step: positive the left, negative the right, up to 1 at full height. */
@@ -324,8 +326,8 @@ export class Character {
   }
 
   /**
-   * A directional blend: the two headings either side of the body's, mixed by how near each is, and of each the gait
-   * nearest the speed. All gaits play at one phase, at the cadence that shows the speed. Below the slowest gaits,
+   * A directional blend: the two headings either side of the body's, mixed by how near each is, and of each its run or
+   * its walk. All gaits play at one phase, at the cadence that shows the speed. Below the slowest gaits,
    * they blend with standing at their own cadence, so stopping settles rather than freezing mid-stride.
    */
   private animateGait(delta: number): void {
@@ -333,8 +335,7 @@ export class Character {
     let [slowest, cycle] = [0, 0];
     const targets = new Map<THREE.AnimationAction, number>();
     for (const [gaits, share] of this.bracket(angleTo(this.root.rotation.y, yawTo(this.velocity)))) {
-      let gait = gaits[0];
-      for (const g of gaits) if (Math.abs(Math.log(speed / g.speed)) < Math.abs(Math.log(speed / gait.speed))) gait = g;
+      const gait = this.running ? gaits.at(-1)! : gaits[0];
       slowest += share * gaits[0].speed;
       cycle += share * gait.cycle;
       targets.set(gait.action, share);

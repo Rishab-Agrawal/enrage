@@ -88,7 +88,8 @@ export class Player {
     if (input) {
       if (input.consume('strike')) this.buffer('strike');
       if (input.consume('dodge')) this.buffer('dodge');
-      input.movement(this.move).normalize();
+      input.movement(this.move);
+      if (this.move.y < 0) this.move.x = 0; // no gait walks back on a diagonal: S overrides A/D
     } else {
       this.move.set(0, 0);
     }
@@ -115,12 +116,14 @@ export class Player {
       const gap = this.toNpc.length() - 1.45;
       if (this.timer < this.contactAt && gap > 0 && gap < 1.2) this.position.addScaledVector(this.toNpc.normalize(), Math.min(gap, 3 * delta));
     } else {
-      // The mouse turns her; W/S walk her along her facing and A/D step her sideways, never faster on a diagonal.
-      // Shift hurries her forward only.
+      // The mouse turns her; W/S walk her along her facing and A/D step her sideways, on a diagonal no faster than
+      // straight. Shift runs her forward only, so A/D then only steer her run a little.
       this.character.aim -= look * tuning.mouseTurn;
-      const speed = this.move.y < 0 ? tuning.playerBackSpeed : input?.sprinting ? tuning.playerSprintSpeed : tuning.playerWalkSpeed;
+      this.character.running = this.move.y > 0 && !!input?.sprinting;
+      const speed = this.move.y < 0 ? tuning.playerBackSpeed : this.character.running ? tuning.playerSprintSpeed : tuning.playerWalkSpeed;
       const [sin, cos] = [Math.sin(this.yaw), Math.cos(this.yaw)];
       this.wish.set(sin, 0, cos).multiplyScalar(this.move.y * speed).add(this.side.set(-cos, 0, sin).multiplyScalar(this.move.x * tuning.playerStrafeSpeed));
+      this.wish.clampLength(0, Math.max(speed, tuning.playerStrafeSpeed));
       this.velocity.lerp(this.wish, 1 - Math.exp(-14 * delta));
     }
     this.knock.multiplyScalar(Math.exp(-6 * delta));

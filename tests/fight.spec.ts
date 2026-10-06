@@ -75,6 +75,10 @@ async function brawl(page: Page, seconds: number, stop: (d: Diagnostics) => bool
 
 test('W walks, Shift sprints, S backs up, A/D step sideways, diagonals are no faster, and Shift alone dashes', async ({ page }) => {
   const errors = await start(page);
+  // Face across the arena, clear of him and its edge.
+  await capture(page);
+  await look(page, Math.PI / 2);
+  await page.waitForTimeout(1000);
   /** Metres moved, which way off her facing (positive left), and radians turned while `keys` are held, pressed in order, for `ms`. */
   const travel = async (keys: string[], ms: number) => {
     const before = await read(page);
@@ -92,19 +96,26 @@ test('W walks, Shift sprints, S backs up, A/D step sideways, diagonals are no fa
   const right = await travel(['KeyD'], 600);
   const left = await travel(['KeyA'], 600);
   const diagonal = await travel(['KeyW', 'KeyD'], 600);
+  const sprintDiagonal = await travel(['KeyW', 'KeyD', 'ShiftLeft'], 600);
+  const backDiagonal = await travel(['KeyS', 'KeyD'], 600);
   expect(walked.moved).toBeGreaterThan(0.5);
   expect(sprinted.moved).toBeGreaterThan(2 * walked.moved);
   // Shift doesn't hurry her backwards.
   expect(backed.moved).toBeLessThan(walked.moved);
-  for (const [{ moved, heading }, expected] of [[walked, 0], [backed, Math.PI], [right, -Math.PI / 2], [left, Math.PI / 2]] as const) {
+  // S overrides A/D.
+  for (const [{ moved, heading }, expected] of [[walked, 0], [backed, Math.PI], [backDiagonal, Math.PI], [right, -Math.PI / 2], [left, Math.PI / 2]] as const) {
     expect(moved).toBeGreaterThan(0.4);
     expect(Math.abs(turn(heading, expected))).toBeLessThan(0.1);
   }
   expect(diagonal.heading).toBeGreaterThan(-Math.PI / 2 + 0.3); // forward and right
   expect(diagonal.heading).toBeLessThan(-0.3);
   expect(diagonal.moved).toBeLessThan(1.05 * Math.max(walked.moved, right.moved));
+  // Sprinting, D steers her run a little, at full speed.
+  expect(sprintDiagonal.heading).toBeGreaterThan(-Math.PI / 4);
+  expect(sprintDiagonal.heading).toBeLessThan(-0.1);
+  expect(sprintDiagonal.moved).toBeGreaterThan(0.95 * sprinted.moved);
   // No key turns her.
-  for (const { turned } of [walked, sprinted, backed, right, left, diagonal]) expect(Math.abs(turned)).toBeLessThan(1e-6);
+  for (const { turned } of [walked, sprinted, backed, right, left, diagonal, sprintDiagonal, backDiagonal]) expect(Math.abs(turned)).toBeLessThan(1e-6);
   expect((await travel(['ShiftLeft'], 100)).moved).toBeGreaterThan(1.5);
   expect(errors).toEqual([]);
 });
@@ -183,7 +194,7 @@ test('legs settle on the speed the body actually moves at', async ({ page }) => 
     [['KeyD'], 1500], // step right
     [['KeyA'], 1500], // step left
     [['KeyW', 'KeyD'], 3000], // walk a diagonal
-    [['KeyS', 'KeyA'], 2000], // back away on a diagonal
+    [['KeyS', 'KeyA'], 2000], // back away: S overrides A
     [['KeyW', 'KeyA', 'ShiftLeft'], 2000], // sprint a diagonal
   ];
   for (const [keys, ms] of route) {

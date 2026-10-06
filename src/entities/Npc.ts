@@ -171,6 +171,7 @@ export class Npc {
     const play = this.character.play.bind(this.character);
     if (state === 'calm') this.character.locomote('calm');
     if (state === 'chase' || state === 'recover') this.character.locomote('idle');
+    this.character.running = state === 'chase';
     if (state === 'shove') {
       this.contactAt = 1; // pending: it lands when she reaches his palms
       this.endAt = 0;
