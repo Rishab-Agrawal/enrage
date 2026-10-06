@@ -2,15 +2,21 @@ import * as THREE from 'three';
 import type { GLTF } from 'three/addons/loaders/GLTFLoader.js';
 import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
 import { addOutline, toonGradient } from '../world/toon';
-import { angleTo } from './steering';
+import { angleTo, yawTo } from './steering';
 
 type PlayOptions = { loop?: boolean; fade?: number; speed?: number; from?: number };
+/**
+ * A looping in-place clip: the ground speed it depicts at rate 1, m/s, the metres a cycle covers, and where in the
+ * cycle, 0 to 1, the left foot strikes. Gaits played at one phase from their strikes step together.
+ */
+type Gait = { action: THREE.AnimationAction; speed: number; cycle: number; strike: number };
 
 /** Ground speed, m/s, below which a body is standing. */
 const STANDING = 0.3;
 /** Seconds for locomotion blends to settle. */
 const GAIT_FADE = 0.2;
 const UP = new THREE.Vector3(0, 1, 0);
+const OCTANT = Math.PI / 4;
 /** Bones that share a twist, hips to head: the legs stay put. */
 const SPINE = ['Waist', 'Spine01', 'Spine02', 'NeckTwist01', 'Head'];
 /** How far a fully raised knee swings the thigh forward, bends the knee and opens outward, rad. */
@@ -19,8 +25,12 @@ const KNEE_BEND = 0.5;
 const KNEE_OPEN = 0.13;
 /** Standing, the upper body twists toward the aim up to this, rad, before the hips pivot round to catch up. */
 const MAX_TWIST = 0.8;
-/** Once the aim comes to rest, below AIM_REST rad/s, a twist past SETTLE, rad, settles with a pivot too. */
+/**
+ * Once the aim comes to rest, below AIM_REST rad/s for REST_TIME s, a twist past SETTLE, rad, settles with a pivot too.
+ * Mouse input misses frames mid-turn, so one still frame is no rest.
+ */
 const AIM_REST = 0.06;
+const REST_TIME = 0.15;
 const SETTLE = 0.2;
 /**
  * A pivot's steps: the outer foot steps round as the hips turn on the ball of the inner, then the inner follows in a
@@ -74,6 +84,8 @@ export class Character {
   private knee = 0;
   private pivoting: Pivot | null = null;
   private lastAim = 0;
+  /** Seconds the aim has been at rest. */
+  private still = 0;
   private readonly spine: THREE.Object3D[];
   /** Thigh, calf and ball of the foot, left leg then right. */
   private readonly legs: THREE.Object3D[][];
@@ -83,10 +95,10 @@ export class Character {
   private readonly pivot = new THREE.Vector3();
   private readonly mixer: THREE.AnimationMixer;
   private readonly actions = new Map<string, THREE.AnimationAction>();
-  /** Gait clip -> the ground speed it depicts at rate 1, m/s, slowest first. */
-  private readonly gaits: Map<string, number>;
-  /** The same for gaits that walk backwards, which the bake records as negative speeds. */
-  private readonly backGaits: Map<string, number>;
+  /** Gaits by the heading they travel off the facing, rad, positive left, to the nearest eighth turn; slowest first. */
+  private readonly gaits = new Map<number, Gait[]>();
+  /** The gaits' shared phase through a cycle, 0 to 1. */
+  private phase = 0;
   /** Set while locomoting: the clip for standing still. */
   private idle: string | null = null;
   /** Seconds standing settles in over until the body next moves: longer after an action, to ease back from it. */
@@ -122,7 +134,7 @@ export class Character {
     this.model = model;
 
     this.mixer = new THREE.AnimationMixer(model);
-    const gaits: [string, number][] = [];
+    const gaits: [number, Gait][] = [];
     for (const clip of gltf.animations) {
       const action = this.mixer.clipAction(clip).setEffectiveWeight(0);
       this.actions.set(clip.name, action);
@@ -132,12 +144,15 @@ export class Character {
         const ground = at(1).flatMap((x, i) => [x, at(2)[i]]);
         this.travels.set(action, new THREE.LinearInterpolant(at(0), ground, 2, new Float32Array(2)));
       }
-      const groundSpeed = clip.userData.groundSpeed as number | undefined;
-      if (groundSpeed) gaits.push([clip.name, groundSpeed * model.scale.x]);
+      const { groundVelocity: ground, strike } = clip.userData as { groundVelocity?: [number, number]; strike: number };
+      if (ground) {
+        const velocity = new THREE.Vector3(ground[0], 0, ground[1]).applyQuaternion(model.quaternion).multiplyScalar(model.scale.x);
+        const speed = velocity.length();
+        gaits.push([(Math.round(yawTo(velocity) / OCTANT) + 8) % 8, { action, speed, cycle: speed * clip.duration, strike: strike / clip.duration }]);
+      }
     }
-    gaits.sort((a, b) => Math.abs(a[1]) - Math.abs(b[1]));
-    this.gaits = new Map(gaits.filter(([, s]) => s > 0));
-    this.backGaits = new Map(gaits.filter(([, s]) => s < 0).map(([name, s]) => [name, -s]));
+    gaits.sort((a, b) => a[0] - b[0] || a[1].speed - b[1].speed);
+    for (const [octant, gait] of gaits) this.gaits.set(octant * OCTANT, [...(this.gaits.get(octant * OCTANT) ?? []), gait]);
     this.hip = model.getObjectByName('Hip')!;
     this.spine = SPINE.map((name) => model.getObjectByName(name)!);
     this.legs = ['L', 'R'].map((leg) => ['Thigh', 'Calf', 'ToeBase'].map((name) => model.getObjectByName(`${leg}_${name}`)!));
@@ -190,10 +205,7 @@ export class Character {
   get stride(): number | null {
     if (!this.idle) return null;
     let stride = 0;
-    for (const [name, groundSpeed] of [...this.gaits, ...this.backGaits]) {
-      const action = this.action(name);
-      stride += action.weight * action.timeScale * groundSpeed;
-    }
+    for (const { action, speed } of [...this.gaits.values()].flat()) stride += action.weight * action.timeScale * speed;
     return stride;
   }
 
@@ -227,7 +239,7 @@ export class Character {
     this.face(delta);
     if (delta > 0) this.velocity.subVectors(this.root.position, this.last).setY(0).divideScalar(delta);
     this.last.copy(this.root.position);
-    if (this.idle) this.animateGait();
+    if (this.idle) this.animateGait(delta);
     // Ease every weight toward its target as a critically damped spring, 95% there in `fade` s: a blend eases in as well
     // as out, so no change of pose starts with a jolt. Renormalise so the pose never mixes in the bind pose.
     const stiffness = 4.74 / this.fade;
@@ -280,6 +292,7 @@ export class Character {
   private face(delta: number): void {
     const facing = this.root.rotation.y;
     const lag = angleTo(facing, this.aim);
+    this.still = Math.abs(angleTo(this.lastAim, this.aim)) < AIM_REST * delta ? this.still + delta : 0;
     if (!this.idle) {
       this.aim += angleTo(this.aim, facing) * (1 - Math.exp(-10 * delta));
       this.pivoting = null;
@@ -293,7 +306,7 @@ export class Character {
       this.pivoting.t = t;
       this.turn(angleTo(facing, from + share * angleTo(from, this.aim) * THREE.MathUtils.smootherstep(t, 0, 1)), about);
       if (t === 1) this.pivoting = STEPS[step + 1] ? this.stepOff(step + 1, -leg, size) : null;
-    } else if (Math.abs(lag) > MAX_TWIST || (Math.abs(angleTo(this.lastAim, this.aim)) < AIM_REST * delta && Math.abs(lag) > SETTLE)) {
+    } else if (Math.abs(lag) > MAX_TWIST || (this.still > REST_TIME && Math.abs(lag) > SETTLE)) {
       // Step out first with the leg on the turning side; the further it has to turn, the larger the steps.
       this.pivoting = this.stepOff(0, Math.sign(lag), Math.min(1, Math.abs(lag) / MAX_TWIST));
     }
@@ -311,23 +324,45 @@ export class Character {
   }
 
   /**
-   * Below the slowest gait, blend it with standing at its own cadence, so stopping settles rather than
-   * freezing mid-stride; above, the gait nearest the speed, played at it. Moving against the facing
-   * shows the backward gaits, if the clip set has any.
+   * A directional blend: the two headings either side of the body's, mixed by how near each is, and of each the gait
+   * nearest the speed. All gaits play at one phase, at the cadence that shows the speed. Below the slowest gaits,
+   * they blend with standing at their own cadence, so stopping settles rather than freezing mid-stride.
    */
-  private animateGait(): void {
+  private animateGait(delta: number): void {
     const speed = this.velocity.length();
-    const yaw = this.root.rotation.y;
-    const backing = this.backGaits.size > 0 && this.velocity.x * Math.sin(yaw) + this.velocity.z * Math.cos(yaw) < 0;
-    const gaits = backing ? this.backGaits : this.gaits;
-    const [[slowest, slowestSpeed]] = gaits;
-    let [gait, groundSpeed] = [slowest, slowestSpeed];
-    for (const [name, s] of gaits) if (Math.abs(Math.log(speed / s)) < Math.abs(Math.log(speed / groundSpeed))) [gait, groundSpeed] = [name, s];
-    const weight = Math.min(1, speed / slowestSpeed);
-    const action = this.action(gait);
-    action.timeScale = Math.max(speed, slowestSpeed) / groundSpeed;
+    let [slowest, cycle] = [0, 0];
+    const targets = new Map<THREE.AnimationAction, number>();
+    for (const [gaits, share] of this.bracket(angleTo(this.root.rotation.y, yawTo(this.velocity)))) {
+      let gait = gaits[0];
+      for (const g of gaits) if (Math.abs(Math.log(speed / g.speed)) < Math.abs(Math.log(speed / gait.speed))) gait = g;
+      slowest += share * gaits[0].speed;
+      cycle += share * gait.cycle;
+      targets.set(gait.action, share);
+    }
+    const weight = Math.min(1, speed / slowest);
+    for (const [action, share] of targets) targets.set(action, share * weight);
+    targets.set(this.action(this.idle!), 1 - weight);
+    const cadence = Math.max(speed, slowest) / cycle;
+    for (const { action, strike } of [...this.gaits.values()].flat()) {
+      const { duration } = action.getClip();
+      action.time = ((this.phase + strike) % 1) * duration;
+      action.timeScale = cadence * duration;
+    }
+    this.phase = (this.phase + cadence * delta) % 1;
     if (this.moving) this.settle = GAIT_FADE;
-    this.blend(new Map([[this.action(this.idle!), 1 - weight], [action, weight]]), this.settle);
+    this.blend(targets, this.settle);
+  }
+
+  /** The gaits of the headings either side of `heading`, each with its share by nearness. */
+  private bracket(heading: number): [Gait[], number][] {
+    const headings = [...this.gaits.keys()];
+    const around = (from: number, to: number) => (angleTo(from, to) + 2 * Math.PI) % (2 * Math.PI);
+    for (const [i, from] of headings.entries()) {
+      const to = headings[(i + 1) % headings.length];
+      const [span, past] = [around(from, to), around(from, heading)];
+      if (span > 0 && past <= span) return [[this.gaits.get(from)!, 1 - past / span], [this.gaits.get(to)!, past / span]];
+    }
+    return [[this.gaits.get(headings[0])!, 1]];
   }
 
   private blend(targets: Map<THREE.AnimationAction, number>, fade: number): void {

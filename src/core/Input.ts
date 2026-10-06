@@ -40,7 +40,7 @@ export class Input {
     surface.addEventListener('mousemove', this.onMouseMove);
   }
 
-  /** WASD/arrows as x (turn right) and y (forward), each -1, 0 or 1. */
+  /** WASD/arrows as x (right) and y (forward), each -1, 0 or 1. */
   movement(target: THREE.Vector2): THREE.Vector2 {
     const held = (a: string, b: string) => (this.keys.has(a) || this.keys.has(b) ? 1 : 0);
     return target.set(held('KeyD', 'ArrowRight') - held('KeyA', 'ArrowLeft'), held('KeyW', 'ArrowUp') - held('KeyS', 'ArrowDown'));

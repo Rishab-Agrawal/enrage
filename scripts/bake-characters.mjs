@@ -17,7 +17,8 @@ const ARTIFACTS = 'artifacts';
 // clips transfer between them (Gorran's haymaker is Wren's cross; both collapse the same way).
 const CHARACTERS = {
   player: {
-    idle: 'tripo/player-anim/idle', walk: 'mixamo/walk', walkBack: 'mixamo/walk-back', run: 'tripo/player-anim/run', jab: 'tripo/player-anim/box_01', cross: 'tripo/player-anim/box_02',
+    idle: 'tripo/player-anim/idle', walk: 'mixamo/walk', walkBack: 'mixamo/walk-back', walkLeft: 'mixamo/left-strafe-walk',
+    walkRight: 'mixamo/right-strafe-walk', run: 'tripo/player-anim/run', jab: 'tripo/player-anim/box_01', cross: 'tripo/player-anim/box_02',
     hurt: 'tripo/player-anim/hit_to_body_01', defeat: 'tripo/npc-anim/defeat_03',
   },
   npc: {
@@ -28,8 +29,8 @@ const CHARACTERS = {
 };
 // Seconds to keep: the defeat take stands back up at the end.
 const TRIM = { 'tripo/npc-anim/defeat_03': 4.6 };
-// Locomotion plays in place: the game moves the body, and the clip records the ground speed it depicts.
-const IN_PLACE = new Set(['run', 'walk', 'walkBack']);
+// Locomotion plays in place: the game moves the body, and the clip records the ground velocity it depicts.
+const IN_PLACE = new Set(['run', 'walk', 'walkBack', 'walkLeft', 'walkRight']);
 // Standing clips sway in place under the body, as the push's step out and back does; every other clip is an action.
 const STANDING = new Set(['idle', 'calm', 'push']);
 // Seconds either side of a gait's loop seam over which its velocity jump is eased out.
@@ -176,9 +177,11 @@ function bestCycle(clip, times) {
 /**
  * Makes a locomotion take a seamless in-place cycle: trims it to its cleanest cycle (Tripo's run starts
  * mid-stride and accelerating), then spreads every channel's pose mismatch across the loop, the Hip's travel
- * included, and eases out its velocity jump at the seam. Returns the ground speed it depicted, in armature units per second.
+ * included, and eases out its velocity jump at the seam. Returns the ground velocity it depicts, [x, z] in the
+ * model's frame, armature units per second; and `strike`, the clip second the left foot strikes, reaching furthest
+ * along the travel, so gaits played from their strikes step in time whichever way they head.
  */
-function inPlace(clip) {
+function inPlace(clip, nodes) {
   const hip = clip.tracks.find((t) => t.name === 'Hip.position');
   const { a, b } = bestCycle(clip, hip.times);
   const [start, period] = [hip.times[a], hip.times[b] - hip.times[a]];
@@ -222,8 +225,20 @@ function inPlace(clip) {
     for (let i = k; i < hip.values.length; i += 3) mean += hip.values[i] / hip.times.length;
     for (let i = k; i < hip.values.length; i += 3) hip.values[i] -= mean;
   }
-  // The body faces -Y in Root space: a backward gait records a negative ground speed.
-  return (Math.sign(-travel[1]) * Math.hypot(travel[0], travel[1])) / period;
+  const rig = skeleton(nodes);
+  const [root, foot, hipBone] = ['Armature', 'L_Foot', 'Hip'].map((name) => rig.get(name));
+  const mixer = new THREE.AnimationMixer(root);
+  const action = mixer.clipAction(clip).play();
+  const pose = (t) => {
+    action.time = t;
+    mixer.update(0);
+    root.updateMatrixWorld(true);
+  };
+  pose(0);
+  const velocity = new THREE.Vector3(...travel).applyQuaternion(rig.get('Root').getWorldQuaternion(new THREE.Quaternion())).divideScalar(period);
+  const along = velocity.clone().setY(0).normalize();
+  const ahead = (t) => (pose(t), foot.getWorldPosition(new THREE.Vector3()).sub(hipBone.getWorldPosition(new THREE.Vector3())).dot(along));
+  return { groundVelocity: [velocity.x, velocity.z], strike: hip.times.reduce((best, t) => (ahead(t) > ahead(best) ? t : best)) };
 }
 
 /**
@@ -250,6 +265,19 @@ function rootMotion(clip, nodes) {
     p.setX(stand.x).setY(stand.y).applyQuaternion(q.invert()).toArray(hip.values, i * 3);
   });
   return travel;
+}
+
+/** The rig's nodes as an Object3D tree at rest, by name. */
+function skeleton(nodes) {
+  const bones = new Map([...nodes].map(([name, node]) => {
+    const bone = new THREE.Object3D();
+    bone.name = name;
+    bone.position.fromArray(node.getTranslation());
+    bone.quaternion.fromArray(node.getRotation());
+    return [name, bone];
+  }));
+  for (const [name, node] of nodes) for (const child of node.listChildren()) bones.get(name).add(bones.get(child.getName()));
+  return bones;
 }
 
 /** Turns `bone` so its world rotation is `rotation`. */
@@ -291,14 +319,7 @@ const smooth = (t, from, to) => THREE.MathUtils.smoothstep(t, from, to);
  * foot; he holds, then folds his arms again by 0.75.
  */
 function shove(nodes) {
-  const bones = new Map([...nodes].map(([name, node]) => {
-    const bone = new THREE.Object3D();
-    bone.name = name;
-    bone.position.fromArray(node.getTranslation());
-    bone.quaternion.fromArray(node.getRotation());
-    return [name, bone];
-  }));
-  for (const [name, node] of nodes) for (const child of node.listChildren()) bones.get(name).add(bones.get(child.getName()));
+  const bones = skeleton(nodes);
   const bone = (name) => bones.get(name);
   const rig = bone('Armature');
   rig.updateMatrixWorld(true);
@@ -382,7 +403,7 @@ for (const [character, clips] of Object.entries(CHARACTERS)) {
       clip.resetDuration();
     }
     const animation = doc.createAnimation(name);
-    if (IN_PLACE.has(name)) animation.setExtras({ groundSpeed: inPlace(clip) });
+    if (IN_PLACE.has(name)) animation.setExtras(inPlace(clip, nodes));
     else if (!STANDING.has(name)) animation.setExtras({ travel: rootMotion(clip, nodes) });
     for (const track of clip.tracks) {
       const [nodeName, property] = track.name.split('.');

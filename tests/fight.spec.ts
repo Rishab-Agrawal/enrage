@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { tuning } from '../src/game/tuning';
 
 // Real-input playtests: keyboard, mouse and the debug panel's mood control, as a player would use them.
 // Gorran's attack choice is seeded, so runs are deterministic up to frame timing.
@@ -18,24 +19,37 @@ async function start(page: Page): Promise<string[]> {
   await page.evaluate(() => window.__THREE_GAME_TEST_HOOKS__?.seed(42));
   // Park the mouse on the canvas before the first click captures it, so clicks never move it and never turn her.
   const box = (await page.locator('#game-canvas').boundingBox())!;
+  mice.set(page, { x: box.width / 2, y: box.height / 2 });
   await page.mouse.move(box.width / 2, box.height / 2);
   return errors;
+}
+
+/** Where each page's mouse is: captured, only its travel counts, so it moves on from wherever it is. */
+const mice = new WeakMap<Page, { x: number; y: number }>();
+
+/** Capture the mouse with a click where it is, unless it already is. */
+async function capture(page: Page): Promise<void> {
+  if (await page.evaluate(() => document.pointerLockElement?.id === 'game-canvas')) return;
+  await page.mouse.down();
+  await page.mouse.up();
+  await expect.poll(() => page.evaluate(() => document.pointerLockElement?.id)).toBe('game-canvas');
+}
+
+/** Slide the mouse sideways as far as turns her by `radians`, positive left, once it is captured. */
+async function look(page: Page, radians: number): Promise<void> {
+  const mouse = mice.get(page)!;
+  mouse.x -= radians / tuning.mouseTurn;
+  await page.mouse.move(mouse.x, mouse.y);
 }
 
 /** Signed shortest turn from yaw `a` to yaw `b`. */
 const turn = (a: number, b: number) => Math.atan2(Math.sin(b - a), Math.cos(b - a));
 
-/** Sprint at him, turning toward him with A/D, then stand and swing while he is in reach, for up to `seconds` or until `stop` holds. */
+/** Sprint at him, turning toward him with the mouse, then stand and swing while he is in reach, for up to `seconds` or until `stop` holds. */
 async function brawl(page: Page, seconds: number, stop: (d: Diagnostics) => boolean): Promise<Diagnostics> {
-  let turning: string | null = null;
-  const steer = async (d: Diagnostics) => {
-    const bearing = turn(d.player.yaw, Math.atan2(d.npc.position.x - d.player.position.x, d.npc.position.z - d.player.position.z));
-    const key = bearing > 0.15 ? 'KeyA' : bearing < -0.15 ? 'KeyD' : null; // A turns left, raising yaw
-    if (key === turning) return;
-    if (turning) await page.keyboard.up(turning);
-    if (key) await page.keyboard.down(key);
-    turning = key;
-  };
+  await capture(page);
+  const steer = (d: Diagnostics) =>
+    look(page, turn(d.player.yaw, Math.atan2(d.npc.position.x - d.player.position.x, d.npc.position.z - d.player.position.z)));
   let closing = false;
   const close = async (on: boolean) => {
     if (on === closing) return;
@@ -56,13 +70,12 @@ async function brawl(page: Page, seconds: number, stop: (d: Diagnostics) => bool
     d = await read(page);
   }
   await close(false);
-  if (turning) await page.keyboard.up(turning);
   return d;
 }
 
-test('W walks, Shift sprints, S backs up, A/D only turn, and Shift alone dashes', async ({ page }) => {
+test('W walks, Shift sprints, S backs up, A/D step sideways, diagonals are no faster, and Shift alone dashes', async ({ page }) => {
   const errors = await start(page);
-  /** Metres moved and radians turned while `keys` are held, pressed in order, for `ms`. */
+  /** Metres moved, which way off her facing (positive left), and radians turned while `keys` are held, pressed in order, for `ms`. */
   const travel = async (keys: string[], ms: number) => {
     const before = await read(page);
     for (const key of keys) await page.keyboard.down(key);
@@ -70,56 +83,61 @@ test('W walks, Shift sprints, S backs up, A/D only turn, and Shift alone dashes'
     for (const key of keys) await page.keyboard.up(key);
     await page.waitForTimeout(400);
     const after = await read(page);
-    const moved = Math.hypot(after.player.position.x - before.player.position.x, after.player.position.z - before.player.position.z);
-    return { moved, turned: turn(before.player.yaw, after.player.yaw) };
+    const [dx, dz] = [after.player.position.x - before.player.position.x, after.player.position.z - before.player.position.z];
+    return { moved: Math.hypot(dx, dz), heading: turn(before.player.yaw, Math.atan2(dx, dz)), turned: turn(before.player.yaw, after.player.yaw) };
   };
   const walked = await travel(['KeyW'], 600);
   const sprinted = await travel(['KeyW', 'ShiftLeft'], 600);
   const backed = await travel(['KeyS', 'ShiftLeft'], 600);
-  const turned = await travel(['KeyD'], 600);
+  const right = await travel(['KeyD'], 600);
+  const left = await travel(['KeyA'], 600);
+  const diagonal = await travel(['KeyW', 'KeyD'], 600);
   expect(walked.moved).toBeGreaterThan(0.5);
   expect(sprinted.moved).toBeGreaterThan(2 * walked.moved);
-  // Shift doesn't hurry her backwards, and walking either way keeps her facing.
-  expect(backed.moved).toBeGreaterThan(0.4);
+  // Shift doesn't hurry her backwards.
   expect(backed.moved).toBeLessThan(walked.moved);
-  for (const { turned } of [walked, sprinted, backed]) expect(Math.abs(turned)).toBeLessThan(1e-6);
-  expect(turned.turned).toBeLessThan(-0.5); // D turns her right: clockwise from above
+  for (const [{ moved, heading }, expected] of [[walked, 0], [backed, Math.PI], [right, -Math.PI / 2], [left, Math.PI / 2]] as const) {
+    expect(moved).toBeGreaterThan(0.4);
+    expect(Math.abs(turn(heading, expected))).toBeLessThan(0.1);
+  }
+  expect(diagonal.heading).toBeGreaterThan(-Math.PI / 2 + 0.3); // forward and right
+  expect(diagonal.heading).toBeLessThan(-0.3);
+  expect(diagonal.moved).toBeLessThan(1.05 * Math.max(walked.moved, right.moved));
+  // No key turns her.
+  for (const { turned } of [walked, sprinted, backed, right, left, diagonal]) expect(Math.abs(turned)).toBeLessThan(1e-6);
   expect((await travel(['ShiftLeft'], 100)).moved).toBeGreaterThan(1.5);
   expect(errors).toEqual([]);
 });
 
 test('a click captures the mouse without striking; then the mouse turns her, until it is released', async ({ page }) => {
   const errors = await start(page);
-  const box = (await page.locator('#game-canvas').boundingBox())!;
-  /** Radians turned by sliding the mouse to `dx` px right of centre. */
-  const look = async (dx: number) => {
+  /** Radians she turns as the mouse slides as far as turns her by `radians` when captured. */
+  const turned = async (radians: number) => {
     const before = await read(page);
-    await page.mouse.move(box.width / 2 + dx, box.height / 2, { steps: 10 });
+    await look(page, radians);
     await page.waitForTimeout(100);
     return turn(before.player.yaw, (await read(page)).player.yaw);
   };
-  expect(await look(200)).toBe(0);
-  await look(0);
-  await page.mouse.click(box.width / 2, box.height / 2);
-  await expect.poll(() => page.evaluate(() => document.pointerLockElement?.id)).toBe('game-canvas');
+  expect(await turned(-0.6)).toBe(0);
+  await capture(page);
   expect((await read(page)).player.state).toBe('move');
-  expect(await look(200)).toBeLessThan(-0.5); // rightward turns her clockwise from above, like D
+  expect(await turned(-0.6)).toBeCloseTo(-0.6, 3); // sliding right turns her clockwise from above
   await page.evaluate(() => document.exitPointerLock());
-  expect(await look(0)).toBe(0);
+  expect(await turned(0.6)).toBe(0);
   expect(errors).toEqual([]);
 });
 
 test('turning on the spot, her upper body leads and her hips pivot to catch up', async ({ page }) => {
   const errors = await start(page);
-  await page.keyboard.down('KeyD');
+  await capture(page);
   let [fastest, lead] = [0, 0];
   for (const end = Date.now() + 1500; Date.now() < end; ) {
+    await look(page, -0.05);
     await page.waitForTimeout(40);
     const d = await read(page);
     fastest = Math.max(fastest, d.player.speed);
     lead = Math.max(lead, Math.abs(turn(d.player.facing, d.player.yaw)));
   }
-  await page.keyboard.up('KeyD');
   await page.waitForTimeout(600);
   const settled = await read(page);
   expect(lead).toBeGreaterThan(0.5); // her hips hold while she twists
@@ -162,9 +180,11 @@ test('legs settle on the speed the body actually moves at', async ({ page }) => 
     [['ShiftLeft'], 1000], // dash where the body faces
     [['KeyW', 'ShiftLeft'], 2500], // sprint into his personal space
     [['KeyS', 'ShiftLeft'], 3000], // back away; Shift doesn't hurry it
-    [['KeyD'], 800], // turn on the spot
-    [['KeyW', 'KeyD'], 3000], // walk an arc
-    [['KeyW', 'KeyD', 'ShiftLeft'], 2000], // sprint an arc
+    [['KeyD'], 1500], // step right
+    [['KeyA'], 1500], // step left
+    [['KeyW', 'KeyD'], 3000], // walk a diagonal
+    [['KeyS', 'KeyA'], 2000], // back away on a diagonal
+    [['KeyW', 'KeyA', 'ShiftLeft'], 2000], // sprint a diagonal
   ];
   for (const [keys, ms] of route) {
     for (const key of keys) await page.keyboard.down(key);

@@ -14,15 +14,19 @@ function jerk(v: ArrayLike<number>, size: number, before: number, i: number, aft
   return Math.sqrt(sum);
 }
 
-// Gaits are drawn at the body's measured speed, so each must loop in place, without a hitch, and record the ground
-// speed it depicts: negative walking backwards.
-const GAITS = { player: { run: 1, walk: 1, walkBack: -1 }, npc: { run: 1, walk: 1 } };
+// Gaits are drawn at the body's measured velocity, so each must loop in place, without a hitch, and record the ground
+// velocity it depicts. The model faces +X, its left -Z.
+const GAITS = {
+  player: { run: [1, 0], walk: [1, 0], walkBack: [-1, 0], walkLeft: [0, -1], walkRight: [0, 1] },
+  npc: { run: [1, 0], walk: [1, 0] },
+};
 for (const [model, gaits] of Object.entries(GAITS)) {
   test(`${model} gaits loop in place`, async () => {
     const doc = await new NodeIO().read(`public/models/${model}.glb`);
-    for (const [name, sign] of Object.entries(gaits)) {
+    for (const [name, [toX, toZ]] of Object.entries(gaits)) {
       const animation = doc.getRoot().listAnimations().find((a) => a.getName() === name)!;
-      expect(Math.sign(animation.getExtras().groundSpeed as number), `${model}/${name} ground speed`).toBe(sign);
+      const [x, z] = animation.getExtras().groundVelocity as number[];
+      expect(Math.acos((x * toX + z * toZ) / Math.hypot(x, z)), `${model}/${name} heading`).toBeLessThan(0.1);
       let swing = 0;
       for (const channel of animation.listChannels()) {
         const bone = `${model}/${name} ${channel.getTargetNode()!.getName()} ${channel.getTargetPath()}`;

@@ -5,8 +5,7 @@ export const tuning = {
   playerWalkSpeed: 1.5,
   playerSprintSpeed: 4.6,
   playerBackSpeed: 1.2,
-  /** Rad/s while A or D is held. */
-  playerTurnRate: 1.15,
+  playerStrafeSpeed: 1.3,
   /** Rad per pixel of mouse travel. */
   mouseTurn: 0.003,
   strikeDamage: 9,
