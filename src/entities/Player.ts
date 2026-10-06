@@ -4,7 +4,7 @@ import type { Input } from '../core/Input';
 import type { FightEvent } from '../game/events';
 import { tuning } from '../game/tuning';
 import { Character } from './Character';
-import { angleTo, turnToward, yawTo } from './steering';
+import { aimToward, angleTo, yawTo } from './steering';
 
 /** Clip-second windows: `contact` is when the striking `hand` lands (measured from the clip's extension frame). */
 const STRIKES = [
@@ -113,8 +113,8 @@ export class Player {
       this.velocity.multiplyScalar(Math.exp(-6 * delta));
     } else if (this.state === 'strike') {
       this.velocity.multiplyScalar(Math.exp(-12 * delta));
-      // Through the wind-up, square up to him and close the last half-metre, so strikes connect instead of whiffing.
-      if (this.contactAt > 0 && this.toNpc.lengthSq() < 36) turnToward(this.character, yawTo(this.toNpc), 10, delta);
+      // Through the wind-up, turn her upper body to him and close the last half-metre, so strikes connect instead of whiffing.
+      if (this.contactAt > 0 && this.toNpc.lengthSq() < 36) aimToward(this.character, yawTo(this.toNpc), 10, delta);
       const gap = this.toNpc.length() - 1.45;
       if (this.timer < this.contactAt && gap > 0 && gap < 1.2) this.position.addScaledVector(this.toNpc.normalize(), Math.min(gap, 3 * delta));
     } else {

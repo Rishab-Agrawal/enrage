@@ -3,16 +3,16 @@ import type { GLTF } from 'three/addons/loaders/GLTFLoader.js';
 import type { FightEvent, Mood } from '../game/events';
 import { ARENA_RADIUS, tuning } from '../game/tuning';
 import { Character } from './Character';
-import { angleTo, turnToward, yawTo } from './steering';
+import { aimToward, angleTo, turnToward, yawTo } from './steering';
 
-/** Clip-second windows; `contact` is when the striking `hand` is at full stretch. The haymaker's long crouch is its telegraph. */
+/**
+ * Clip-second windows; `contact` is when the striking `hand` is at full stretch. He closes to `range`, m, before
+ * swinging, so the take's own footwork carries the blow onto her if she stands. The haymaker's long crouch is its telegraph.
+ */
 const ATTACKS = {
-  punch: { from: 0.1, contact: 0.7, to: 1.3, speed: 1.2, hand: 'L_Hand', knockback: 5.5 },
-  haymaker: { from: 0.9, contact: 2.3, to: 2.65, speed: 1.6, hand: 'R_Hand', knockback: 10.5 },
+  punch: { range: 1.3, from: 0.1, contact: 0.7, to: 1.3, speed: 1.2, hand: 'L_Hand', knockback: 5.5 },
+  haymaker: { range: 1, from: 0.9, contact: 2.3, to: 2.65, speed: 1.6, hand: 'R_Hand', knockback: 10.5 },
 };
-/** He closes to this before swinging, and keeps stepping in through the wind-up, faster than she can back away. */
-const ATTACK_RANGE = 1.3;
-const STEP_IN_SPEED = 1.6;
 /**
  * A calm NPC shoves off a player closing on him, dashing or not: he wheels round at SHOVE_TURN rad/s and pushes, starting
  * so his palms are out, SHOVE_LAND s into the push, as she reaches SHOVE_REACH. She is shoved the moment she gets
@@ -103,7 +103,7 @@ export class Npc {
           this.walk(this.retreatHeading(), WALK_SPEED, delta);
         } else {
           this.retreating = false;
-          this.look(this.toPlayer, 1.5, delta);
+          aimToward(this.character, yawTo(this.toPlayer), 1.5, delta);
         }
         break;
       case 'shove':
@@ -124,15 +124,12 @@ export class Npc {
         if (this.timer >= ROAR_TIME) this.enter('chase');
         break;
       case 'chase':
-        if (distance <= ATTACK_RANGE) this.startAttack(events);
+        if (distance <= ATTACKS[this.attack].range) this.startAttack(events);
         else this.walk(this.toPlayer.normalize(), tuning.npcRunSpeed, delta);
         break;
       case 'attack':
-        // Tracks the player through the wind-up, committed after contact: sidestepping late works.
-        if (this.contactAt > 0) {
-          turnToward(this.character, yawTo(this.toPlayer), 2.6, delta);
-          if (distance > ATTACK_RANGE) this.position.addScaledVector(this.toPlayer.normalize(), STEP_IN_SPEED * delta);
-        }
+        // His upper body tracks her through the wind-up, committed after contact: sidestepping late works.
+        if (this.contactAt > 0) aimToward(this.character, yawTo(this.toPlayer), 2.6, delta);
         if (this.contactAt > 0 && this.timer >= this.contactAt) {
           this.contactAt = 0;
           const { hand, knockback } = ATTACKS[this.attack];
@@ -142,7 +139,7 @@ export class Npc {
         if (this.timer >= this.endAt) this.enter('recover');
         break;
       case 'recover':
-        if (distance > ATTACK_RANGE) this.walk(this.toPlayer.normalize(), WALK_SPEED, delta);
+        if (distance > ATTACKS[this.attack].range) this.walk(this.toPlayer.normalize(), WALK_SPEED, delta);
         if (this.timer >= RECOVER_TIME) this.enter('chase');
         break;
       case 'flinch':
@@ -172,6 +169,7 @@ export class Npc {
     if (state === 'calm') this.character.locomote('calm');
     if (state === 'chase' || state === 'recover') this.character.locomote('idle');
     this.character.running = state === 'chase';
+    if (state === 'chase') this.attack = this.rng() < 0.6 ? 'punch' : 'haymaker';
     if (state === 'shove') {
       this.contactAt = 1; // pending: it lands when she reaches his palms
       this.endAt = 0;
@@ -183,7 +181,6 @@ export class Npc {
   }
 
   private startAttack(events: FightEvent[]): void {
-    this.attack = this.rng() < 0.6 ? 'punch' : 'haymaker';
     const attack = ATTACKS[this.attack];
     this.enter('attack');
     this.contactAt = (attack.contact - attack.from) / attack.speed;
@@ -207,12 +204,6 @@ export class Npc {
 
   private walk(direction: THREE.Vector3, speed: number, delta: number): void {
     this.position.addScaledVector(direction, speed * delta);
-    this.look(direction, 7, delta);
-  }
-
-  /** Turns his aim toward `direction` by at most `rate` rad/s: his head leads and his hips follow. */
-  private look(direction: THREE.Vector3, rate: number, delta: number): void {
-    const step = rate * delta;
-    this.character.aim += THREE.MathUtils.clamp(angleTo(this.character.aim, yawTo(direction)), -step, step);
+    aimToward(this.character, yawTo(direction), 7, delta);
   }
 }
