@@ -113,7 +113,7 @@ export class Player {
       this.velocity.multiplyScalar(Math.exp(-6 * delta));
     } else if (this.state === 'strike') {
       this.velocity.multiplyScalar(Math.exp(-12 * delta));
-      // Through the wind-up, turn her upper body to him and close the last half-metre, so strikes connect instead of whiffing.
+      // Through the wind-up, turn to him and close the last half-metre, so strikes connect instead of whiffing.
       if (this.contactAt > 0 && this.toNpc.lengthSq() < 36) aimToward(this.character, yawTo(this.toNpc), 10, delta);
       const gap = this.toNpc.length() - 1.45;
       if (this.timer < this.contactAt && gap > 0 && gap < 1.2) this.position.addScaledVector(this.toNpc.normalize(), Math.min(gap, 3 * delta));
