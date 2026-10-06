@@ -336,3 +336,50 @@ test('an action owns the whole body unless it tracks the aim: then his hips pivo
   expect(tracked.facing).toBeGreaterThan(0.5);
   expect(tracked.twist).toBeLessThanOrEqual(0.8);
 });
+
+test('a straight fight is lost even dodging every swing on the frame and countering at once', async ({ page }) => {
+  test.setTimeout(240_000);
+  const errors = await start(page);
+  await capture(page);
+  await setMood(page, 'enraged');
+  // Frame by frame, with his timing known exactly: dodge each swing as late as the dodge still covers it, back off
+  // while the dodge recharges, and strike whenever no swing is coming.
+  await page.evaluate((mouseTurn) => {
+    const canvas = document.querySelector('#game-canvas')!;
+    const held = new Set<string>();
+    const hold = (code: string, on: boolean) => {
+      if (on === held.has(code)) return;
+      window.dispatchEvent(new KeyboardEvent(on ? 'keydown' : 'keyup', { code }));
+      if (on) held.add(code);
+      else held.delete(code);
+    };
+    let [lastFrame, dodgedAt] = [-1, -9];
+    const tick = () => {
+      const d = window.__THREE_GAME_DIAGNOSTICS__!;
+      if (d.outcome) return;
+      requestAnimationFrame(tick);
+      if (d.frame === lastFrame) return;
+      lastFrame = d.frame;
+      const [dx, dz] = [d.npc.position.x - d.player.position.x, d.npc.position.z - d.player.position.z];
+      const turn = Math.atan2(Math.sin(Math.atan2(dx, dz) - d.player.yaw), Math.cos(Math.atan2(dx, dz) - d.player.yaw));
+      canvas.dispatchEvent(new MouseEvent('mousemove', { movementX: -turn / mouseTurn }));
+      const [coming, ready] = [d.npc.contactIn, d.elapsed - dodgedAt > 0.75];
+      if (coming !== null && coming < 0.2 && ready) {
+        canvas.dispatchEvent(new PointerEvent('pointerdown', { button: 2 }));
+        dodgedAt = d.elapsed;
+      } else if ((coming === null || coming > 0.55) && d.elapsed - dodgedAt > 0.33 && Math.hypot(dx, dz) < 1.7) {
+        canvas.dispatchEvent(new PointerEvent('pointerdown', { button: 0 }));
+      }
+      const retreat = coming !== null && !ready;
+      hold('KeyS', retreat);
+      hold('KeyW', !retreat && Math.hypot(dx, dz) > 1.5);
+    };
+    requestAnimationFrame(tick);
+  }, tuning.mouseTurn);
+  await page.waitForFunction(() => window.__THREE_GAME_DIAGNOSTICS__?.outcome, null, { timeout: 200_000 });
+  const d = await read(page);
+  console.log(`perfect dodger: outcome=${d.outcome} npcHealth=${Math.round(d.npc.health)} playerHealth=${Math.round(d.player.health)} t=${d.elapsed.toFixed(1)}s`);
+  expect(d.outcome).toBe('defeat');
+  expect(d.npc.health).toBeLessThan(400); // the fight was real: blows landed
+  expect(errors).toEqual([]);
+});

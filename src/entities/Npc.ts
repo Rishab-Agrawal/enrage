@@ -31,6 +31,13 @@ const ROAR_TIME = 1.4;
 const RECOVER_TIME = 0.5;
 const FLINCH_TIME = 0.35;
 const POISE_TIME = 1.6;
+/**
+ * Every blow she lands winds him up: at full fury, FURY_HEALTH of damage in, his swings run FURY_HASTE faster and he
+ * recovers from them at once, quicker than her dodge recharges. It cools only while he's calm, over FURY_COOL s.
+ */
+const FURY_HEALTH = 120;
+const FURY_HASTE = 0.6;
+const FURY_COOL = 30;
 
 type State = 'calm' | 'shove' | 'roar' | 'chase' | 'attack' | 'recover' | 'flinch' | 'down';
 
@@ -38,6 +45,8 @@ export class Npc {
   readonly character: Character;
   readonly radius = 0.55;
   health = tuning.npcMaxHealth;
+  /** How wound up her blows have made him, 0 to 1. */
+  fury = 0;
   /** The NPC's temper. The only state an outside system (debug panel now, LLM later) sets, via `setMood`. */
   mood: Mood = 'calm';
   state: State = 'calm';
@@ -63,8 +72,14 @@ export class Npc {
     return this.character.root.position;
   }
 
+  /** Seconds until his swing under way lands, null between swings. */
+  get contactIn(): number | null {
+    return this.state === 'attack' && this.contactAt > 0 ? this.contactAt - this.timer : null;
+  }
+
   reset(): void {
     this.health = tuning.npcMaxHealth;
+    this.fury = 0;
     this.character.place(0, -4, 0);
     this.lastPlayer.setX(NaN);
     this.mood = 'calm';
@@ -87,6 +102,7 @@ export class Npc {
   update(delta: number, player: THREE.Vector3, events: FightEvent[]): void {
     this.timer += delta;
     this.poise -= delta;
+    if (this.mood === 'calm') this.fury = Math.max(0, this.fury - delta / FURY_COOL);
     this.toPlayer.subVectors(player, this.position).setY(0);
     const distance = this.toPlayer.length();
     // Her own speed toward him, whatever he is doing.
@@ -141,7 +157,7 @@ export class Npc {
       case 'recover':
         if (distance > ATTACKS[this.attack].range) this.walk(this.toPlayer.normalize(), WALK_SPEED, delta);
         else aimToward(this.character, yawTo(this.toPlayer), 7, delta);
-        if (this.timer >= RECOVER_TIME) this.enter('chase');
+        if (this.timer >= RECOVER_TIME * (1 - this.fury)) this.enter('chase');
         break;
       case 'flinch':
         if (this.timer >= FLINCH_TIME) this.enter('chase');
@@ -154,6 +170,7 @@ export class Npc {
   /** Damage always lands; a flinch only interrupts movement, never a committed attack or roar. */
   takeHit(damage: number): void {
     this.health = Math.max(0, this.health - damage);
+    this.fury = Math.min(1, this.fury + damage / FURY_HEALTH);
     this.character.flash.value = 0.45;
     if (this.health <= 0) this.enter('down');
     else if ((this.state === 'chase' || this.state === 'recover') && this.poise <= 0) {
@@ -184,9 +201,10 @@ export class Npc {
   private startAttack(events: FightEvent[]): void {
     const attack = ATTACKS[this.attack];
     this.enter('attack');
-    this.contactAt = (attack.contact - attack.from) / attack.speed;
-    this.endAt = (attack.to - attack.from) / attack.speed;
-    this.character.play(this.attack, { loop: false, from: attack.from, speed: attack.speed, fade: 0.1, track: true });
+    const speed = attack.speed * (1 + FURY_HASTE * this.fury);
+    this.contactAt = (attack.contact - attack.from) / speed;
+    this.endAt = (attack.to - attack.from) / speed;
+    this.character.play(this.attack, { loop: false, from: attack.from, speed, fade: 0.1, track: true });
     events.push({ type: 'swing', who: 'npc', heavy: true });
   }
 

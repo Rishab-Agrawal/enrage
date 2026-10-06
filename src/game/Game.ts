@@ -57,6 +57,7 @@ export class Game {
   private frame = 0;
   private paused = false;
   private readonly offset = new THREE.Vector3();
+  private readonly glow = new THREE.Color();
 
   constructor(
     private readonly canvas: HTMLCanvasElement,
@@ -149,7 +150,9 @@ export class Game {
     this.judge(delta);
 
     const rage = this.npc.mood === 'enraged' && this.npc.state !== 'down';
-    this.npc.character.rim.value.lerp(rage ? RAGE_RIM : PLAYER_RIM, 1 - Math.exp(-5 * delta));
+    // His rage burns hotter as his fury builds.
+    const rim = rage ? this.glow.copy(RAGE_RIM).multiplyScalar(1 + 1.5 * this.npc.fury) : PLAYER_RIM;
+    this.npc.character.rim.value.lerp(rim, 1 - Math.exp(-5 * delta));
     this.vfx.update(delta, this.npc.position, rage ? 'enraged' : 'calm');
     this.arena.update(this.elapsed);
     this.cameraRig.update(delta, this.player.position, this.player.yaw);
@@ -317,6 +320,7 @@ export class Game {
         health: this.npc.health,
         mood: this.npc.mood,
         state: this.npc.state,
+        contactIn: this.npc.contactIn,
       },
       renderer: {
         calls: info.render.calls,

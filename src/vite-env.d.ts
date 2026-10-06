@@ -12,7 +12,8 @@ interface ThreeGameDiagnostics {
   outcome: 'victory' | 'defeat' | null;
   /** `yaw` is where she steers, which W walks along and the camera looks along; `facing` her hips' yaw; `speed` is measured ground speed; `stride` the ground speed the legs show, null mid-action. */
   player: { position: Vec3; yaw: number; facing: number; speed: number; stride: number | null; health: number; state: string };
-  npc: { position: Vec3; stride: number | null; health: number; mood: 'calm' | 'enraged'; state: string };
+  /** `contactIn`: seconds until his swing under way lands, null between swings. */
+  npc: { position: Vec3; stride: number | null; health: number; mood: 'calm' | 'enraged'; state: string; contactIn: number | null };
   renderer: { calls: number; triangles: number; geometries: number; textures: number };
   canvas: { clientWidth: number; clientHeight: number; width: number; height: number; dpr: number };
 }
