@@ -158,6 +158,26 @@ test('turning on the spot, her upper body leads and her hips pivot to catch up',
   expect(errors).toEqual([]);
 });
 
+test('whipped round faster than she can pivot, her hips are dragged the way the mouse goes, never past her spine', async ({ page }) => {
+  const errors = await start(page);
+  await capture(page);
+  const before = await read(page);
+  let [lead, back, last] = [0, 0, before.player.facing];
+  for (let i = 0; i < 40; i++) {
+    await look(page, 0.5);
+    await page.waitForTimeout(16);
+    const d = await read(page);
+    lead = Math.max(lead, Math.abs(turn(d.player.facing, d.player.yaw)));
+    back = Math.max(back, last - d.player.facing);
+    last = d.player.facing;
+  }
+  await page.waitForTimeout(800);
+  expect(lead).toBeLessThan(0.85);
+  expect(back).toBeLessThan(0.01); // her hips never swing back against the mouse
+  expect((await read(page)).player.facing - before.player.facing).toBeCloseTo(20, 0);
+  expect(errors).toEqual([]);
+});
+
 test('legs settle on the speed the body actually moves at', async ({ page }) => {
   test.setTimeout(60_000);
   const errors = await start(page);

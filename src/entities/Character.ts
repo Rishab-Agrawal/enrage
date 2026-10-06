@@ -23,7 +23,7 @@ const SPINE = ['Waist', 'Spine01', 'Spine02', 'NeckTwist01', 'Head'];
 const KNEE_FLEX = 0.3;
 const KNEE_BEND = 0.5;
 const KNEE_OPEN = 0.13;
-/** Standing, the upper body twists toward the aim up to this, rad, before the hips pivot round to catch up. */
+/** The upper body twists toward the aim up to this, rad: standing, the hips then pivot round to catch up. */
 const MAX_TWIST = 0.8;
 /**
  * Once the aim comes to rest, below AIM_REST rad/s for REST_TIME s, a twist past SETTLE, rad, settles with a pivot too.
@@ -60,8 +60,9 @@ function cue(action: THREE.AnimationAction, { loop = true, speed = 1, from = 0 }
 }
 
 /**
- * A pivot under way: which of STEPS it is on and that step's progress, 0 to 1; the hips' yaw the step set off from, the
- * ball of the foot it turns on and the leg stepping round (positive the left); and how large its steps are, up to 1.
+ * A pivot under way: which of STEPS it is on and that step's progress, 0 to 1; the hips' yaw the step set off from, on
+ * the aim's winding so `aim - from` is the way round the aim went; the ball of the foot it turns on and the leg
+ * stepping round (positive the left); and how large its steps are, up to 1.
  */
 type Pivot = { step: number; t: number; from: number; about: THREE.Vector3; leg: number; size: number };
 
@@ -306,14 +307,20 @@ export class Character {
       const { share, time } = STEPS[step];
       const t = Math.min(1, this.pivoting.t + delta / time);
       this.pivoting.t = t;
-      this.turn(angleTo(facing, from + share * angleTo(from, this.aim) * THREE.MathUtils.smootherstep(t, 0, 1)), about);
+      this.turn(angleTo(facing, from + share * (this.aim - from) * THREE.MathUtils.smootherstep(t, 0, 1)), about);
       if (t === 1) this.pivoting = STEPS[step + 1] ? this.stepOff(step + 1, -leg, size) : null;
     } else if (Math.abs(lag) > MAX_TWIST || (this.still > REST_TIME && Math.abs(lag) > SETTLE)) {
       // Step out first with the leg on the turning side; the further it has to turn, the larger the steps.
       this.pivoting = this.stepOff(0, Math.sign(lag), Math.min(1, Math.abs(lag) / MAX_TWIST));
     }
     this.lastAim = this.aim;
-    const twist = this.idle ? angleTo(this.root.rotation.y, this.aim) : 0;
+    // The aim drags the hips round, mid-pivot or not, rather than twist the upper body past MAX_TWIST.
+    const lead = this.idle ? angleTo(this.root.rotation.y, this.aim) : 0;
+    const twist = THREE.MathUtils.clamp(lead, -MAX_TWIST, MAX_TWIST);
+    if (lead !== twist) {
+      this.turn(lead - twist, this.pivoting?.about);
+      if (this.pivoting) this.pivoting.from += lead - twist;
+    }
     this.twist += (twist - this.twist) * (1 - Math.exp(-20 * delta));
     const { pivoting: p } = this;
     const knee = p ? p.leg * p.size * STEPS[p.step].lift * Math.sin(Math.PI * p.t) : 0;
@@ -322,7 +329,7 @@ export class Character {
 
   /** Starts a pivot's `step`: `leg` steps round while the hips turn on the ball of the other foot. */
   private stepOff(step: number, leg: number, size: number): Pivot {
-    return { step, t: 0, from: this.root.rotation.y, about: this.ball(-leg), leg, size };
+    return { step, t: 0, from: this.aim - angleTo(this.root.rotation.y, this.aim), about: this.ball(-leg), leg, size };
   }
 
   /**

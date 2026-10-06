@@ -21,8 +21,9 @@ export class Input {
   private readonly onBlur = () => this.keys.clear();
   private readonly onPointerDown = (event: PointerEvent) => {
     // The click that captures the mouse is not a strike. A refused lock (e.g. just after Esc) waits for the next click.
-    // Firefox returns no promise.
-    if (document.pointerLockElement !== this.surface) return void this.surface.requestPointerLock()?.catch(() => {});
+    // Raw movement: Chrome's default lock recentres the cursor, and fast travel then spikes or stalls at the window's
+    // edge. Where raw input is unsupported, the plain lock. Firefox returns no promise.
+    if (document.pointerLockElement !== this.surface) return void this.lock();
     if (event.button === 0) this.pressed.add('strike');
     if (event.button === 2) this.pressed.add('dodge');
   };
@@ -38,6 +39,14 @@ export class Input {
     surface.addEventListener('pointerdown', this.onPointerDown);
     surface.addEventListener('contextmenu', this.onContextMenu);
     surface.addEventListener('mousemove', this.onMouseMove);
+  }
+
+  private async lock(): Promise<void> {
+    try {
+      await this.surface.requestPointerLock({ unadjustedMovement: true });
+    } catch (error) {
+      if ((error as DOMException).name === 'NotSupportedError') await this.surface.requestPointerLock().catch(() => {});
+    }
   }
 
   /** WASD/arrows as x (right) and y (forward), each -1, 0 or 1. */
