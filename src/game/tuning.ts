@@ -7,6 +7,8 @@ export const tuning = {
   playerBackSpeed: 1.2,
   /** Rad/s while A or D is held. */
   playerTurnRate: 1.15,
+  /** Rad per pixel of mouse travel. */
+  mouseTurn: 0.003,
   strikeDamage: 9,
   npcMaxHealth: 400,
   npcRunSpeed: 4.8,

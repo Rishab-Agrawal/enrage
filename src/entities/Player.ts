@@ -56,7 +56,7 @@ export class Player {
     return this.character.root.position;
   }
 
-  /** Where she heads: A/D steer it, W walks along it and the camera looks along it. */
+  /** Where she heads: A/D and the mouse steer it, W walks along it and the camera looks along it. */
   get yaw(): number {
     return this.character.aim;
   }
@@ -86,6 +86,7 @@ export class Player {
     this.bufferTimer -= delta;
     if (resting && this.state !== 'down') this.health = Math.min(tuning.playerMaxHealth, this.health + tuning.playerRegen * delta);
 
+    const look = input?.consumeLook() ?? 0;
     if (input) {
       if (input.consume('strike')) this.buffer('strike');
       if (input.consume('dodge')) this.buffer('dodge');
@@ -116,10 +117,10 @@ export class Player {
       const gap = this.toNpc.length() - 1.45;
       if (this.timer < this.contactAt && gap > 0 && gap < 1.2) this.position.addScaledVector(this.toNpc.normalize(), Math.min(gap, 3 * delta));
     } else {
-      // A/D only turn her and W/S only walk her along her facing, so held together she walks an arc.
+      // A/D and the mouse only turn her and W/S only walk her along her facing, so held together she walks an arc.
       // Shift hurries her forward only.
       this.turn += (this.move.x - this.turn) * (1 - Math.exp(-12 * delta));
-      this.character.aim -= this.turn * tuning.playerTurnRate * delta;
+      this.character.aim -= this.turn * tuning.playerTurnRate * delta + look * tuning.mouseTurn;
       const speed = this.move.y < 0 ? tuning.playerBackSpeed : input?.sprinting ? tuning.playerSprintSpeed : tuning.playerWalkSpeed;
       this.wish.set(Math.sin(this.yaw), 0, Math.cos(this.yaw)).multiplyScalar(this.move.y * speed);
       this.velocity.lerp(this.wish, 1 - Math.exp(-14 * delta));

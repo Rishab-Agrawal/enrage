@@ -16,6 +16,9 @@ async function start(page: Page): Promise<string[]> {
   await page.goto('/');
   await page.waitForFunction(() => (window.__THREE_GAME_DIAGNOSTICS__?.frame ?? 0) > 10);
   await page.evaluate(() => window.__THREE_GAME_TEST_HOOKS__?.seed(42));
+  // Park the mouse on the canvas before the first click captures it, so clicks never move it and never turn her.
+  const box = (await page.locator('#game-canvas').boundingBox())!;
+  await page.mouse.move(box.width / 2, box.height / 2);
   return errors;
 }
 
@@ -24,8 +27,6 @@ const turn = (a: number, b: number) => Math.atan2(Math.sin(b - a), Math.cos(b - 
 
 /** Sprint at him, turning toward him with A/D, then stand and swing while he is in reach, for up to `seconds` or until `stop` holds. */
 async function brawl(page: Page, seconds: number, stop: (d: Diagnostics) => boolean): Promise<Diagnostics> {
-  const box = (await page.locator('#game-canvas').boundingBox())!;
-  await page.mouse.move(box.width / 2, box.height / 2);
   let turning: string | null = null;
   const steer = async (d: Diagnostics) => {
     const bearing = turn(d.player.yaw, Math.atan2(d.npc.position.x - d.player.position.x, d.npc.position.z - d.player.position.z));
@@ -84,6 +85,27 @@ test('W walks, Shift sprints, S backs up, A/D only turn, and Shift alone dashes'
   for (const { turned } of [walked, sprinted, backed]) expect(Math.abs(turned)).toBeLessThan(1e-6);
   expect(turned.turned).toBeLessThan(-0.5); // D turns her right: clockwise from above
   expect((await travel(['ShiftLeft'], 100)).moved).toBeGreaterThan(1.5);
+  expect(errors).toEqual([]);
+});
+
+test('a click captures the mouse without striking; then the mouse turns her, until it is released', async ({ page }) => {
+  const errors = await start(page);
+  const box = (await page.locator('#game-canvas').boundingBox())!;
+  /** Radians turned by sliding the mouse to `dx` px right of centre. */
+  const look = async (dx: number) => {
+    const before = await read(page);
+    await page.mouse.move(box.width / 2 + dx, box.height / 2, { steps: 10 });
+    await page.waitForTimeout(100);
+    return turn(before.player.yaw, (await read(page)).player.yaw);
+  };
+  expect(await look(200)).toBe(0);
+  await look(0);
+  await page.mouse.click(box.width / 2, box.height / 2);
+  await expect.poll(() => page.evaluate(() => document.pointerLockElement?.id)).toBe('game-canvas');
+  expect((await read(page)).player.state).toBe('move');
+  expect(await look(200)).toBeLessThan(-0.5); // rightward turns her clockwise from above, like D
+  await page.evaluate(() => document.exitPointerLock());
+  expect(await look(0)).toBe(0);
   expect(errors).toEqual([]);
 });
 
