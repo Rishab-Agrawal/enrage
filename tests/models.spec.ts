@@ -55,3 +55,38 @@ for (const [model, gaits] of Object.entries(GAITS)) {
     }
   });
 }
+
+// Actions stand on the ground the bind pose does, and a toe on the ground stays put: within 3 cm of its lowest it hardly moves.
+test('action clips keep their feet planted', async ({ page }) => {
+  await page.goto('/');
+  const clips = await page.evaluate(async () => {
+    const { GLTFLoader } = await import('/node_modules/three/examples/jsm/loaders/GLTFLoader.js' as string);
+    const { Character } = await import('/src/entities/Character.ts' as string);
+    const results: { clip: string; off: number; slide: number }[] = [];
+    for (const [model, clips] of [['npc', ['roar', 'punch', 'haymaker', 'hurt', 'defeat']], ['player', ['jab', 'cross', 'hurt', 'defeat']]]) {
+      const gltf = await new GLTFLoader().loadAsync(`models/${model}.glb`);
+      for (const clip of clips) {
+        const character = new Character(gltf, 2);
+        const toes = () => ['L_ToeBase', 'R_ToeBase'].map((name) => character.joint(name));
+        const ground = Math.min(...toes().map((toe) => toe.y));
+        character.play(clip, { loop: false, fade: 0.001 });
+        const frames = Array.from({ length: Math.ceil(gltf.animations.find((a: { name: string }) => a.name === clip)!.duration * 60) }, () => (character.update(1 / 60), toes()));
+        const lowest = frames.slice(1).map((pair) => Math.min(...pair.map((toe) => toe.y)));
+        const floors = [0, 1].map((k) => Math.min(...frames.map((pair) => pair[k].y)));
+        let slide = 0;
+        for (let i = 2; i < frames.length; i++) {
+          for (const k of [0, 1]) {
+            const [toe, before] = [frames[i][k], frames[i - 1][k]];
+            if (Math.max(toe.y, before.y) < floors[k] + 0.03) slide += Math.hypot(toe.x - before.x, toe.z - before.z);
+          }
+        }
+        results.push({ clip: `${model}/${clip}`, off: Math.abs(Math.min(...lowest) - ground), slide });
+      }
+    }
+    return results;
+  });
+  for (const { clip, off, slide } of clips) {
+    expect(off, `${clip} off the ground`).toBeLessThan(0.01);
+    expect(slide, `${clip} planted toe slide`).toBeLessThan(0.2);
+  }
+});

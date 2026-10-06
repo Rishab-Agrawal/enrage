@@ -242,6 +242,68 @@ function inPlace(clip, nodes) {
 }
 
 /**
+ * Grounds an action take and plants its feet: Tripo's takes hover or sink by their own offsets, and some drag a foot
+ * along the ground. The body drops till its lowest toe stands on the rig's ground; then a toe within `lift` of its
+ * lowest holds where it landed, its leg bending to keep it there, and a lifted foot carries over from one hold to the next.
+ */
+function plant(clip, nodes) {
+  const rig = skeleton(nodes);
+  const [root, hipBone] = [rig.get('Armature'), rig.get('Hip')];
+  const at = (bone) => bone.getWorldPosition(new THREE.Vector3());
+  root.updateMatrixWorld(true);
+  const legs = ['L', 'R'].map((side) => ['Thigh', 'Calf', 'Foot', 'ToeBase'].map((name) => rig.get(`${side}_${name}`)));
+  const ground = Math.min(...legs.map((leg) => at(leg[3]).y));
+  const lift = 0.07 * (at(hipBone).y - ground);
+  const mixer = new THREE.AnimationMixer(root);
+  // Scale keys are FBX units, which the rig's rest doesn't carry.
+  const action = mixer.clipAction(new THREE.AnimationClip('', -1, clip.tracks.filter((t) => !t.name.endsWith('.scale')))).play();
+  const pose = (t) => {
+    action.time = t;
+    mixer.update(0);
+    root.updateMatrixWorld(true);
+  };
+  const { times } = clip.tracks.find((t) => t.name === 'Hip.position');
+  const toes = Array.from(times, (t) => (pose(t), legs.map((leg) => at(leg[3]))));
+  const drop = Math.min(...toes.flat().map((p) => p.y)) - ground;
+  // Per leg and key, how far the toe is shifted over the ground: to its hold while down, eased between holds while lifted.
+  const shifts = legs.map((_, i) => {
+    const floor = Math.min(...toes.map((pair) => pair[i].y));
+    let hold = null;
+    const held = toes.map((pair) => {
+      const toe = pair[i];
+      if (toe.y > floor + lift) return (hold = null);
+      hold ??= toe;
+      return hold.clone().sub(toe).setY(0);
+    });
+    return held.map((shift, k) => {
+      if (shift) return shift;
+      const [a, b] = [held.findLastIndex((s, j) => s && j < k), held.findIndex((s, j) => s && j > k)];
+      const [from, to] = [held[a] ?? new THREE.Vector3(), held[b] ?? new THREE.Vector3()];
+      return from.clone().lerp(to, smooth(times[k], times[a] ?? 0, times[b] ?? times.at(-1)));
+    });
+  });
+  const bones = [hipBone, ...legs.flatMap((leg) => leg.slice(0, 3))];
+  const names = bones.map((bone, j) => `${bone.name}.${j ? 'quaternion' : 'position'}`);
+  const values = bones.map(() => []);
+  times.forEach((t, k) => {
+    pose(t);
+    const take = bones.map((bone) => [bone.position.clone(), bone.quaternion.clone()]);
+    hipBone.position.copy(hipBone.parent.worldToLocal(at(hipBone).setY(at(hipBone).y - drop)));
+    root.updateMatrixWorld(true);
+    legs.forEach(([thigh, calf, foot], i) => {
+      const turn = foot.getWorldQuaternion(new THREE.Quaternion());
+      reach(thigh, calf, foot, at(foot).add(shifts[i][k]), at(calf).sub(at(thigh)));
+      setWorld(foot, turn);
+    });
+    bones.forEach((bone, j) => values[j].push(...(j ? bone.quaternion : bone.position).toArray()));
+    // The mixer only rewrites a bone when its keys change.
+    bones.forEach((bone, j) => (bone.position.copy(take[j][0]), bone.quaternion.copy(take[j][1])));
+  });
+  clip.tracks = clip.tracks.filter((track) => !names.includes(track.name));
+  names.forEach((name, j) => clip.tracks.push(new (j ? THREE.QuaternionKeyframeTrack : THREE.VectorKeyframeTrack)(name, times, values[j])));
+}
+
+/**
  * Plays an action take in place: its hips keep their height and turn but stand over the rig's rest hips. Returns the
  * ground they covered as travel, [time, x, z, ...] in the model's frame, for the game to move the body by: a step
  * then carries on into whatever plays next instead of snapping back.
@@ -404,7 +466,10 @@ for (const [character, clips] of Object.entries(CHARACTERS)) {
     }
     const animation = doc.createAnimation(name);
     if (IN_PLACE.has(name)) animation.setExtras(inPlace(clip, nodes));
-    else if (!STANDING.has(name)) animation.setExtras({ travel: rootMotion(clip, nodes) });
+    else if (!STANDING.has(name)) {
+      plant(clip, nodes);
+      animation.setExtras({ travel: rootMotion(clip, nodes) });
+    }
     for (const track of clip.tracks) {
       const [nodeName, property] = track.name.split('.');
       const values = Float32Array.from(track.values);
