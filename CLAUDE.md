@@ -15,7 +15,7 @@ Code and design, from architecture down to single lines, as a very experienced s
 - Comments: as crisp as possible. Never history, past mistakes or what changed.
 - Keep diffs as small as possible. Not so commits are tiny: a small diff is evidence that nothing is bloated or over-engineered.
 - When something goes stale, remove it in the same change.
-- Commit to main directly; don't create other branches.
+- Commit and push to main directly; don't create other branches.
 - Lasting knowledge that the code, git and skills don't already hold goes in this file, never in Claude's auto-memory. Only what's necessary, as crisp as possible.
 
 ## Problems are symptoms
