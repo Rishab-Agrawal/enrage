@@ -4,7 +4,8 @@ import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
 import { addOutline, toonGradient } from '../world/toon';
 import { angleTo, yawTo } from './steering';
 
-type PlayOptions = { loop?: boolean; fade?: number; speed?: number; from?: number };
+/** `track`: through an action, the upper body twists toward the aim; otherwise the clip owns the whole body. */
+type PlayOptions = { loop?: boolean; fade?: number; speed?: number; from?: number; track?: boolean };
 /**
  * A looping in-place clip: the ground speed it depicts at rate 1, m/s, the metres a cycle covers, and where in the
  * cycle, 0 to 1, the left foot strikes. Gaits played at one phase from their strikes step together.
@@ -86,6 +87,8 @@ export class Character {
   /** One knee raised and opened outward, as in a quick step: positive the left, negative the right, up to 1 at full height. */
   private knee = 0;
   private pivoting: Pivot | null = null;
+  /** Whether the action under way tracks the aim. */
+  private tracking = false;
   private lastAim = 0;
   /** Seconds the aim has been at rest. */
   private still = 0;
@@ -219,8 +222,9 @@ export class Character {
   }
 
   /** Crossfade to an action clip, ending locomotion and any gesture. */
-  play(name: string, { fade = 0.18, ...options }: PlayOptions = {}): void {
+  play(name: string, { fade = 0.18, track = false, ...options }: PlayOptions = {}): void {
     this.idle = null;
+    this.tracking = track;
     this.endGesture(fade);
     this.blend(new Map([[cue(this.action(name), options), 1]]), fade);
   }
@@ -290,14 +294,16 @@ export class Character {
 
   /**
    * The hips follow the aim: closely on the move; standing, the upper body leads and the hips hold until it has
-   * twisted as far as it goes, then catch up in a pivot's two steps. Mid-action the clip owns the hips: the upper body
-   * twists toward the aim, which stops where the twist does.
+   * twisted as far as it goes, then catch up in a pivot's two steps; an action that tracks the aim turns the same way
+   * over its clip. Any other action owns the whole body, and the aim eases after its hips.
    */
   private face(delta: number): void {
     const facing = this.root.rotation.y;
     const lag = angleTo(facing, this.aim);
     this.still = Math.abs(angleTo(this.lastAim, this.aim)) < AIM_REST * delta ? this.still + delta : 0;
-    if (!this.idle) {
+    const steering = !!this.idle || this.tracking;
+    if (!steering) {
+      this.aim += angleTo(this.aim, facing) * (1 - Math.exp(-10 * delta));
       this.pivoting = null;
     } else if (this.moving) {
       this.turn(lag * (1 - Math.exp(-20 * delta)));
@@ -315,10 +321,9 @@ export class Character {
     }
     this.lastAim = this.aim;
     // The aim drags the hips round, mid-pivot or not, rather than twist the upper body past MAX_TWIST.
-    const lead = angleTo(this.root.rotation.y, this.aim);
+    const lead = steering ? angleTo(this.root.rotation.y, this.aim) : 0;
     const twist = THREE.MathUtils.clamp(lead, -MAX_TWIST, MAX_TWIST);
-    if (!this.idle) this.aim -= lead - twist;
-    else if (lead !== twist) {
+    if (lead !== twist) {
       this.turn(lead - twist, this.pivoting?.about);
       if (this.pivoting) this.pivoting.from += lead - twist;
     }

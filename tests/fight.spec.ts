@@ -317,3 +317,22 @@ test('fighting in rounds and resting while he is calm wins', async ({ page }) =>
   expect((await read(page)).npc.health).toBe(400);
   expect(errors).toEqual([]);
 });
+
+test('an action owns the whole body unless it tracks the aim: then his hips pivot round to it', async ({ page }) => {
+  await start(page);
+  const [owned, tracked] = await page.evaluate(async () => {
+    const { GLTFLoader } = await import('/node_modules/three/examples/jsm/loaders/GLTFLoader.js' as string);
+    const { Character } = await import('/src/entities/Character.ts' as string);
+    const gltf = await new GLTFLoader().loadAsync('models/npc.glb');
+    return [false, true].map((track) => {
+      const character = new Character(gltf, 2);
+      character.play(track ? 'haymaker' : 'defeat', { loop: false, track });
+      character.aim = 1.4; // she is well off to his left
+      for (let i = 0; i < 60; i++) character.update(1 / 60);
+      return { facing: character.root.rotation.y, twist: character['twist'] as number };
+    });
+  });
+  expect(Math.abs(owned.facing) + Math.abs(owned.twist)).toBeLessThan(0.01);
+  expect(tracked.facing).toBeGreaterThan(0.5);
+  expect(tracked.twist).toBeLessThanOrEqual(0.8);
+});

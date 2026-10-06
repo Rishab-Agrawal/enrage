@@ -128,7 +128,7 @@ export class Npc {
         else this.walk(this.toPlayer.normalize(), tuning.npcRunSpeed, delta);
         break;
       case 'attack':
-        // His upper body tracks her through the wind-up, committed after contact: sidestepping late works.
+        // He tracks her through the wind-up, committed after contact: sidestepping late works.
         if (this.contactAt > 0) aimToward(this.character, yawTo(this.toPlayer), 2.6, delta);
         if (this.contactAt > 0 && this.timer >= this.contactAt) {
           this.contactAt = 0;
@@ -140,6 +140,7 @@ export class Npc {
         break;
       case 'recover':
         if (distance > ATTACKS[this.attack].range) this.walk(this.toPlayer.normalize(), WALK_SPEED, delta);
+        else aimToward(this.character, yawTo(this.toPlayer), 7, delta);
         if (this.timer >= RECOVER_TIME) this.enter('chase');
         break;
       case 'flinch':
@@ -185,7 +186,7 @@ export class Npc {
     this.enter('attack');
     this.contactAt = (attack.contact - attack.from) / attack.speed;
     this.endAt = (attack.to - attack.from) / attack.speed;
-    this.character.play(this.attack, { loop: false, from: attack.from, speed: attack.speed, fade: 0.1 });
+    this.character.play(this.attack, { loop: false, from: attack.from, speed: attack.speed, fade: 0.1, track: true });
     events.push({ type: 'swing', who: 'npc', heavy: true });
   }
 
