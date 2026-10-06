@@ -18,7 +18,8 @@ export class Input {
     if (event.code === 'KeyM') this.pressed.add('mute');
   };
   private readonly onKeyUp = (event: KeyboardEvent) => this.keys.delete(event.code);
-  private readonly onBlur = () => this.keys.clear();
+  // Focus moving to another window or into a widget takes the keyups with it (lil-gui's swallow them): let held keys go.
+  private readonly release = () => this.keys.clear();
   private readonly onPointerDown = (event: PointerEvent) => {
     // The click that captures the mouse is not a strike. A refused lock (e.g. just after Esc) waits for the next click.
     // Raw movement: Chrome's default lock recentres the cursor, and fast travel then spikes or stalls at the window's
@@ -35,7 +36,8 @@ export class Input {
   constructor(private readonly surface: HTMLElement) {
     window.addEventListener('keydown', this.onKeyDown);
     window.addEventListener('keyup', this.onKeyUp);
-    window.addEventListener('blur', this.onBlur);
+    window.addEventListener('blur', this.release);
+    window.addEventListener('focusin', this.release);
     surface.addEventListener('pointerdown', this.onPointerDown);
     surface.addEventListener('contextmenu', this.onContextMenu);
     surface.addEventListener('mousemove', this.onMouseMove);
@@ -78,7 +80,8 @@ export class Input {
   dispose(): void {
     window.removeEventListener('keydown', this.onKeyDown);
     window.removeEventListener('keyup', this.onKeyUp);
-    window.removeEventListener('blur', this.onBlur);
+    window.removeEventListener('blur', this.release);
+    window.removeEventListener('focusin', this.release);
     this.surface.removeEventListener('pointerdown', this.onPointerDown);
     this.surface.removeEventListener('contextmenu', this.onContextMenu);
     this.surface.removeEventListener('mousemove', this.onMouseMove);

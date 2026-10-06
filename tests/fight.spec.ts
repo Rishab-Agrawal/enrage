@@ -139,6 +139,20 @@ test('a click captures the mouse without striking; then the mouse turns her, unt
   expect(errors).toEqual([]);
 });
 
+test('a key let go while the debug panel has focus does not stay held', async ({ page }) => {
+  const errors = await start(page);
+  await capture(page);
+  await page.keyboard.down('KeyW');
+  await page.evaluate(() => document.exitPointerLock());
+  await page.locator('#debug select').focus(); // as clicking it to change his mood does; it keeps the keyup
+  await setMood(page, 'calm');
+  await page.keyboard.up('KeyW');
+  await capture(page);
+  await page.waitForTimeout(600);
+  expect((await read(page)).player.speed).toBeLessThan(0.05);
+  expect(errors).toEqual([]);
+});
+
 test('turning on the spot, her upper body leads and her hips pivot to catch up', async ({ page }) => {
   const errors = await start(page);
   await capture(page);
