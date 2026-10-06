@@ -18,8 +18,8 @@ const STANDING = 0.3;
 const GAIT_FADE = 0.2;
 const UP = new THREE.Vector3(0, 1, 0);
 const OCTANT = Math.PI / 4;
-/** Bones that share a twist, hips to head: the legs stay put. */
-const SPINE = ['Waist', 'Spine01', 'Spine02', 'NeckTwist01', 'Head'];
+/** Bones that share a twist, waist to chest: the arms and head turn the whole of it, the legs stay put. */
+const SPINE = ['Waist', 'Spine01', 'Spine02'];
 /** How far a fully raised knee swings the thigh forward, bends the knee and opens outward, rad. */
 const KNEE_FLEX = 0.3;
 const KNEE_BEND = 0.5;

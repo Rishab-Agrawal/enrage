@@ -10,9 +10,12 @@ import { aimToward, angleTo, turnToward, yawTo } from './steering';
  * swinging, so the take's own footwork carries the blow onto her if she stands. The haymaker's long crouch is its telegraph.
  */
 const ATTACKS = {
-  punch: { range: 1.3, from: 0.1, contact: 0.7, to: 1.3, speed: 1.2, hand: 'L_Hand', knockback: 5.5 },
-  haymaker: { range: 1, from: 0.9, contact: 2.3, to: 2.65, speed: 1.6, hand: 'R_Hand', knockback: 10.5 },
+  punch: { range: 1.1, from: 0.35, contact: 0.7, to: 1.3, speed: 1.2, hand: 'L_Hand', knockback: 5.5 },
+  haymaker: { range: 1, from: 1.95, contact: 2.3, to: 2.65, speed: 1.6, hand: 'R_Hand', knockback: 10.5 },
 };
+const windUp = ({ from, contact, speed }: (typeof ATTACKS)[keyof typeof ATTACKS]) => (contact - from) / speed;
+/** He swings at this distance whatever she does: any closer, his run would be shoving her along. */
+const CLINCH = 0.95;
 /**
  * A calm NPC shoves off a player closing on him, dashing or not: he wheels round at SHOVE_TURN rad/s and pushes, starting
  * so his palms are out, SHOVE_LAND s into the push, as she reaches SHOVE_REACH. She is shoved the moment she gets
@@ -123,13 +126,16 @@ export class Npc {
         turnToward(this.character, yawTo(this.toPlayer), 4, delta);
         if (this.timer >= ROAR_TIME) this.enter('chase');
         break;
-      case 'chase':
-        if (distance <= ATTACKS[this.attack].range) this.startAttack(events);
+      case 'chase': {
+        // He swings once she'll still be in reach as the blow lands, judging by her speed toward him.
+        const attack = ATTACKS[this.attack];
+        if (distance - closing * windUp(attack) <= attack.range || distance <= CLINCH) this.startAttack(events);
         else this.walk(this.toPlayer.normalize(), tuning.npcRunSpeed, delta);
         break;
+      }
       case 'attack':
         // He tracks her through the wind-up, committed after contact: sidestepping late works.
-        if (this.contactAt > 0) aimToward(this.character, yawTo(this.toPlayer), 2.6, delta);
+        if (this.contactAt > 0) aimToward(this.character, yawTo(this.toPlayer), 5, delta);
         if (this.contactAt > 0 && this.timer >= this.contactAt) {
           this.contactAt = 0;
           const { hand, knockback } = ATTACKS[this.attack];
@@ -184,7 +190,7 @@ export class Npc {
   private startAttack(events: FightEvent[]): void {
     const attack = ATTACKS[this.attack];
     this.enter('attack');
-    this.contactAt = (attack.contact - attack.from) / attack.speed;
+    this.contactAt = windUp(attack);
     this.endAt = (attack.to - attack.from) / attack.speed;
     this.character.play(this.attack, { loop: false, from: attack.from, speed: attack.speed, fade: 0.1, track: true });
     events.push({ type: 'swing', who: 'npc', heavy: true });

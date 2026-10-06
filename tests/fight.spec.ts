@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import type { FightEvent } from '../src/game/events';
 import { tuning } from '../src/game/tuning';
 
 // Real-input playtests: keyboard, mouse and the debug panel's mood control, as a player would use them.
@@ -295,11 +296,11 @@ test('a straight fight is lost: no regen while he is enraged', async ({ page }) 
 });
 
 test('fighting in rounds and resting while he is calm wins', async ({ page }) => {
-  test.setTimeout(300_000);
+  test.setTimeout(480_000);
   const errors = await start(page);
   let rounds = 0;
   let d = await read(page);
-  while (!d.outcome && rounds < 12) {
+  while (!d.outcome && rounds < 16) {
     rounds += 1;
     await setMood(page, 'enraged');
     d = await brawl(page, 40, (now) => now.player.health < 35);
@@ -335,4 +336,48 @@ test('an action owns the whole body unless it tracks the aim: then his hips pivo
   expect(Math.abs(owned.facing) + Math.abs(owned.twist)).toBeLessThan(0.01);
   expect(tracked.facing).toBeGreaterThan(0.5);
   expect(tracked.twist).toBeLessThanOrEqual(0.8);
+});
+
+test('walking back or sideways, before or as he swings, does not dodge his blows', async ({ page }) => {
+  await start(page);
+  const misses = await page.evaluate(async () => {
+    const THREE = await import('/node_modules/three/build/three.module.js' as string);
+    const { GLTFLoader } = await import('/node_modules/three/examples/jsm/loaders/GLTFLoader.js' as string);
+    const { Npc } = await import('/src/entities/Npc.ts' as string);
+    const gltf = await new GLTFLoader().loadAsync('models/npc.glb');
+    const misses: string[] = [];
+    // She walks back at her backing speed or sideways at her strafing speed: all along, or 0.2 s into each of his swings.
+    for (const [back, side] of [[1.5, 0], [0, 2]]) {
+      for (const reactive of [false, true]) {
+        for (const pick of [0.1, 0.9]) {
+          const npc = new Npc(gltf, () => pick); // punches only, then haymakers only
+          const player = new THREE.Vector3(0, 0, 2);
+          const events: FightEvent[] = [];
+          npc.setMood('enraged', events);
+          let [swings, hits, swungAt] = [0, 0, -9];
+          for (let t = 0; t < 20; t += 1 / 60) {
+            const away = player.clone().sub(npc.position).setY(0).normalize();
+            if (!reactive || (npc.state === 'attack' && t - swungAt > 0.2)) {
+              player.addScaledVector(away, back / 60).addScaledVector(new THREE.Vector3(-away.z, 0, away.x), side / 60);
+            }
+            if (player.length() > 13) player.setLength(13); // inside the arena's edge
+            npc.update(1 / 60, player, events);
+            const apart = player.clone().sub(npc.position).setY(0);
+            if (apart.length() < 0.9) player.copy(npc.position).add(apart.setLength(0.9)); // bodies don't overlap
+            npc.character.update(1 / 60);
+            for (const event of events) {
+              if (event.type === 'swing') (swings += 1), (swungAt = t);
+              if (event.type !== 'contact') continue;
+              const arm = new THREE.Line3(npc.position.clone().setY(0), event.at.clone().setY(0));
+              if (arm.closestPointToPoint(player, true, new THREE.Vector3()).distanceTo(player) <= 0.45) hits += 1;
+            }
+            events.length = 0;
+          }
+          if (hits < 0.85 * swings) misses.push(`${back ? 'back' : 'side'} ${reactive ? 'on his swing' : 'all along'} ${pick < 0.5 ? 'punch' : 'haymaker'}: ${hits}/${swings}`);
+        }
+      }
+    }
+    return misses;
+  });
+  expect(misses).toEqual([]);
 });
