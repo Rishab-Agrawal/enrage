@@ -6,8 +6,8 @@ import { Character } from './Character';
 import { aimToward, angleTo, turnToward, yawTo } from './steering';
 
 /**
- * Clip-second windows; `contact` is when the striking `hand` is at full stretch. He closes to `range`, m, before
- * swinging, so the take's own footwork carries the blow onto her if she stands. The haymaker's long crouch is its telegraph.
+ * Clip-second windows, each starting with the blow already under way; `contact` is when the striking `hand` is at full
+ * stretch. He swings when she'll be within `range`, m, as it lands: the take's own footwork carries the blow onto her.
  */
 const ATTACKS = {
   punch: { range: 1.1, from: 0.35, contact: 0.7, to: 1.3, speed: 1.2, hand: 'L_Hand', knockback: 5.5 },
