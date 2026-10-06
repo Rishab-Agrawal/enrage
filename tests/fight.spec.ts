@@ -110,10 +110,10 @@ test('W walks, Shift sprints, S backs up, A/D step sideways, diagonals are no fa
   expect(diagonal.heading).toBeGreaterThan(-Math.PI / 2 + 0.3); // forward and right
   expect(diagonal.heading).toBeLessThan(-0.3);
   expect(diagonal.moved).toBeLessThan(1.05 * Math.max(walked.moved, right.moved));
-  // Sprinting, D steers her run a little, at full speed.
+  // Sprinting, D steers her run a little, 5% slower.
   expect(sprintDiagonal.heading).toBeGreaterThan(-Math.PI / 4);
   expect(sprintDiagonal.heading).toBeLessThan(-0.1);
-  expect(sprintDiagonal.moved).toBeGreaterThan(0.95 * sprinted.moved);
+  expect(sprintDiagonal.moved / sprinted.moved).toBeCloseTo(0.95, 1);
   // No key turns her.
   for (const { turned } of [walked, sprinted, backed, right, left, diagonal, sprintDiagonal, backDiagonal]) expect(Math.abs(turned)).toBeLessThan(1e-6);
   expect((await travel(['ShiftLeft'], 100)).moved).toBeGreaterThan(1.5);

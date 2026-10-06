@@ -14,6 +14,8 @@ const STRIKES = [
 const DODGE_TIME = 0.32;
 const DODGE_SPEED = 10;
 const DODGE_COOLDOWN = 0.7;
+/** Share of her sprint's speed she keeps while A/D steer it. */
+const STEERED_RUN = 0.95;
 const HURT_TIME = 0.42;
 /** A shove sends her reeling back this fast, m/s, out of control for REEL_TIME. */
 const SHOVE_SPEED = 14;
@@ -117,13 +119,13 @@ export class Player {
       if (this.timer < this.contactAt && gap > 0 && gap < 1.2) this.position.addScaledVector(this.toNpc.normalize(), Math.min(gap, 3 * delta));
     } else {
       // The mouse turns her; W/S walk her along her facing and A/D step her sideways, on a diagonal no faster than
-      // straight. Shift runs her forward only, so A/D then only steer her run a little.
+      // straight. Shift runs her forward only, so A/D then only steer her run a little, and slow it to STEERED_RUN.
       this.character.aim -= look * tuning.mouseTurn;
       this.character.running = this.move.y > 0 && !!input?.sprinting;
       const speed = this.move.y < 0 ? tuning.playerBackSpeed : this.character.running ? tuning.playerSprintSpeed : tuning.playerWalkSpeed;
       const [sin, cos] = [Math.sin(this.yaw), Math.cos(this.yaw)];
       this.wish.set(sin, 0, cos).multiplyScalar(this.move.y * speed).add(this.side.set(-cos, 0, sin).multiplyScalar(this.move.x * tuning.playerStrafeSpeed));
-      this.wish.clampLength(0, Math.max(speed, tuning.playerStrafeSpeed));
+      this.wish.clampLength(0, this.character.running ? speed * (this.move.x ? STEERED_RUN : 1) : Math.max(speed, tuning.playerStrafeSpeed));
       this.velocity.lerp(this.wish, 1 - Math.exp(-14 * delta));
     }
     this.knock.multiplyScalar(Math.exp(-6 * delta));
@@ -187,6 +189,7 @@ export class Player {
     this.character.turn(angleTo(this.character.root.rotation.y, this.yaw));
     this.velocity.set(Math.sin(this.yaw), 0, Math.cos(this.yaw)).multiplyScalar(DODGE_SPEED);
     this.character.locomote('idle');
+    this.character.running = true; // a dash is a burst of her run
     events.push({ type: 'dodge', at: this.position.clone() });
   }
 

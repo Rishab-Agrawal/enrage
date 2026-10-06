@@ -3,14 +3,14 @@ export const tuning = {
   playerMaxHealth: 100,
   playerRegen: 3,
   playerWalkSpeed: 2,
-  playerSprintSpeed: 5.5,
+  playerSprintSpeed: 5.3,
   playerBackSpeed: 1.5,
   playerStrafeSpeed: 2,
   /** Rad per pixel of mouse travel. */
   mouseTurn: 0.003,
   strikeDamage: 9,
   npcMaxHealth: 400,
-  npcRunSpeed: 5.7,
+  npcRunSpeed: 5.5,
   punchDamage: 16,
   haymakerDamage: 30,
 };
