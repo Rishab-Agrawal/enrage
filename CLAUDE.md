@@ -12,6 +12,7 @@ Stylized anime, Studio Ghibli × Genshin Impact: cel-shaded characters, soft lig
 
 Code and design, from architecture down to single lines, as a very experienced senior engineer would write them: no bloat, nothing stale, no over-engineering, easy to maintain. The `ponytail` skill is a useful guide, not the whole standard.
 
+- Check if there are any standard/official way of doing what you are trying to do, rather than reinventing the wheel with sub-par quality.
 - Comments: as crisp as possible. Never history, past mistakes or what changed.
 - Keep diffs as small as possible. Not so commits are tiny: a small diff is evidence that nothing is bloated or over-engineered.
 - When something goes stale, remove it in the same change.
