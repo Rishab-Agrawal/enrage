@@ -21,7 +21,7 @@ The player strikes to empty the NPC's health. His heavy attacks create risk, and
 
 | Clause | Proof in code |
 | --- | --- |
-| Verb on real input | LMB strike, WASD walk, Shift sprint (dash when standing), RMB dash (`Input.ts`) |
+| Verb on real input | Left click strike, WASD walk, Shift sprint (dash when standing) (`Input.ts`) |
 | Objective visible | Both health bars, top of screen |
 | Pressure in the first minute | An enraged NPC chases and hits for 18–24 |
 | Reward changes state | Damage is permanent: the NPC never heals |

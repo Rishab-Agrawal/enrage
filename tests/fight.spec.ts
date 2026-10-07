@@ -244,7 +244,7 @@ test('legs settle on the speed the body actually moves at', async ({ page }) => 
   expect(errors).toEqual([]);
 });
 
-test('a calm NPC shoves off a player who rushes him, dashing too, before she can touch him', async ({ page }) => {
+test('a calm NPC shoves off a player who rushes him before she can touch him', async ({ page }) => {
   const errors = await start(page);
   // Every frame: how close she ever got, and how many shoves she took.
   await page.evaluate(() => {
@@ -260,17 +260,7 @@ test('a calm NPC shoves off a player who rushes him, dashing too, before she can
     };
     sample();
   });
-  let rushing = true;
-  const dashes = (async () => {
-    while (rushing) {
-      await page.mouse.down({ button: 'right' });
-      await page.mouse.up({ button: 'right' });
-      await page.waitForTimeout(750);
-    }
-  })();
   const d = await brawl(page, 10, () => false);
-  rushing = false;
-  await dashes;
   const { closest, shoves } = await page.evaluate(() => {
     const { closest, shoves } = window as unknown as { closest: number; shoves: number };
     return { closest, shoves };

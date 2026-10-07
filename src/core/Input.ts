@@ -6,7 +6,7 @@ import * as THREE from 'three';
  */
 export class Input {
   private readonly keys = new Set<string>();
-  private readonly pressed = new Set<'strike' | 'dodge' | 'rematch' | 'mute'>();
+  private readonly pressed = new Set<'strike' | 'dodge' | 'rematch'>();
   private look = 0;
 
   private readonly onKeyDown = (event: KeyboardEvent) => {
@@ -15,7 +15,6 @@ export class Input {
     if (event.key === 'Shift' && this.movement(new THREE.Vector2()).lengthSq() === 0) this.pressed.add('dodge');
     this.keys.add(event.code);
     if (event.code === 'KeyR') this.pressed.add('rematch');
-    if (event.code === 'KeyM') this.pressed.add('mute');
   };
   private readonly onKeyUp = (event: KeyboardEvent) => this.keys.delete(event.code);
   // Focus moving to another window or into a widget takes the keyups with it (lil-gui's swallow them): let held keys go.
@@ -26,7 +25,6 @@ export class Input {
     // edge. Where raw input is unsupported, the plain lock. Firefox returns no promise.
     if (document.pointerLockElement !== this.surface) return void this.lock();
     if (event.button === 0) this.pressed.add('strike');
-    if (event.button === 2) this.pressed.add('dodge');
   };
   private readonly onContextMenu = (event: MouseEvent) => event.preventDefault();
   private readonly onMouseMove = (event: MouseEvent) => {
@@ -68,7 +66,7 @@ export class Input {
     return this.keys.has('ShiftLeft') || this.keys.has('ShiftRight');
   }
 
-  consume(intent: 'strike' | 'dodge' | 'rematch' | 'mute'): boolean {
+  consume(intent: 'strike' | 'dodge' | 'rematch'): boolean {
     return this.pressed.delete(intent);
   }
 

@@ -132,7 +132,6 @@ export class Game {
 
   private step(delta: number): void {
     this.elapsed += delta;
-    if (this.input.consume('mute')) this.audio.toggleMute();
     if (this.input.consume('rematch') && this.outcome) this.rematch();
 
     // Hitstop slows the fight, never the camera or effects.

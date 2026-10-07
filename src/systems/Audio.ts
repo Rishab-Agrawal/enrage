@@ -3,7 +3,6 @@ export class Audio {
   private context: AudioContext | null = null;
   private master: GainNode | null = null;
   private noise: AudioBuffer | null = null;
-  muted = false;
 
   constructor() {
     const unlock = () => {
@@ -13,11 +12,6 @@ export class Audio {
     };
     window.addEventListener('pointerdown', unlock);
     window.addEventListener('keydown', unlock);
-  }
-
-  toggleMute(): void {
-    this.muted = !this.muted;
-    if (this.master && this.context) this.master.gain.setTargetAtTime(this.muted ? 0 : 0.8, this.context.currentTime, 0.05);
   }
 
   swing(heavy: boolean): void {
@@ -70,7 +64,7 @@ export class Audio {
     const ctx = new AudioContext();
     this.context = ctx;
     this.master = ctx.createGain();
-    this.master.gain.value = this.muted ? 0 : 0.8;
+    this.master.gain.value = 0.8;
     this.master.connect(ctx.destination);
     this.noise = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate);
     const data = this.noise.getChannelData(0);
