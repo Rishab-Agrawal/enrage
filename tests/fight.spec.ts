@@ -15,6 +15,13 @@ async function start(page: Page): Promise<string[]> {
   const errors: string[] = [];
   page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
   page.on('pageerror', (e) => errors.push(e.message));
+  // Raw mouse input reads the machine's real mouse, even headless: lock without it, so only Playwright's mouse turns her.
+  await page.addInitScript(() => {
+    const lock = Element.prototype.requestPointerLock;
+    Element.prototype.requestPointerLock = function () {
+      return lock.call(this);
+    };
+  });
   await page.goto('/');
   await page.waitForFunction(() => (window.__THREE_GAME_DIAGNOSTICS__?.frame ?? 0) > 10);
   await page.evaluate(() => window.__THREE_GAME_TEST_HOOKS__?.seed(42));
