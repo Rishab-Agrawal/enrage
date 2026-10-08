@@ -8,6 +8,8 @@ export class Input {
   private readonly keys = new Set<string>();
   private readonly pressed = new Set<'strike' | 'dodge' | 'rematch' | 'speak' | 'pause'>();
   private look = 0;
+  /** `performance.now()` before which mouse travel is ignored. */
+  private lookFrom = 0;
 
   private readonly onKeyDown = (event: KeyboardEvent) => {
     if (event.repeat) return;
@@ -37,7 +39,7 @@ export class Input {
   };
   private readonly onContextMenu = (event: MouseEvent) => event.preventDefault();
   private readonly onMouseMove = (event: MouseEvent) => {
-    if (this.captured) this.look += event.movementX;
+    if (this.captured && event.timeStamp >= this.lookFrom) this.look += event.movementX;
   };
 
   constructor(private readonly surface: HTMLElement) {
@@ -86,6 +88,11 @@ export class Input {
 
   consume(intent: 'strike' | 'dodge' | 'rematch' | 'speak' | 'pause'): boolean {
     return this.pressed.delete(intent);
+  }
+
+  /** Ignore mouse travel for a second: the hand that just clicked or pressed R is still settling on the mouse. */
+  holdLook(): void {
+    this.lookFrom = performance.now() + 1000;
   }
 
   /** Forget latched presses and mouse travel, e.g. made on the result screen. */

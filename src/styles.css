@@ -199,7 +199,7 @@ body,
 /* Gorran's lines, under the health bars. */
 #subtitle {
   position: absolute;
-  top: 128px;
+  top: 160px;
   inset-inline: 16px;
   margin: 0;
   font-weight: 700;

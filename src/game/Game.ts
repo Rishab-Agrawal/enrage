@@ -129,6 +129,7 @@ export class Game {
     this.events.length = 0;
     this.line = '';
     this.input.clear();
+    this.input.holdLook();
     this.debug.sync();
     this.cameraRig.update(0, this.player.position, this.player.yaw, true);
   }
@@ -162,6 +163,7 @@ export class Game {
   }
 
   private show(screen: Screen): void {
+    if (this.screen === 'title') this.input.holdLook();
     this.screen = screen;
     // A pause lets go of the mic, and presses made off the fight don't carry into it.
     this.voice.update(0, false, false);

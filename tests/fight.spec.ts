@@ -42,6 +42,7 @@ async function capture(page: Page): Promise<void> {
   await page.mouse.down();
   await page.mouse.up();
   await expect.poll(() => page.evaluate(() => document.pointerLockElement?.id)).toBe('game-canvas');
+  await page.waitForTimeout(1000); // the mouse turns her only a second into the fight
 }
 
 /** Slide the mouse sideways as far as turns her by `radians`, positive left, once it is captured. */
@@ -405,13 +406,15 @@ test('fighting in rounds and resting while he is calm wins', async ({ page }) =>
   expect(errors).toEqual([]);
 });
 
-test('a rematch faces her at him, whatever the mouse did on the result screen', async ({ page }) => {
+test('a rematch faces her at him, whatever the mouse did on the result screen or in its first second', async ({ page }) => {
   const errors = await start(page);
   await capture(page);
   await page.evaluate(() => window.__THREE_GAME_TEST_HOOKS__?.setState('defeat'));
   await look(page, 1.5);
   await page.keyboard.press('KeyR');
   await expect.poll(async () => (await read(page)).outcome).toBeNull();
+  await look(page, 1.5);
+  await page.waitForTimeout(100);
   expect((await read(page)).player.yaw).toBeCloseTo(Math.PI, 2);
   expect(errors).toEqual([]);
 });
