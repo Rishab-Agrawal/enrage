@@ -194,6 +194,7 @@ export class Game {
     this.resolve();
     // Animate once bodies are where they end up this frame: locomotion shows the actual displacement.
     this.player.character.update(fightDelta);
+    if (this.player.character.stepped) this.audio.step(this.player.character.running);
     this.npc.character.update(fightDelta);
     this.react();
     this.judge(delta);

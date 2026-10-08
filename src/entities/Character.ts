@@ -82,6 +82,8 @@ export class Character {
   aim = 0;
   /** Whether locomotion shows each heading's fastest gait, a run, over its slowest, a walk, at whatever speed the body moves. */
   running = false;
+  /** Whether a foot struck the ground mid-stride this frame. */
+  stepped = false;
   /** Twist of the upper body over the hips, rad, positive left: where it looks ahead of where it faces. */
   private twist = 0;
   /** One knee raised and opened outward, as in a quick step: positive the left, negative the right, up to 1 at full height. */
@@ -249,6 +251,7 @@ export class Character {
     this.face(delta);
     if (delta > 0) this.velocity.subVectors(this.root.position, this.last).setY(0).divideScalar(delta);
     this.last.copy(this.root.position);
+    this.stepped = false;
     if (this.idle) this.animateGait(delta);
     if (this.snap) {
       for (const action of this.actions.values()) action.weight = this.targets.get(action) ?? 0;
@@ -371,7 +374,10 @@ export class Character {
       action.time = ((this.phase + strike) % 1) * duration;
       action.timeScale = cadence * duration;
     }
-    this.phase = (this.phase + cadence * delta) % 1;
+    const phase = this.phase + cadence * delta;
+    // The left foot strikes at phase 0, the right half a cycle on.
+    this.stepped = this.moving && Math.floor(phase * 2) > Math.floor(this.phase * 2);
+    this.phase = phase % 1;
     if (this.moving) this.settle = GAIT_FADE;
     this.blend(targets, this.settle);
   }

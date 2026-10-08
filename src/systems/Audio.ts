@@ -4,6 +4,7 @@ import { voiceFile } from '../game/lines';
 /** Music level, under the effects. */
 const MUSIC = 0.3;
 const START = 'audio/sfx/start.mp3';
+const STEPS = [1, 2, 3].map((i) => `audio/sfx/step-${i}.mp3`);
 
 /** Web Audio: procedural impacts, swings, roar, calm chime, outcome stingers and wind; recorded music, voice and effects. */
 export class Audio {
@@ -59,12 +60,22 @@ export class Audio {
       this.tracks.set(mood, gain);
       void this.load(`audio/music/${mood}.mp3`).then((buffer) => this.play(buffer, gain, true));
     }
-    void this.load(START);
+    for (const url of [START, ...STEPS]) void this.load(url);
   }
 
   /** The fight begins. */
   start(): void {
     void this.load(START).then((buffer) => this.play(buffer));
+  }
+
+  /** One of Wren's footfalls on the grass, firmer at a run. */
+  step(running: boolean): void {
+    const gain = this.context.createGain();
+    gain.gain.value = running ? 1.5 : 1;
+    gain.connect(this.master);
+    void this.load(STEPS[Math.floor(Math.random() * STEPS.length)]).then((buffer) => {
+      this.play(buffer, gain).playbackRate.value = 0.9 + Math.random() * 0.2;
+    });
   }
 
   swing(heavy: boolean): void {
