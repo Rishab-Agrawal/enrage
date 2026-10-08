@@ -9,7 +9,7 @@ const takes = (name: string, count: number) => Array.from({ length: count }, (_,
 const STEPS = takes('step', 2);
 const HURTS = takes('hurt', 3);
 const GRUNTS = takes('grunt', 3);
-const HITS = takes('hit', 3);
+const HITS = takes('hit', 2);
 const HEAVY_HITS = takes('heavy-hit', 3);
 
 /** Web Audio: procedural swings, calm chime, outcome stingers and wind; recorded music, voice and effects. */
@@ -95,7 +95,7 @@ export class Audio {
 
   /** A blow lands; `heavy` for Gorran's, on her. */
   hit(heavy: boolean): void {
-    this.vary(heavy ? HEAVY_HITS : HITS, heavy ? 1 : 0.7);
+    this.vary(heavy ? HEAVY_HITS : HITS, 1);
   }
 
   whoosh(): void {
