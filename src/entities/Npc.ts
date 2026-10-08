@@ -30,6 +30,8 @@ const SHOVE_TIME = 0.5;
 const COMFORT_DISTANCE = 6;
 const RETREAT_TO = 7.5;
 const WALK_SPEED = 1.7;
+/** How fast he steps after her through a wind-up, m/s: past her walk, short of her sprint. */
+const STEP_IN_SPEED = 3.5;
 const ROAR_TIME = 1.4;
 const RECOVER_TIME = 0.5;
 const FLINCH_TIME = 0.35;
@@ -134,11 +136,11 @@ export class Npc {
         break;
       }
       case 'attack':
-        // He tracks her through the wind-up, stepping after her as fast as she backs off, up to his run: only a dash
-        // outruns the blow. Committed after contact: sidestepping late works.
+        // He tracks her through the wind-up, stepping after her as she backs off: a sprint or dash outruns the blow.
+        // Committed after contact: sidestepping late works.
         if (this.contactAt > 0) {
           aimToward(this.character, yawTo(this.toPlayer), 5, delta);
-          this.position.addScaledVector(this.toPlayer.normalize(), THREE.MathUtils.clamp(-closing, 0, tuning.npcRunSpeed) * delta);
+          this.position.addScaledVector(this.toPlayer.normalize(), THREE.MathUtils.clamp(-closing, 0, STEP_IN_SPEED) * delta);
         }
         if (this.contactAt > 0 && this.timer >= this.contactAt) {
           this.contactAt = 0;

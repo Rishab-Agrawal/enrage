@@ -412,3 +412,36 @@ test('walking away, back or forward, or sideways, before or as he swings, does n
   });
   expect(misses).toEqual([]);
 });
+
+test('sprinting off as he swings outruns his blows', async ({ page }) => {
+  await start(page);
+  const landed = await page.evaluate(async () => {
+    const THREE = await import('/node_modules/three/build/three.module.js' as string);
+    const { GLTFLoader } = await import('/node_modules/three/examples/jsm/loaders/GLTFLoader.js' as string);
+    const { Npc } = await import('/src/entities/Npc.ts' as string);
+    const gltf = await new GLTFLoader().loadAsync('models/npc.glb');
+    const landed: string[] = [];
+    for (const pick of [0.1, 0.9]) {
+      const npc = new Npc(gltf, () => pick); // punches only, then haymakers only
+      const player = new THREE.Vector3(0, 0, 2);
+      const events: FightEvent[] = [];
+      npc.setMood('enraged', events);
+      let [swings, hits] = [0, 0];
+      for (let t = 0; t < 10; t += 1 / 60) {
+        if (npc.state === 'attack') player.add(player.clone().sub(npc.position).setY(0).setLength(5.3 / 60));
+        npc.update(1 / 60, player, events);
+        npc.character.update(1 / 60);
+        for (const event of events) {
+          if (event.type === 'swing') swings += 1;
+          if (event.type !== 'contact') continue;
+          const arm = new THREE.Line3(npc.position.clone().setY(0), event.at.clone().setY(0));
+          if (arm.closestPointToPoint(player, true, new THREE.Vector3()).distanceTo(player) <= 0.45) hits += 1;
+        }
+        events.length = 0;
+      }
+      landed.push(`${hits}/${swings}`);
+    }
+    return landed;
+  });
+  expect(landed.every((s) => s.startsWith('0/') && s !== '0/0'), landed.join(', ')).toBe(true);
+});
