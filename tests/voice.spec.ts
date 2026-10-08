@@ -5,7 +5,7 @@ test('the mic listens for at most LISTEN s per press, then ignores presses for C
   const voice = new Voice();
   voice.update(0.1, true, true);
   expect(voice.state).toBe('listening');
-  voice.update(LISTEN, false, true);
+  expect(voice.update(LISTEN, false, true)).toBe(true);
   expect(voice.state).toBe('cooldown');
   voice.update(COOLDOWN / 2, true, true);
   expect(voice.state).toBe('cooldown');

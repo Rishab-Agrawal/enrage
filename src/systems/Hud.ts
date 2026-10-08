@@ -11,6 +11,7 @@ type HudState = {
   screen: Screen;
   voice: VoiceState;
   voiceLeft: number; // 0..1
+  line: string;
   regenerating: boolean;
   outcome: Outcome;
   npcHealthLeft: number;
@@ -32,6 +33,7 @@ export class Hud {
   private readonly npcFill = $('.npc .fill');
   private readonly npcChip = $('.npc .chip');
   private readonly npcPortrait = $<HTMLImageElement>('.npc img');
+  private readonly subtitle = $('#subtitle');
   private readonly voice = $('#voice');
   private readonly goal = $('#voice p');
   private readonly voiceTimer = $('#voice .timer');
@@ -63,6 +65,14 @@ export class Hud {
       if (this.last.mood) {
         this.npcPortrait.animate([{ transform: 'scale(1.25)' }, { transform: 'scale(1)' }], { duration: 450, easing: 'cubic-bezier(.22,1,.36,1)' });
         this.goal.animate([{ opacity: 0, transform: 'translateY(8px)' }, {}], { duration: 450, easing: 'cubic-bezier(.22,1,.36,1)' });
+      }
+    }
+    if (state.line !== this.last.line) {
+      this.subtitle.classList.toggle('shown', !!state.line);
+      // An empty line fades the last one out.
+      if (state.line) {
+        this.subtitle.textContent = state.line;
+        this.subtitle.animate([{ transform: 'translateY(8px)' }, {}], { duration: 450, easing: 'cubic-bezier(.22,1,.36,1)' });
       }
     }
     if (state.voice !== this.last.voice) this.voice.className = state.voice;

@@ -163,7 +163,26 @@ body,
   }
 }
 
-/* The mood's goal over the push-to-talk mic; subtitles stack above. */
+/* Gorran's lines, under the health bars. */
+#subtitle {
+  position: absolute;
+  top: 128px;
+  inset-inline: 16px;
+  margin: 0;
+  font-weight: 700;
+  font-size: 1.4rem;
+  text-align: center;
+  text-shadow: 0 2px 0 var(--ink), 0 0 10px rgba(0, 0, 0, 0.5);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.4s;
+}
+
+#subtitle.shown {
+  opacity: 1;
+}
+
+/* The mood's goal over the push-to-talk mic. */
 #voice {
   position: absolute;
   bottom: 20px;
@@ -487,7 +506,7 @@ kbd {
   opacity: 0;
 }
 
-#app[data-screen='paused'] #voice {
+#app[data-screen='paused'] :is(#voice, #subtitle) {
   visibility: hidden;
 }
 

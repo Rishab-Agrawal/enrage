@@ -11,11 +11,14 @@ export class Voice {
   /** Seconds left in this state. */
   left = 0;
 
-  update(delta: number, pressed: boolean, held: boolean): void {
+  /** Returns whether a turn ended. */
+  update(delta: number, pressed: boolean, held: boolean): boolean {
     this.left -= delta;
+    const ended = this.state === 'listening' && (!held || this.left <= 0);
     if (this.state === 'ready' && pressed) this.enter('listening', LISTEN);
-    else if (this.state === 'listening' && (!held || this.left <= 0)) this.enter('cooldown', COOLDOWN);
+    else if (ended) this.enter('cooldown', COOLDOWN);
     else if (this.state === 'cooldown' && this.left <= 0) this.enter('ready', 0);
+    return ended;
   }
 
   /** Fraction of this state's time left, 0..1. */

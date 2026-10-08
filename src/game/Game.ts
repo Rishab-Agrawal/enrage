@@ -14,9 +14,12 @@ import { Voice } from '../systems/Voice';
 import { createSeededRandom } from '../utils/random';
 import { Arena, SUN_DIRECTION } from '../world/Arena';
 import type { FightEvent, Mood } from './events';
+import { LINES } from './lines';
 import { ARENA_RADIUS, tuning } from './tuning';
 
 const STEP = 1 / 60;
+/** How long a line of Gorran's stays up, s. */
+const LINE_TIME = 2.5;
 /** Radius of a fist, m. */
 const FIST = 0.1;
 const arm = new THREE.Line3();
@@ -56,6 +59,8 @@ export class Game {
   private outcomeTimer = 0;
   private hitstop = 0;
   private elapsed = 0;
+  private line = '';
+  private lineLeft = 0;
   private frame = 0;
   private screen: Screen = 'title';
   /** Held still for screenshots, without the pause card. */
@@ -122,6 +127,7 @@ export class Game {
     this.outcomeTimer = 0;
     this.hitstop = 0;
     this.events.length = 0;
+    this.line = '';
     this.input.clear();
     this.debug.sync();
     this.cameraRig.update(0, this.player.position, this.player.yaw, true);
@@ -143,6 +149,7 @@ export class Game {
         screen: this.screen,
         voice: this.voice.state,
         voiceLeft: this.voice.remaining,
+        line: this.line,
         regenerating: this.npc.mood === 'calm' && this.player.health < tuning.playerMaxHealth && this.player.state !== 'down',
         outcome: this.outcomeTimer > 1.4 ? this.outcome : null,
         npcHealthLeft: Math.ceil(this.npc.health),
@@ -163,7 +170,10 @@ export class Game {
     this.elapsed += delta;
     if (this.input.consume('rematch') && this.outcome) this.rematch();
     const playing = this.screen === 'fight';
-    if (playing) this.voice.update(delta, this.input.consume('speak'), this.input.speaking);
+    // Her words leave him as he was, until a model judges them.
+    if (playing && this.voice.update(delta, this.input.consume('speak'), this.input.speaking) && !this.outcome) this.say(LINES.unmoved[this.npc.mood]);
+    this.lineLeft -= delta;
+    if (this.lineLeft <= 0) this.line = '';
 
     // Hitstop slows the fight, never the camera or effects.
     this.hitstop -= delta;
@@ -234,8 +244,11 @@ export class Game {
         case 'shove':
           this.vfx.puff(this.player.position, 3);
           this.audio.swing(true);
+          // He doesn't repeat himself over every shove.
+          if (!this.line) this.say(LINES.shove);
           break;
         case 'mood':
+          this.say(LINES.mood[event.mood]);
           if (event.mood === 'enraged') {
             this.vfx.roar();
             this.audio.roar();
@@ -260,8 +273,18 @@ export class Game {
     else if (this.player.health <= 0) this.outcome = 'defeat';
     if (!this.outcome) return;
     this.audio.stinger(this.outcome === 'victory');
-    if (this.outcome === 'defeat') this.npc.standDown();
+    if (this.outcome === 'defeat') {
+      this.npc.standDown();
+      this.say(LINES.won);
+    }
     this.debug.sync();
+  }
+
+  /** A line from `lines` other than the one he just said, cosmetic so off the seeded RNG. */
+  private say(lines: string[]): void {
+    const fresh = lines.filter((line) => line !== this.line);
+    this.line = fresh[Math.floor(Math.random() * fresh.length)];
+    this.lineLeft = LINE_TIME;
   }
 
   private installTestHooks(): void {

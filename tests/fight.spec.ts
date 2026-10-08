@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import type { FightEvent } from '../src/game/events';
+import { LINES } from '../src/game/lines';
 import { tuning } from '../src/game/tuning';
 
 // Real-input playtests: keyboard, mouse and the debug panel's mood control, as a player would use them.
@@ -161,6 +162,19 @@ test('losing the mouse pauses the fight and lets go of the mic; capturing it aga
   await capture(page);
   await expect(page.locator('#pause')).toBeHidden();
   expect((await read(page)).elapsed).toBeGreaterThan(elapsed);
+  expect(errors).toEqual([]);
+});
+
+test('Gorran answers her turn at the mic as he is, and speaks up as his mood turns', async ({ page }) => {
+  const errors = await start(page);
+  await capture(page);
+  const says = (lines: string[]) => expect.poll(async () => lines.includes((await page.locator('#subtitle').textContent())!)).toBe(true);
+  await page.keyboard.press('Space');
+  await says(LINES.unmoved.calm);
+  await setMood(page, 'enraged');
+  await says(LINES.mood.enraged);
+  await setMood(page, 'calm');
+  await says(LINES.mood.calm);
   expect(errors).toEqual([]);
 });
 
