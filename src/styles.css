@@ -333,6 +333,24 @@ kbd {
   pointer-events: none;
 }
 
+#pause dl {
+  display: grid;
+  grid-template-columns: auto auto;
+  align-items: center;
+  gap: 10px 14px;
+  margin: 14px 0 24px;
+  font-weight: 700;
+  text-shadow: 0 1px 0 var(--ink);
+}
+
+#pause dt {
+  justify-self: end;
+}
+
+#pause dd {
+  margin: 0;
+}
+
 #result button {
   padding: 10px 26px;
   border: 2px solid var(--gold);
