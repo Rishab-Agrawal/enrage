@@ -1,5 +1,5 @@
 /** Longest the mic listens per press, s. */
-export const LISTEN = 20;
+export const LISTEN = 15;
 /** The mic rests this long after each turn, s, so talk can't be spammed. */
 export const COOLDOWN = 5;
 
