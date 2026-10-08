@@ -129,7 +129,7 @@ test('W walks, Shift sprints, S backs up, A/D step sideways, diagonals are no fa
   expect(errors).toEqual([]);
 });
 
-test('a full bar holds 5 s of sprint and refills as fast, and she can run on a part-refilled bar', async ({ page }) => {
+test('a full bar holds 5 s of sprint and refills as fast, after a 1 s pause once emptied, and she can run on a part-refilled bar', async ({ page }) => {
   await start(page);
   const log = await page.evaluate(async () => {
     const { GLTFLoader } = await import('/node_modules/three/examples/jsm/loaders/GLTFLoader.js' as string);
@@ -145,12 +145,12 @@ test('a full bar holds 5 s of sprint and refills as fast, and she can run on a p
       consume: (intent: string) => intent === 'dodge' && Math.abs(t - 6) < 1 / 120,
       movement: (v: { set(x: number, y: number): void }) => v.set(0, 1),
     };
-    const log: { t: number; speed: number; stamina: number; state: string }[] = [];
+    const log: { t: number; speed: number; stamina: number; winded: boolean; state: string }[] = [];
     for (; t < 14; t += 1 / 60) {
       const before = player.position.clone();
       player.update(1 / 60, input, player.position.clone().setZ(-99), false, []);
       player.character.update(1 / 60);
-      log.push({ t, speed: player.position.distanceTo(before) * 60, stamina: player.stamina, state: player.state });
+      log.push({ t, speed: player.position.distanceTo(before) * 60, stamina: player.stamina, winded: player.winded, state: player.state });
     }
     return log;
   });
@@ -160,10 +160,14 @@ test('a full bar holds 5 s of sprint and refills as fast, and she can run on a p
   expect(at(6.9).stamina).toBe(0);
   expect(at(6.9).speed).toBeCloseTo(tuning.playerWalkSpeed, 0);
   expect(log.some((s) => s.state === 'dodge')).toBe(false);
-  // Let go for 2.5 s, half refills, and she runs on it for 2.5 s.
-  expect(at(9.5).stamina).toBeCloseTo(2.5, 1);
-  expect(at(11.5).speed).toBeCloseTo(tuning.playerSprintSpeed, 0);
-  expect(at(12.5).speed).toBeCloseTo(tuning.playerWalkSpeed, 0);
+  expect(at(6.9).winded).toBe(false);
+  // Let go, it waits 1 s, winded, then refills 1.5 s worth by 9.5 s, which she runs on.
+  expect(at(7.9).stamina).toBe(0);
+  expect(at(7.9).winded).toBe(true);
+  expect(at(9.5).stamina).toBeCloseTo(1.5, 1);
+  expect(at(9.5).winded).toBe(false);
+  expect(at(10.5).speed).toBeCloseTo(tuning.playerSprintSpeed, 0);
+  expect(at(11.5).speed).toBeCloseTo(tuning.playerWalkSpeed, 0);
 });
 
 test('a click captures the mouse without striking; then the mouse turns her, until it is released', async ({ page }) => {

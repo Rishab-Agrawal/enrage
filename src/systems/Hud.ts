@@ -8,6 +8,7 @@ type HudState = {
   player: number; // 0..1
   npc: number; // 0..1
   stamina: number; // 0..1
+  winded: boolean;
   mood: Mood;
   screen: Screen;
   voice: VoiceState;
@@ -61,6 +62,7 @@ export class Hud {
     this.npcChip.style.transform = `scaleX(${this.chips.npc})`;
     this.staminaFill.style.transform = `scaleX(${state.stamina})`;
     this.stamina.classList.toggle('shown', state.stamina < 1);
+    this.stamina.classList.toggle('winded', state.winded);
 
     if (state.mood !== this.last.mood) {
       this.npcPortrait.className = state.mood;

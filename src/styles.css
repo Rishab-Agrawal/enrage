@@ -145,7 +145,7 @@ body,
   }
 }
 
-/* Stamina: a thin bar under her health, shown only while it isn't full. */
+/* Stamina: a thin bar under her health, shown only while it isn't full; it pulses while she is winded. */
 .stamina {
   grid-column: 2;
   height: 6px;
@@ -159,6 +159,16 @@ body,
 
 .stamina.shown {
   opacity: 1;
+}
+
+.stamina.winded {
+  animation: winded 0.5s ease-in-out infinite;
+}
+
+@keyframes winded {
+  50% {
+    opacity: 0.4;
+  }
 }
 
 .stamina i {

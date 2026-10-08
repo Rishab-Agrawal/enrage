@@ -16,6 +16,8 @@ const DODGE_SPEED = 10;
 const DODGE_COOLDOWN = 0.7;
 /** A dash spends this many seconds of sprint. */
 const DASH_COST = 0.75;
+/** An emptied bar waits this long, let go of, before it refills. */
+const STAMINA_PAUSE = 1;
 /** Share of her sprint's speed she keeps while A/D steer it. */
 const STEERED_RUN = 0.95;
 const HURT_TIME = 0.42;
@@ -37,6 +39,8 @@ export class Player {
   health = tuning.playerMaxHealth;
   /** Seconds of sprint left. It refills as fast as sprinting spends it, whenever she isn't holding a sprint. */
   stamina = tuning.playerStamina;
+  /** Seconds her emptied bar has been let go of. */
+  private drained = 0;
   state: State = 'move';
   private timer = 0;
   private contactAt = 0;
@@ -64,6 +68,11 @@ export class Player {
   /** Where she faces: the mouse steers it, W walks along it and the camera looks along it. */
   get yaw(): number {
     return this.character.aim;
+  }
+
+  /** Catching her breath: the emptied bar is let go of, and waits to refill. */
+  get winded(): boolean {
+    return this.drained > 0;
   }
 
   get invulnerable(): boolean {
@@ -103,7 +112,8 @@ export class Player {
     this.toNpc.subVectors(npc, this.position).setY(0);
     // A sprint held on an empty bar keeps it empty: she walks until she lets go, rather than stuttering into a run.
     const sprint = this.move.y > 0 && !!input?.sprinting;
-    if (!sprint) this.stamina = Math.min(tuning.playerStamina, this.stamina + delta);
+    this.drained = this.stamina === 0 && !sprint ? this.drained + delta : 0;
+    if (!sprint && (this.stamina > 0 || this.drained >= STAMINA_PAUSE)) this.stamina = Math.min(tuning.playerStamina, this.stamina + delta);
 
     if (this.state === 'strike' && this.contactAt > 0 && this.timer >= this.contactAt) {
       this.contactAt = 0;
