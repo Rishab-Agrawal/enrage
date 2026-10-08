@@ -4,7 +4,7 @@ export const LINES = {
   shove: ['Please go away.', 'Leave me alone.', 'I don’t want a fight.'],
   /** Her words leave his mood as it was. */
   unmoved: {
-    calm: ['Whatever.', 'Go away.', 'Stay quiet.'],
+    calm: ['Whatever.', 'If you say so.', 'Hm.'],
     enraged: ['Not so easy.', 'I don’t care.', 'I’m still angry!', 'Saying that won’t help you.'],
   },
   /** His mood turns. */
