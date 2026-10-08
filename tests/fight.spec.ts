@@ -206,13 +206,20 @@ test('until the camera has glided in behind her after the click that starts the 
 });
 
 test('what she says while Space is held shows in the debug panel', async ({ page }) => {
-  // Deepgram stubbed: a silent mic, a fake token, and a socket that answers CloseStream with a fixed transcript.
+  // Deepgram stubbed: a silent mic whose recorder leads with an empty chunk, as Firefox's does, a fake token, and a socket
+  // that, like Deepgram, ends the stream on an empty message and answers CloseStream with a fixed transcript.
   await page.addInitScript(() => {
     navigator.mediaDevices.getUserMedia = async () => new AudioContext().createMediaStreamDestination().stream;
+    const start = MediaRecorder.prototype.start;
+    MediaRecorder.prototype.start = function (timeslice) {
+      start.call(this, timeslice);
+      this.dispatchEvent(new BlobEvent('dataavailable', { data: new Blob() }));
+    };
   });
   await page.route('/api/stt-token', (route) => route.fulfill({ json: { access_token: 'test' } }));
   await page.routeWebSocket('wss://api.deepgram.com/**', (socket) =>
     socket.onMessage((message) => {
+      if (message.length === 0) socket.close();
       if (typeof message !== 'string' || JSON.parse(message).type !== 'CloseStream') return;
       socket.send(JSON.stringify({ type: 'Results', is_final: true, channel: { alternatives: [{ transcript: 'You look tired.' }] } }));
       socket.close();
