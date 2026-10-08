@@ -198,6 +198,8 @@ export class Game {
     const rage = this.npc.mood === 'enraged' && this.npc.state !== 'down';
     this.npc.character.rim.value.lerp(rage ? RAGE_RIM : PLAYER_RIM, 1 - Math.exp(-5 * delta));
     this.vfx.update(delta, this.npc.position, rage ? 'enraged' : 'calm');
+    // He stands down once she's beaten, but the music stays with the loss until the rematch.
+    this.audio.music(rage || this.outcome === 'defeat' ? 'enraged' : 'calm');
     this.arena.update(this.elapsed);
     if (playing) this.cameraRig.update(delta, this.player.position, this.player.yaw);
     else this.cameraRig.title(this.elapsed, this.offset.addVectors(this.player.position, this.npc.position).multiplyScalar(0.5));

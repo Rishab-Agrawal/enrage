@@ -1,8 +1,15 @@
-/** Procedural Web Audio: impacts, swings, roar, calm chime, outcome stingers and a wind bed. */
+import type { Mood } from '../game/events';
+
+/** Music level, under the effects. */
+const MUSIC = 0.3;
+
+/** Web Audio: procedural impacts, swings, roar, calm chime, outcome stingers and wind; a music loop per mood. */
 export class Audio {
   private context: AudioContext | null = null;
   private master: GainNode | null = null;
   private noise: AudioBuffer | null = null;
+  private readonly tracks = new Map<Mood, GainNode>();
+  private mood: Mood = 'calm';
 
   constructor() {
     const unlock = () => {
@@ -59,6 +66,15 @@ export class Audio {
     notes.forEach((f, i) => this.tone(f, i * 0.16, 1.6, 0.1, won ? 'triangle' : 'sine'));
   }
 
+  /** Crossfades the music to `mood`'s loop. */
+  music(mood: Mood): void {
+    if (mood === this.mood) return;
+    this.mood = mood;
+    const ctx = this.context;
+    if (!ctx) return;
+    for (const [track, gain] of this.tracks) gain.gain.setTargetAtTime(track === mood ? MUSIC : 0, ctx.currentTime, 0.6);
+  }
+
   private unlock(): void {
     if (this.context) return;
     const ctx = new AudioContext();
@@ -88,6 +104,24 @@ export class Audio {
     wind.connect(band).connect(level).connect(this.master);
     wind.start();
     lfo.start();
+
+    // Both loops run throughout; the mood only moves their gains.
+    for (const mood of ['calm', 'enraged'] as const) {
+      const gain = ctx.createGain();
+      gain.gain.value = mood === this.mood ? MUSIC : 0;
+      gain.connect(this.master);
+      this.tracks.set(mood, gain);
+      void fetch(`audio/music/${mood}.mp3`)
+        .then((response) => response.arrayBuffer())
+        .then((data) => ctx.decodeAudioData(data))
+        .then((buffer) => {
+          const source = ctx.createBufferSource();
+          source.buffer = buffer;
+          source.loop = true;
+          source.connect(gain);
+          source.start();
+        });
+    }
   }
 
   private noiseBurst(duration: number, from: number, to: number, volume: number): void {
