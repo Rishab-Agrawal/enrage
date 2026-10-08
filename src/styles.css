@@ -188,11 +188,11 @@ body,
   font-weight: 900;
 }
 
-#voice .calm {
+b.calm {
   color: var(--calm);
 }
 
-#voice .enraged {
+b.enraged {
   color: var(--rage);
 }
 
@@ -320,7 +320,7 @@ kbd {
 }
 
 #result p,
-#pause p {
+#pause > p {
   margin: 0 0 16px;
   font-size: 1.1rem;
   font-weight: 700;
@@ -329,8 +329,59 @@ kbd {
 
 /* Clicks fall through to the canvas, whose capture resumes the fight. */
 #pause {
-  background: rgba(25, 20, 40, 0.5);
+  background: radial-gradient(ellipse at center, rgba(25, 20, 40, 0.75), rgba(25, 20, 40, 0.45) 75%);
   pointer-events: none;
+}
+
+#pause > p {
+  animation: breathe 2.4s ease-in-out infinite;
+}
+
+@keyframes breathe {
+  50% {
+    opacity: 0.55;
+  }
+}
+
+/* How to play | Controls, split by a gold hairline. */
+.help {
+  display: grid;
+  text-wrap: pretty;
+  grid-template-columns: auto auto;
+  margin-top: 18px;
+  font-weight: 700;
+  text-shadow: 0 1px 0 var(--ink);
+}
+
+.help section {
+  padding: 0 40px;
+}
+
+.help section + section {
+  border-left: 1px solid rgba(233, 199, 123, 0.45);
+}
+
+.help h2 {
+  margin: 0 0 14px;
+  color: var(--gold);
+  font-size: 0.8rem;
+  font-weight: 900;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+}
+
+.help p {
+  max-width: 26em;
+  margin: 0 0 10px;
+  line-height: 1.6;
+}
+
+.help small {
+  display: block;
+  max-width: 32em;
+  margin-top: 16px;
+  font-size: 0.8rem;
+  opacity: 0.7;
 }
 
 #pause dl {
@@ -338,9 +389,7 @@ kbd {
   grid-template-columns: auto auto;
   align-items: center;
   gap: 10px 14px;
-  margin: 14px 0 24px;
-  font-weight: 700;
-  text-shadow: 0 1px 0 var(--ink);
+  margin: 0;
 }
 
 #pause dt {

@@ -69,12 +69,12 @@ export class Hud {
     // The arc's tail stays at twelve while its head sweeps clockwise after it.
     this.voiceTimer.style.strokeDashoffset = String(state.voiceLeft - 1);
     if (state.paused !== this.last.paused) this.pause.hidden = !state.paused;
+    if (state.paused !== this.last.paused || state.outcome !== this.last.outcome) this.voice.hidden = state.paused || !!state.outcome;
     if (state.regenerating !== this.last.regenerating) this.playerSection.classList.toggle('regen', state.regenerating);
     this.app.classList.toggle('hurt', state.player < 0.3 && !state.outcome);
 
     if (state.outcome !== this.last.outcome) {
       this.result.hidden = !state.outcome;
-      this.voice.hidden = !!state.outcome;
       this.result.className = state.outcome ?? '';
       this.resultTitle.textContent = state.outcome === 'victory' ? 'Victory' : 'Defeat';
       this.resultText.textContent =
