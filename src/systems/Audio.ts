@@ -5,6 +5,7 @@ import { voiceFile } from '../game/lines';
 const MUSIC = 0.3;
 const START = 'audio/sfx/start.mp3';
 const CHIME = 'audio/sfx/chime.mp3';
+const VICTORY = 'audio/sfx/victory.mp3';
 /** `count` takes of an effect, to pick from at random. */
 const takes = (name: string, count: number) => Array.from({ length: count }, (_, i) => `audio/sfx/${name}-${i + 1}.mp3`);
 const STEPS = takes('step', 2);
@@ -13,7 +14,7 @@ const GRUNTS = takes('grunt', 3);
 const HITS = takes('hit', 2);
 const HEAVY_HITS = takes('heavy-hit', 3);
 
-/** Web Audio: procedural swings, victory stinger and wind; recorded music, voice and effects. */
+/** Web Audio: procedural swings and wind; recorded music, voice and effects. */
 export class Audio {
   // Browsers hold a context made before the first click or key press suspended; that press resumes it.
   private readonly context = new AudioContext();
@@ -67,7 +68,7 @@ export class Audio {
       this.tracks.set(mood, gain);
       void this.load(`audio/music/${mood}.mp3`).then((buffer) => this.play(buffer, gain, true));
     }
-    for (const url of [START, CHIME, ...STEPS, ...HURTS, ...GRUNTS, ...HITS, ...HEAVY_HITS]) void this.load(url);
+    for (const url of [START, CHIME, VICTORY, ...STEPS, ...HURTS, ...GRUNTS, ...HITS, ...HEAVY_HITS]) void this.load(url);
   }
 
   /** The fight begins. */
@@ -109,7 +110,7 @@ export class Audio {
   }
 
   victory(): void {
-    [392, 493.88, 587.33, 783.99].forEach((f, i) => this.tone(f, i * 0.16, 1.6, 0.1, 'triangle'));
+    void this.load(VICTORY).then((buffer) => this.play(buffer));
   }
 
   /** Crossfades the music to `mood`'s loop. */
@@ -178,20 +179,5 @@ export class Audio {
     source.connect(filter).connect(gain).connect(this.master);
     source.start(now, Math.random());
     source.stop(now + duration);
-  }
-
-  private tone(frequency: number, delay: number, duration: number, volume: number, type: OscillatorType): void {
-    const ctx = this.context;
-    const now = ctx.currentTime + delay;
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.type = type;
-    osc.frequency.value = frequency;
-    gain.gain.setValueAtTime(0.0001, now);
-    gain.gain.exponentialRampToValueAtTime(volume, now + 0.02);
-    gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
-    osc.connect(gain).connect(this.master);
-    osc.start(now);
-    osc.stop(now + duration);
   }
 }
