@@ -12,7 +12,7 @@ const STEPS = takes('step', 2);
 const HURTS = { player: takes('wren-hurt', 3), npc: takes('gorran-hurt', 2) };
 const GRUNTS = takes('wren-grunt', 3);
 const FALLS = takes('gorran-down', 2);
-const SWINGS = { player: takes('wren-swing', 2), npc: takes('gorran-swing', 2) };
+const SWINGS = { player: takes('wren-swing', 1), npc: takes('gorran-swing', 2) };
 const HITS = takes('hit', 2);
 const HEAVY_HITS = takes('heavy-hit', 3);
 
