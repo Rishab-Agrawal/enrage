@@ -16,7 +16,7 @@ const DODGE_SPEED = 10;
 const DODGE_COOLDOWN = 0.7;
 /** A dash spends this many seconds of sprint. */
 const DASH_COST = 0.75;
-/** An emptied bar waits this long, let go of, before it refills. */
+/** An emptied bar waits this long before it refills. */
 const STAMINA_PAUSE = 1;
 /** Share of her sprint's speed she keeps while A/D steer it. */
 const STEERED_RUN = 0.95;
@@ -37,10 +37,12 @@ export class Player {
   private readonly knock = new THREE.Vector3();
   readonly radius = 0.35;
   health = tuning.playerMaxHealth;
-  /** Seconds of sprint left. It refills as fast as sprinting spends it, whenever she isn't holding a sprint. */
+  /** Seconds of sprint left. It refills as fast as sprinting spends it, whenever she isn't sprinting. */
   stamina = tuning.playerStamina;
-  /** Seconds her emptied bar has been let go of. */
+  /** Seconds the bar has sat empty. */
   private drained = 0;
+  /** Emptied, the bar ignores a held Shift: she presses it afresh to sprint again. */
+  private spent = false;
   state: State = 'move';
   private timer = 0;
   private contactAt = 0;
@@ -70,7 +72,7 @@ export class Player {
     return this.character.aim;
   }
 
-  /** Catching her breath: the emptied bar is let go of, and waits to refill. */
+  /** Catching her breath: the emptied bar waits to refill. */
   get winded(): boolean {
     return this.drained > 0;
   }
@@ -82,6 +84,7 @@ export class Player {
   reset(): void {
     this.health = tuning.playerMaxHealth;
     this.stamina = tuning.playerStamina;
+    this.spent = false;
     this.character.place(0, 6, Math.PI);
     this.velocity.set(0, 0, 0);
     this.knock.set(0, 0, 0);
@@ -110,8 +113,8 @@ export class Player {
       this.move.set(0, 0);
     }
     this.toNpc.subVectors(npc, this.position).setY(0);
-    // A sprint held on an empty bar keeps it empty: she walks until she lets go, rather than stuttering into a run.
-    const sprint = this.move.y > 0 && !!input?.sprinting;
+    if (!input?.sprinting) this.spent = false;
+    const sprint = this.move.y > 0 && !!input?.sprinting && !this.spent;
     this.drained = this.stamina === 0 && !sprint ? this.drained + delta : 0;
     if (!sprint && (this.stamina > 0 || this.drained >= STAMINA_PAUSE)) this.stamina = Math.min(tuning.playerStamina, this.stamina + delta);
 
@@ -139,8 +142,8 @@ export class Player {
       // The mouse turns her; W/S walk her along her facing and A/D step her sideways, on a diagonal no faster than
       // straight. Shift runs her forward only, so A/D then only steer her run a little, and slow it to STEERED_RUN.
       this.character.aim -= look * tuning.mouseTurn;
-      this.character.running = sprint && this.stamina > 0;
-      if (this.character.running) this.stamina = Math.max(0, this.stamina - delta);
+      this.character.running = sprint;
+      if (sprint) this.spend(delta);
       const speed = this.move.y < 0 ? tuning.playerBackSpeed : this.character.running ? tuning.playerSprintSpeed : tuning.playerWalkSpeed;
       const [sin, cos] = [Math.sin(this.yaw), Math.cos(this.yaw)];
       this.wish.set(sin, 0, cos).multiplyScalar(this.move.y * speed).add(this.side.set(-cos, 0, sin).multiplyScalar(this.move.x * tuning.playerStrafeSpeed));
@@ -198,8 +201,13 @@ export class Player {
     events.push({ type: 'swing', who: 'player', heavy: false });
   }
 
+  private spend(seconds: number): void {
+    this.stamina = Math.max(0, this.stamina - seconds);
+    if (this.stamina === 0) this.spent = true;
+  }
+
   private startDodge(events: FightEvent[]): void {
-    this.stamina = Math.max(0, this.stamina - DASH_COST);
+    this.spend(DASH_COST);
     this.buffered = null;
     this.state = 'dodge';
     this.timer = 0;

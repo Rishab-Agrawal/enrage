@@ -129,20 +129,20 @@ test('W walks, Shift sprints, S backs up, A/D step sideways, diagonals are no fa
   expect(errors).toEqual([]);
 });
 
-test('a full bar holds 5 s of sprint and refills as fast, after a 1 s pause once emptied, and she can run on a part-refilled bar', async ({ page }) => {
+test('a full bar holds 5 s of sprint and refills as fast, after a 1 s pause once emptied; a Shift held through it only walks her, and a fresh press runs on the part-refilled bar', async ({ page }) => {
   await start(page);
   const log = await page.evaluate(async () => {
     const { GLTFLoader } = await import('/node_modules/three/examples/jsm/loaders/GLTFLoader.js' as string);
     const { Player } = await import('/src/entities/Player.ts' as string);
     const player = new Player(await new GLTFLoader().loadAsync('models/player.glb'));
     let t = 0;
-    // W held throughout; Shift held but for 7–9.5 s, and Shift alone tapped at 6 s to dash.
+    // W held throughout; Shift held but for 7.5–9.5 s, and Shift alone tapped at 5.5 s to dash.
     const input = {
       get sprinting() {
-        return t < 7 || t >= 9.5;
+        return t < 7.5 || t >= 9.5;
       },
       consumeLook: () => 0,
-      consume: (intent: string) => intent === 'dodge' && Math.abs(t - 6) < 1 / 120,
+      consume: (intent: string) => intent === 'dodge' && Math.abs(t - 5.5) < 1 / 120,
       movement: (v: { set(x: number, y: number): void }) => v.set(0, 1),
     };
     const log: { t: number; speed: number; stamina: number; winded: boolean; state: string }[] = [];
@@ -156,18 +156,18 @@ test('a full bar holds 5 s of sprint and refills as fast, after a 1 s pause once
   });
   const at = (t: number) => log.find((s) => s.t >= t)!;
   expect(at(4.5).speed).toBeCloseTo(tuning.playerSprintSpeed, 0);
-  // Emptied at 5 s, and held, it stays empty: she walks, and cannot dash.
-  expect(at(6.9).stamina).toBe(0);
-  expect(at(6.9).speed).toBeCloseTo(tuning.playerWalkSpeed, 0);
+  // Emptied at 5 s, it waits 1 s, winded, though Shift is held, and she cannot dash.
+  expect(at(5.5).stamina).toBe(0);
+  expect(at(5.5).winded).toBe(true);
   expect(log.some((s) => s.state === 'dodge')).toBe(false);
-  expect(at(6.9).winded).toBe(false);
-  // Let go, it waits 1 s, winded, then refills 1.5 s worth by 9.5 s, which she runs on.
-  expect(at(7.9).stamina).toBe(0);
-  expect(at(7.9).winded).toBe(true);
-  expect(at(9.5).stamina).toBeCloseTo(1.5, 1);
-  expect(at(9.5).winded).toBe(false);
+  // Then it refills, Shift still held, and she walks on it.
+  expect(at(7).stamina).toBeCloseTo(1, 1);
+  expect(at(7).winded).toBe(false);
+  expect(at(7).speed).toBeCloseTo(tuning.playerWalkSpeed, 0);
+  // Pressed afresh at 9.5 s, she runs on the 3.5 s refilled, until it empties again.
+  expect(at(9.5).stamina).toBeCloseTo(3.5, 1);
   expect(at(10.5).speed).toBeCloseTo(tuning.playerSprintSpeed, 0);
-  expect(at(11.5).speed).toBeCloseTo(tuning.playerWalkSpeed, 0);
+  expect(at(13.5).speed).toBeCloseTo(tuning.playerWalkSpeed, 0);
 });
 
 test('a click captures the mouse without striking; then the mouse turns her, until it is released', async ({ page }) => {
