@@ -1,4 +1,4 @@
-import type { Mood } from '../game/events';
+import type { Fighter, Mood } from '../game/events';
 import { voiceFile } from '../game/lines';
 
 /** Music level, under the effects. */
@@ -9,8 +9,9 @@ const VICTORY = 'audio/sfx/victory.mp3';
 /** `count` takes of an effect, to pick from at random. */
 const takes = (name: string, count: number) => Array.from({ length: count }, (_, i) => `audio/sfx/${name}-${i + 1}.mp3`);
 const STEPS = takes('step', 2);
-const HURTS = takes('hurt', 3);
-const GRUNTS = takes('grunt', 3);
+const HURTS = { player: takes('wren-hurt', 3), npc: takes('gorran-hurt', 2) };
+const GRUNTS = takes('wren-grunt', 3);
+const FALLS = takes('gorran-down', 2);
 const HITS = takes('hit', 2);
 const HEAVY_HITS = takes('heavy-hit', 3);
 
@@ -68,7 +69,7 @@ export class Audio {
       this.tracks.set(mood, gain);
       void this.load(`audio/music/${mood}.mp3`).then((buffer) => this.play(buffer, gain, true));
     }
-    for (const url of [START, CHIME, VICTORY, ...STEPS, ...HURTS, ...GRUNTS, ...HITS, ...HEAVY_HITS]) void this.load(url);
+    for (const url of [START, CHIME, VICTORY, ...STEPS, ...HURTS.player, ...HURTS.npc, ...GRUNTS, ...FALLS, ...HITS, ...HEAVY_HITS]) void this.load(url);
   }
 
   /** The fight begins. */
@@ -81,9 +82,14 @@ export class Audio {
     this.vary(STEPS, running ? 1.5 : 1);
   }
 
-  /** Wren cries out as a blow lands on her. */
-  hurt(): void {
-    this.vary(HURTS, 0.7);
+  /** `who` cries out as a blow lands. */
+  hurt(who: Fighter): void {
+    this.vary(HURTS[who], 0.7);
+  }
+
+  /** Gorran groans as he goes down. */
+  fall(): void {
+    this.vary(FALLS, 1);
   }
 
   /** Wren's effort behind her cross. */

@@ -1,6 +1,6 @@
 import type * as THREE from 'three';
 
-type Fighter = 'player' | 'npc';
+export type Fighter = 'player' | 'npc';
 
 /** Everything gameplay announces in a frame; combat, VFX, audio and HUD all react to these. */
 export type FightEvent =

@@ -246,7 +246,8 @@ export class Game {
           const heavy = event.who === 'player';
           this.vfx.hit(event.at, heavy);
           this.audio.hit(heavy);
-          if (event.who === 'player') this.audio.hurt();
+          if (event.who === 'npc' && this.npc.health <= 0) this.audio.fall();
+          else this.audio.hurt(event.who);
           this.cameraRig.shake(heavy ? 0.55 : 0.28);
           this.hitstop = heavy ? 0.09 : 0.06;
           break;
