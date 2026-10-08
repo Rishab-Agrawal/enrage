@@ -6,9 +6,8 @@ export const tuning = {
   playerSprintSpeed: 5.3,
   playerBackSpeed: 1.5,
   playerStrafeSpeed: 2,
-  /** Seconds of sprint a full stamina bar holds, and how many it regains per second. */
-  playerStamina: 10,
-  playerStaminaRegen: 2.5,
+  /** Seconds of sprint a full stamina bar holds. */
+  playerStamina: 5,
   /** Rad per pixel of mouse travel. */
   mouseTurn: 0.003,
   strikeDamage: 15,

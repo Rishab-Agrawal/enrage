@@ -28,8 +28,7 @@ export class DebugPanel {
     balance.add(tuning, 'playerSprintSpeed', 2, 8, 0.1).name('player sprint speed');
     balance.add(tuning, 'playerBackSpeed', 0.5, 3, 0.1).name('player back speed');
     balance.add(tuning, 'playerStrafeSpeed', 0.5, 3, 0.1).name('player strafe speed');
-    balance.add(tuning, 'playerStamina', 2, 30, 0.5).name('player stamina (s of sprint)');
-    balance.add(tuning, 'playerStaminaRegen', 0.5, 10, 0.5).name('player stamina regen /s');
+    balance.add(tuning, 'playerStamina', 1, 20, 0.5).name('player stamina (s of sprint)');
   }
 
   /** Reflect a mood set elsewhere (rematch, test hooks, a future LLM). */

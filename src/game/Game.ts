@@ -146,7 +146,6 @@ export class Game {
         player: this.player.health / tuning.playerMaxHealth,
         npc: this.npc.health / tuning.npcMaxHealth,
         stamina: this.player.stamina / tuning.playerStamina,
-        winded: this.player.winded,
         mood: this.npc.mood,
         screen: this.screen,
         voice: this.voice.state,

@@ -14,9 +14,8 @@ const STRIKES = [
 const DODGE_TIME = 0.32;
 const DODGE_SPEED = 10;
 const DODGE_COOLDOWN = 0.7;
-/** A dash spends this many seconds of sprint. Stamina refills STAMINA_DELAY after she last spent it. */
-const DASH_COST = 1.5;
-const STAMINA_DELAY = 1;
+/** A dash spends this many seconds of sprint. */
+const DASH_COST = 0.75;
 /** Share of her sprint's speed she keeps while A/D steer it. */
 const STEERED_RUN = 0.95;
 const HURT_TIME = 0.42;
@@ -36,10 +35,8 @@ export class Player {
   private readonly knock = new THREE.Vector3();
   readonly radius = 0.35;
   health = tuning.playerMaxHealth;
-  /** Seconds of sprint left. Emptied, she is `winded`: no sprint or dash until it is full again. */
+  /** Seconds of sprint left. It refills as fast as sprinting spends it, whenever she isn't holding a sprint. */
   stamina = tuning.playerStamina;
-  winded = false;
-  private staminaDelay = 0;
   state: State = 'move';
   private timer = 0;
   private contactAt = 0;
@@ -76,7 +73,6 @@ export class Player {
   reset(): void {
     this.health = tuning.playerMaxHealth;
     this.stamina = tuning.playerStamina;
-    this.winded = false;
     this.character.place(0, 6, Math.PI);
     this.velocity.set(0, 0, 0);
     this.knock.set(0, 0, 0);
@@ -94,9 +90,6 @@ export class Player {
     this.dodgeCooldown -= delta;
     this.bufferTimer -= delta;
     if (resting && this.state !== 'down') this.health = Math.min(tuning.playerMaxHealth, this.health + tuning.playerRegen * delta);
-    this.staminaDelay -= delta;
-    if (this.staminaDelay <= 0) this.stamina = Math.min(tuning.playerStamina, this.stamina + tuning.playerStaminaRegen * delta);
-    if (this.stamina >= tuning.playerStamina) this.winded = false;
 
     const look = input?.consumeLook() ?? 0;
     if (input) {
@@ -108,6 +101,9 @@ export class Player {
       this.move.set(0, 0);
     }
     this.toNpc.subVectors(npc, this.position).setY(0);
+    // A sprint held on an empty bar keeps it empty: she walks until she lets go, rather than stuttering into a run.
+    const sprint = this.move.y > 0 && !!input?.sprinting;
+    if (!sprint) this.stamina = Math.min(tuning.playerStamina, this.stamina + delta);
 
     if (this.state === 'strike' && this.contactAt > 0 && this.timer >= this.contactAt) {
       this.contactAt = 0;
@@ -116,7 +112,7 @@ export class Player {
     if (this.state !== 'move' && this.state !== 'down' && this.timer >= this.endAt) this.toMove();
     if (this.bufferTimer <= 0) this.buffered = null;
     const canAct = this.state === 'move' || (this.state === 'strike' && this.timer >= this.cancelAt);
-    if ((canAct || this.state === 'hurt') && this.buffered === 'dodge' && this.dodgeCooldown <= 0 && !this.winded) this.startDodge(events);
+    if ((canAct || this.state === 'hurt') && this.buffered === 'dodge' && this.dodgeCooldown <= 0 && this.stamina > 0) this.startDodge(events);
     else if (canAct && this.buffered === 'strike') this.startStrike(events);
 
     if (this.state === 'dodge') {
@@ -133,8 +129,8 @@ export class Player {
       // The mouse turns her; W/S walk her along her facing and A/D step her sideways, on a diagonal no faster than
       // straight. Shift runs her forward only, so A/D then only steer her run a little, and slow it to STEERED_RUN.
       this.character.aim -= look * tuning.mouseTurn;
-      this.character.running = this.move.y > 0 && !!input?.sprinting && !this.winded;
-      if (this.character.running) this.spend(delta);
+      this.character.running = sprint && this.stamina > 0;
+      if (this.character.running) this.stamina = Math.max(0, this.stamina - delta);
       const speed = this.move.y < 0 ? tuning.playerBackSpeed : this.character.running ? tuning.playerSprintSpeed : tuning.playerWalkSpeed;
       const [sin, cos] = [Math.sin(this.yaw), Math.cos(this.yaw)];
       this.wish.set(sin, 0, cos).multiplyScalar(this.move.y * speed).add(this.side.set(-cos, 0, sin).multiplyScalar(this.move.x * tuning.playerStrafeSpeed));
@@ -192,14 +188,8 @@ export class Player {
     events.push({ type: 'swing', who: 'player', heavy: false });
   }
 
-  private spend(seconds: number): void {
-    this.stamina = Math.max(0, this.stamina - seconds);
-    this.staminaDelay = STAMINA_DELAY;
-    if (this.stamina === 0) this.winded = true;
-  }
-
   private startDodge(events: FightEvent[]): void {
-    this.spend(DASH_COST);
+    this.stamina = Math.max(0, this.stamina - DASH_COST);
     this.buffered = null;
     this.state = 'dodge';
     this.timer = 0;

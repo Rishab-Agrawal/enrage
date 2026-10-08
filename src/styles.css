@@ -145,7 +145,7 @@ body,
   }
 }
 
-/* Stamina: a thin bar under her health, shown only while it isn't full; red while she is winded. */
+/* Stamina: a thin bar under her health, shown only while it isn't full. */
 .stamina {
   grid-column: 2;
   height: 6px;
@@ -166,10 +166,6 @@ body,
   height: 100%;
   background: #ffe08a;
   transform-origin: left;
-}
-
-.stamina.winded i {
-  background: var(--rage);
 }
 
 /* Mood ring traces his cutout's alpha; no downward shadow, so the bust's cut edge stays bare. */
