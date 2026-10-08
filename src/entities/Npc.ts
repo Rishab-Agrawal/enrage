@@ -199,7 +199,7 @@ export class Npc {
     this.contactAt = windUp(attack);
     this.endAt = (attack.to - attack.from) / attack.speed;
     this.character.play(this.attack, { loop: false, from: attack.from, speed: attack.speed, fade: 0.1, track: true });
-    events.push({ type: 'swing', who: 'npc', heavy: true });
+    events.push({ type: 'swing', who: 'npc' });
   }
 
   /** Away from the player, sliding along the arena edge instead of pinning against it. */

@@ -12,10 +12,11 @@ const STEPS = takes('step', 2);
 const HURTS = { player: takes('wren-hurt', 3), npc: takes('gorran-hurt', 2) };
 const GRUNTS = takes('wren-grunt', 3);
 const FALLS = takes('gorran-down', 2);
+const SWINGS = { player: takes('wren-swing', 2), npc: takes('gorran-swing', 2) };
 const HITS = takes('hit', 2);
 const HEAVY_HITS = takes('heavy-hit', 3);
 
-/** Web Audio: procedural swings and wind; recorded music, voice and effects. */
+/** Web Audio: a procedural wind bed; recorded music, voice and effects. */
 export class Audio {
   // Browsers hold a context made before the first click or key press suspended; that press resumes it.
   private readonly context = new AudioContext();
@@ -69,7 +70,7 @@ export class Audio {
       this.tracks.set(mood, gain);
       void this.load(`audio/music/${mood}.mp3`).then((buffer) => this.play(buffer, gain, true));
     }
-    for (const url of [START, CHIME, VICTORY, ...STEPS, ...HURTS.player, ...HURTS.npc, ...GRUNTS, ...FALLS, ...HITS, ...HEAVY_HITS]) void this.load(url);
+    for (const url of [START, CHIME, VICTORY, ...STEPS, ...HURTS.player, ...HURTS.npc, ...GRUNTS, ...FALLS, ...SWINGS.player, ...SWINGS.npc, ...HITS, ...HEAVY_HITS]) void this.load(url);
   }
 
   /** The fight begins. */
@@ -97,17 +98,14 @@ export class Audio {
     this.vary(GRUNTS, 0.7);
   }
 
-  swing(heavy: boolean): void {
-    this.noiseBurst(heavy ? 0.32 : 0.18, heavy ? 500 : 1400, heavy ? 1800 : 4200, heavy ? 0.22 : 0.16);
+  /** `who` swings a fist through the air. */
+  swing(who: Fighter): void {
+    this.vary(SWINGS[who], who === 'player' ? 0.5 : 0.7);
   }
 
   /** A blow lands; `heavy` for Gorran's, on her. */
   hit(heavy: boolean): void {
     this.vary(heavy ? HEAVY_HITS : HITS, 1);
-  }
-
-  whoosh(): void {
-    this.noiseBurst(0.28, 600, 2400, 0.18);
   }
 
   /** Gorran calms down. */
@@ -166,24 +164,5 @@ export class Audio {
     source.connect(out);
     source.start();
     return source;
-  }
-
-  private noiseBurst(duration: number, from: number, to: number, volume: number): void {
-    const ctx = this.context;
-    const now = ctx.currentTime;
-    const source = ctx.createBufferSource();
-    source.buffer = this.noise;
-    source.playbackRate.value = 0.9 + Math.random() * 0.2;
-    const filter = ctx.createBiquadFilter();
-    filter.type = 'bandpass';
-    filter.Q.value = 1.2;
-    filter.frequency.setValueAtTime(from, now);
-    filter.frequency.exponentialRampToValueAtTime(to, now + duration);
-    const gain = ctx.createGain();
-    gain.gain.setValueAtTime(volume, now);
-    gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
-    source.connect(filter).connect(gain).connect(this.master);
-    source.start(now, Math.random());
-    source.stop(now + duration);
   }
 }

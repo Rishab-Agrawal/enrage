@@ -239,7 +239,7 @@ export class Game {
     for (const event of this.events) {
       switch (event.type) {
         case 'swing':
-          this.audio.swing(event.heavy);
+          this.audio.swing(event.who);
           break;
         case 'hit': {
           // Taking a blow from Gorran is the heavier event.
@@ -254,11 +254,10 @@ export class Game {
         }
         case 'dodge':
           this.vfx.puff(event.at, 4);
-          this.audio.whoosh();
           break;
         case 'shove':
           this.vfx.puff(this.player.position, 3);
-          this.audio.swing(true);
+          this.audio.swing('npc');
           // He doesn't repeat himself over every shove.
           if (!this.line) this.say(LINES.shove);
           break;

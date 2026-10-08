@@ -198,7 +198,7 @@ export class Player {
     this.cancelAt = this.contactAt + 0.08;
     this.endAt = (strike.to - strike.from) / strike.speed;
     this.character.play(strike.clip, { loop: false, from: strike.from, speed: strike.speed, fade: STRIKE_FADE, track: true });
-    events.push({ type: 'swing', who: 'player', heavy: false });
+    events.push({ type: 'swing', who: 'player' });
   }
 
   private spend(seconds: number): void {
