@@ -36,6 +36,8 @@ export class Hud {
   private readonly voiceTimer = $('#voice .timer');
   private readonly result = $('#result');
   private readonly pause = $('#pause');
+  private readonly pauseTitle = $('#pause h1');
+  private readonly pausePrompt = $('#pause > p');
   private readonly resultTitle = $('#result h1');
   private readonly resultText = $('#result p');
   private chips = { player: 1, npc: 1 };
@@ -68,7 +70,14 @@ export class Hud {
     if (state.voice !== this.last.voice) this.voice.className = state.voice;
     // The arc's tail stays at twelve while its head sweeps clockwise after it.
     this.voiceTimer.style.strokeDashoffset = String(state.voiceLeft - 1);
-    if (state.paused !== this.last.paused) this.pause.hidden = !state.paused;
+    if (state.paused !== this.last.paused) {
+      this.pause.hidden = !state.paused;
+      // The first pause is the briefing; once the fight starts, the card is a pause.
+      if (this.last.paused !== undefined) {
+        this.pauseTitle.textContent = 'Paused';
+        this.pausePrompt.textContent = 'Click to resume';
+      }
+    }
     if (state.paused !== this.last.paused || state.outcome !== this.last.outcome) this.voice.hidden = state.paused || !!state.outcome;
     if (state.regenerating !== this.last.regenerating) this.playerSection.classList.toggle('regen', state.regenerating);
     this.app.classList.toggle('hurt', state.player < 0.3 && !state.outcome);

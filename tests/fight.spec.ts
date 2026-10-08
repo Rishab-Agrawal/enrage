@@ -221,6 +221,7 @@ test('whipped round faster than she can pivot, her hips are dragged the way the 
 test('legs settle on the speed the body actually moves at', async ({ page }) => {
   test.setTimeout(60_000);
   const errors = await start(page);
+  await capture(page);
   const misfits: string[] = [];
   let last = await read(page);
   // When each fighter's legs last matched the body: they get a blend's time to catch up with a change.
@@ -301,6 +302,7 @@ test('a calm NPC shoves off a player who rushes him before she can touch him', a
 
 test('a calm NPC nudged inside his comfort distance walks well clear of it', async ({ page }) => {
   const errors = await start(page);
+  await capture(page);
   // Sprint in: walking, she can't outpace his retreat.
   for (const key of ['KeyW', 'ShiftLeft']) await page.keyboard.down(key);
   await page.waitForFunction(() => {

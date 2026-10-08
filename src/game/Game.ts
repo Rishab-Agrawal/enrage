@@ -57,7 +57,8 @@ export class Game {
   private hitstop = 0;
   private elapsed = 0;
   private frame = 0;
-  private paused = false;
+  /** The fight opens paused, on the briefing. */
+  private paused = true;
   /** Held still for screenshots, without the pause card. */
   private frozen = false;
   private readonly offset = new THREE.Vector3();
@@ -78,6 +79,7 @@ export class Game {
     );
     this.buildScene();
     this.rematch();
+    this.step(STEP); // poses the fighters, which the briefing holds still
     this.installTestHooks();
   }
 
@@ -272,6 +274,7 @@ export class Game {
       },
       setState: (name: string) => {
         this.rematch();
+        this.setPaused(false);
         if (name === 'enraged') {
           this.setMood('enraged');
           settle(3.2);
