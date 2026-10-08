@@ -145,6 +145,33 @@ body,
   }
 }
 
+/* Stamina: a thin bar under her health, shown only while it isn't full; red while she is winded. */
+.stamina {
+  grid-column: 2;
+  height: 6px;
+  margin: 5px 14px 0 0;
+  background: var(--frame);
+  border-radius: 3px;
+  overflow: hidden;
+  opacity: 0;
+  transition: opacity 0.4s;
+}
+
+.stamina.shown {
+  opacity: 1;
+}
+
+.stamina i {
+  display: block;
+  height: 100%;
+  background: #ffe08a;
+  transform-origin: left;
+}
+
+.stamina.winded i {
+  background: var(--rage);
+}
+
 /* Mood ring traces his cutout's alpha; no downward shadow, so the bust's cut edge stays bare. */
 .npc img {
   --ring: var(--calm);

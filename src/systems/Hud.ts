@@ -7,6 +7,8 @@ export type Screen = 'title' | 'fight' | 'paused';
 type HudState = {
   player: number; // 0..1
   npc: number; // 0..1
+  stamina: number; // 0..1
+  winded: boolean;
   mood: Mood;
   screen: Screen;
   voice: VoiceState;
@@ -30,6 +32,8 @@ export class Hud {
   private readonly playerFill = $('.player .fill');
   private readonly playerChip = $('.player .chip');
   private readonly playerSection = $('.fighter.player');
+  private readonly stamina = $('.stamina');
+  private readonly staminaFill = $('.stamina i');
   private readonly npcFill = $('.npc .fill');
   private readonly npcChip = $('.npc .chip');
   private readonly npcPortrait = $<HTMLImageElement>('.npc img');
@@ -56,6 +60,9 @@ export class Hud {
     this.playerChip.style.transform = `scaleX(${this.chips.player})`;
     this.npcFill.style.transform = `scaleX(${state.npc})`;
     this.npcChip.style.transform = `scaleX(${this.chips.npc})`;
+    this.staminaFill.style.transform = `scaleX(${state.stamina})`;
+    this.stamina.classList.toggle('shown', state.stamina < 1);
+    this.stamina.classList.toggle('winded', state.winded);
 
     if (state.mood !== this.last.mood) {
       this.npcPortrait.className = state.mood;

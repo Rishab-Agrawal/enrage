@@ -145,6 +145,8 @@ export class Game {
       {
         player: this.player.health / tuning.playerMaxHealth,
         npc: this.npc.health / tuning.npcMaxHealth,
+        stamina: this.player.stamina / tuning.playerStamina,
+        winded: this.player.winded,
         mood: this.npc.mood,
         screen: this.screen,
         voice: this.voice.state,
@@ -344,6 +346,7 @@ export class Game {
         speed: this.player.character.velocity.length(),
         stride: this.player.character.stride,
         health: this.player.health,
+        stamina: this.player.stamina,
         state: this.player.state,
       },
       npc: {

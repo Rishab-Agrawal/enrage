@@ -129,6 +129,37 @@ test('W walks, Shift sprints, S backs up, A/D step sideways, diagonals are no fa
   expect(errors).toEqual([]);
 });
 
+test('a full bar holds 10 s of sprint; emptied, she walks and cannot dash until it refills', async ({ page }) => {
+  await start(page);
+  const log = await page.evaluate(async () => {
+    const { GLTFLoader } = await import('/node_modules/three/examples/jsm/loaders/GLTFLoader.js' as string);
+    const { Player } = await import('/src/entities/Player.ts' as string);
+    const player = new Player(await new GLTFLoader().loadAsync('models/player.glb'));
+    let dash = false;
+    // Shift and W held throughout.
+    const input = { sprinting: true, consumeLook: () => 0, consume: (intent: string) => intent === 'dodge' && dash, movement: (v: { set(x: number, y: number): void }) => v.set(0, 1) };
+    const log: { t: number; speed: number; winded: boolean; state: string }[] = [];
+    for (let t = 0; t < 18; t += 1 / 60) {
+      dash = Math.abs(t - 12) < 1 / 120;
+      const before = player.position.clone();
+      player.update(1 / 60, input, player.position.clone().setZ(-99), false, []);
+      player.character.update(1 / 60);
+      log.push({ t, speed: player.position.distanceTo(before) * 60, winded: player.winded, state: player.state });
+    }
+    return log;
+  });
+  const at = (t: number) => log.find((s) => s.t >= t)!;
+  const windedAt = log.find((s) => s.winded)!.t;
+  expect(windedAt).toBeGreaterThan(9.5);
+  expect(windedAt).toBeLessThan(10.5);
+  expect(at(9).speed).toBeCloseTo(tuning.playerSprintSpeed, 0);
+  expect(at(11.5).speed).toBeCloseTo(tuning.playerWalkSpeed, 0);
+  expect(log.some((s) => s.state === 'dodge')).toBe(false); // the dash pressed at 12 s
+  // 1 s before it refills, 4 s to fill, then she sprints again.
+  expect(at(14.5).winded).toBe(true);
+  expect(at(17.5).speed).toBeCloseTo(tuning.playerSprintSpeed, 0);
+});
+
 test('a click captures the mouse without striking; then the mouse turns her, until it is released', async ({ page }) => {
   const errors = await start(page);
   /** Radians she turns as the mouse slides as far as turns her by `radians` when captured. */
