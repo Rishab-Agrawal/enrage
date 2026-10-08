@@ -4,7 +4,11 @@ import { voiceFile } from '../game/lines';
 /** Music level, under the effects. */
 const MUSIC = 0.3;
 const START = 'audio/sfx/start.mp3';
-const STEPS = [1, 2].map((i) => `audio/sfx/step-${i}.mp3`);
+/** `count` takes of an effect, to pick from at random. */
+const takes = (name: string, count: number) => Array.from({ length: count }, (_, i) => `audio/sfx/${name}-${i + 1}.mp3`);
+const STEPS = takes('step', 2);
+const HURTS = takes('hurt', 3);
+const GRUNTS = takes('grunt', 3);
 
 /** Web Audio: procedural impacts, swings, calm chime, outcome stingers and wind; recorded music, voice and effects. */
 export class Audio {
@@ -60,7 +64,7 @@ export class Audio {
       this.tracks.set(mood, gain);
       void this.load(`audio/music/${mood}.mp3`).then((buffer) => this.play(buffer, gain, true));
     }
-    for (const url of [START, ...STEPS]) void this.load(url);
+    for (const url of [START, ...STEPS, ...HURTS, ...GRUNTS]) void this.load(url);
   }
 
   /** The fight begins. */
@@ -70,12 +74,17 @@ export class Audio {
 
   /** One of Wren's footfalls on the grass, firmer at a run. */
   step(running: boolean): void {
-    const gain = this.context.createGain();
-    gain.gain.value = running ? 1.5 : 1;
-    gain.connect(this.master);
-    void this.load(STEPS[Math.floor(Math.random() * STEPS.length)]).then((buffer) => {
-      this.play(buffer, gain).playbackRate.value = 0.9 + Math.random() * 0.2;
-    });
+    this.vary(STEPS, running ? 1.5 : 1);
+  }
+
+  /** Wren cries out as a blow lands on her. */
+  hurt(): void {
+    this.vary(HURTS, 0.7);
+  }
+
+  /** Wren's effort behind her cross. */
+  grunt(): void {
+    this.vary(GRUNTS, 0.7);
   }
 
   swing(heavy: boolean): void {
@@ -115,6 +124,16 @@ export class Audio {
       if (this.said !== line) return;
       this.voice?.stop();
       this.voice = this.play(buffer);
+    });
+  }
+
+  /** One of `urls` at random, slightly retuned so repeats differ. */
+  private vary(urls: string[], volume: number): void {
+    const gain = this.context.createGain();
+    gain.gain.value = volume;
+    gain.connect(this.master);
+    void this.load(urls[Math.floor(Math.random() * urls.length)]).then((buffer) => {
+      this.play(buffer, gain).playbackRate.value = 0.95 + Math.random() * 0.1;
     });
   }
 

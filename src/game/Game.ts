@@ -246,6 +246,7 @@ export class Game {
           const heavy = event.who === 'player';
           this.vfx.hit(event.at, heavy);
           this.audio.hit(heavy);
+          if (event.who === 'player') this.audio.hurt();
           this.cameraRig.shake(heavy ? 0.55 : 0.28);
           this.hitstop = heavy ? 0.09 : 0.06;
           break;
@@ -270,6 +271,8 @@ export class Game {
           }
           break;
         case 'contact':
+          // She puts her voice into the cross.
+          if (event.who === 'player' && event.heavy) this.audio.grunt();
           break;
       }
     }

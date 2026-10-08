@@ -8,8 +8,8 @@ import { aimToward, angleTo, yawTo } from './steering';
 
 /** Clip-second windows: `contact` is when the striking `hand` lands (measured from the clip's extension frame). */
 const STRIKES = [
-  { clip: 'jab', hand: 'L_Hand', from: 0.15, contact: 0.49, to: 1.0, speed: 1.6 },
-  { clip: 'cross', hand: 'R_Hand', from: 1.25, contact: 2.2, to: 2.6, speed: 2.4 },
+  { clip: 'jab', hand: 'L_Hand', from: 0.15, contact: 0.49, to: 1.0, speed: 1.6, heavy: false },
+  { clip: 'cross', hand: 'R_Hand', from: 1.25, contact: 2.2, to: 2.6, speed: 2.4, heavy: true },
 ];
 const DODGE_TIME = 0.32;
 const DODGE_SPEED = 10;
@@ -120,7 +120,7 @@ export class Player {
 
     if (this.state === 'strike' && this.contactAt > 0 && this.timer >= this.contactAt) {
       this.contactAt = 0;
-      events.push({ type: 'contact', who: 'player', damage: tuning.strikeDamage, knockback: 0, at: this.character.joint(this.strike.hand) });
+      events.push({ type: 'contact', who: 'player', heavy: this.strike.heavy, damage: tuning.strikeDamage, knockback: 0, at: this.character.joint(this.strike.hand) });
     }
     if (this.state !== 'move' && this.state !== 'down' && this.timer >= this.endAt) this.toMove();
     if (this.bufferTimer <= 0) this.buffered = null;

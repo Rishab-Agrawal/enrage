@@ -146,7 +146,7 @@ export class Npc {
           this.contactAt = 0;
           const { hand, knockback } = ATTACKS[this.attack];
           const damage = this.attack === 'punch' ? tuning.punchDamage : tuning.haymakerDamage;
-          events.push({ type: 'contact', who: 'npc', damage, knockback, at: this.character.joint(hand) });
+          events.push({ type: 'contact', who: 'npc', heavy: this.attack === 'haymaker', damage, knockback, at: this.character.joint(hand) });
         }
         if (this.timer >= this.endAt) this.enter('recover');
         break;
