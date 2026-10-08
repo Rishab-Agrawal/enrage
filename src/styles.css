@@ -284,7 +284,8 @@ kbd {
   text-align: center;
 }
 
-#result {
+#result,
+#pause {
   position: absolute;
   inset: 0;
   display: grid;
@@ -296,12 +297,14 @@ kbd {
 }
 
 #result[hidden],
+#pause[hidden],
 #voice[hidden],
 #loading[hidden] {
   display: none;
 }
 
-#result h1 {
+#result h1,
+#pause h1 {
   margin: 0;
   font-size: clamp(3rem, 8vw, 5.5rem);
   font-weight: 900;
@@ -316,11 +319,18 @@ kbd {
   text-shadow: 0 4px 0 var(--ink), 0 0 30px rgba(220, 60, 40, 0.6);
 }
 
-#result p {
+#result p,
+#pause p {
   margin: 0 0 16px;
   font-size: 1.1rem;
   font-weight: 700;
   text-shadow: 0 2px 0 var(--ink);
+}
+
+/* Clicks fall through to the canvas, whose capture resumes the fight. */
+#pause {
+  background: rgba(25, 20, 40, 0.5);
+  pointer-events: none;
 }
 
 #result button {

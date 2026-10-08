@@ -146,6 +146,24 @@ test('a click captures the mouse without striking; then the mouse turns her, unt
   expect(errors).toEqual([]);
 });
 
+test('losing the mouse pauses the fight and lets go of the mic; capturing it again resumes', async ({ page }) => {
+  const errors = await start(page);
+  await capture(page);
+  await page.keyboard.down('Space');
+  await expect(page.locator('#voice')).toHaveClass('listening');
+  await page.evaluate(() => document.exitPointerLock());
+  await expect(page.locator('#pause')).toBeVisible();
+  await expect(page.locator('#voice')).toHaveClass('cooldown');
+  const { elapsed } = await read(page);
+  await page.waitForTimeout(300);
+  expect((await read(page)).elapsed).toBe(elapsed);
+  await page.keyboard.up('Space');
+  await capture(page);
+  await expect(page.locator('#pause')).toBeHidden();
+  expect((await read(page)).elapsed).toBeGreaterThan(elapsed);
+  expect(errors).toEqual([]);
+});
+
 test('a key let go while the debug panel has focus does not stay held', async ({ page }) => {
   const errors = await start(page);
   await capture(page);

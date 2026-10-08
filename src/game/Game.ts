@@ -58,6 +58,8 @@ export class Game {
   private elapsed = 0;
   private frame = 0;
   private paused = false;
+  /** Held still for screenshots, without the pause card. */
+  private frozen = false;
   private readonly offset = new THREE.Vector3();
 
   constructor(
@@ -128,8 +130,33 @@ export class Game {
   private update(delta: number): void {
     this.frame += 1;
     resizeRenderer(this.renderer, this.camera);
-    if (!this.paused) this.step(delta);
+    // Losing the mouse (Esc, alt-tab) pauses the fight; capturing it again resumes.
+    if (this.input.consume('pause') && !this.outcome) this.setPaused(true);
+    else if (this.paused && this.input.captured) this.setPaused(false);
+    const running = !this.paused && !this.frozen;
+    if (running) this.step(delta);
+    this.hud.update(
+      {
+        player: this.player.health / tuning.playerMaxHealth,
+        npc: this.npc.health / tuning.npcMaxHealth,
+        mood: this.npc.mood,
+        paused: this.paused,
+        voice: this.voice.state,
+        voiceLeft: this.voice.remaining,
+        regenerating: this.npc.mood === 'calm' && this.player.health < tuning.playerMaxHealth && this.player.state !== 'down',
+        outcome: this.outcomeTimer > 1.4 ? this.outcome : null,
+        npcHealthLeft: Math.ceil(this.npc.health),
+      },
+      running ? delta : 0,
+    );
     this.publishDiagnostics();
+  }
+
+  private setPaused(paused: boolean): void {
+    this.paused = paused;
+    // A pause lets go of the mic, and presses made during it don't carry into the fight.
+    this.voice.update(0, false, false);
+    this.input.clear();
   }
 
   private step(delta: number): void {
@@ -155,19 +182,6 @@ export class Game {
     this.vfx.update(delta, this.npc.position, rage ? 'enraged' : 'calm');
     this.arena.update(this.elapsed);
     this.cameraRig.update(delta, this.player.position, this.player.yaw);
-    this.hud.update(
-      {
-        player: this.player.health / tuning.playerMaxHealth,
-        npc: this.npc.health / tuning.npcMaxHealth,
-        mood: this.npc.mood,
-        voice: this.voice.state,
-        voiceLeft: this.voice.remaining,
-        regenerating: this.npc.mood === 'calm' && this.player.health < tuning.playerMaxHealth && this.player.state !== 'down',
-        outcome: this.outcomeTimer > 1.4 ? this.outcome : null,
-        npcHealthLeft: Math.ceil(this.npc.health),
-      },
-      delta,
-    );
   }
 
   /** Combat rules: a blow lands only where the fist meets the other's body, and only an enraged NPC is hurt; bodies don't overlap. */
@@ -283,7 +297,7 @@ export class Game {
         return { state: name };
       },
       setPausedForScreenshot: (paused: boolean) => {
-        this.paused = paused;
+        this.frozen = paused;
       },
       // Ambient motion runs on fight time, which setPausedForScreenshot already freezes.
       setReducedMotion: () => {},
