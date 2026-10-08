@@ -3,6 +3,9 @@ import { voiceFile } from '../game/lines';
 
 /** Music level, under the effects. */
 const MUSIC = 0.3;
+/** Ambience levels, under the music: the breeze, and a bird at its loudest. */
+const WIND = 0.5;
+const BIRD = 0.06;
 const START = 'audio/sfx/start.mp3';
 const CHIME = 'audio/sfx/chime.mp3';
 const VICTORY = 'audio/sfx/victory.mp3';
@@ -15,13 +18,13 @@ const FALLS = takes('gorran-down', 2);
 const SWINGS = { player: takes('wren-swing', 1), npc: takes('gorran-swing', 2) };
 const HITS = takes('hit', 2);
 const HEAVY_HITS = takes('heavy-hit', 3);
+const BIRDS = takes('bird', 4);
 
-/** Web Audio: a procedural wind bed; recorded music, voice and effects. */
+/** Web Audio: recorded music, ambience, voices and effects. */
 export class Audio {
   // Browsers hold a context made before the first click or key press suspended; that press resumes it.
   private readonly context = new AudioContext();
   private readonly master = this.context.createGain();
-  private readonly noise = this.context.createBuffer(1, this.context.sampleRate * 2, this.context.sampleRate);
   private readonly tracks = new Map<Mood, GainNode>();
   private mood: Mood = 'calm';
   private readonly buffers = new Map<string, Promise<AudioBuffer>>();
@@ -40,27 +43,18 @@ export class Audio {
 
     this.master.gain.value = 0.8;
     this.master.connect(ctx.destination);
-    const data = this.noise.getChannelData(0);
-    for (let i = 0; i < data.length; i += 1) data[i] = Math.random() * 2 - 1;
 
-    // Wind bed: looped noise through a slowly wandering band-pass.
-    const wind = ctx.createBufferSource();
-    wind.buffer = this.noise;
-    wind.loop = true;
-    const band = ctx.createBiquadFilter();
-    band.type = 'bandpass';
-    band.frequency.value = 420;
-    band.Q.value = 0.6;
-    const lfo = ctx.createOscillator();
-    const depth = ctx.createGain();
-    lfo.frequency.value = 0.07;
-    depth.gain.value = 180;
-    lfo.connect(depth).connect(band.frequency);
-    const level = ctx.createGain();
-    level.gain.value = 0.05;
-    wind.connect(band).connect(level).connect(this.master);
-    wind.start();
-    lfo.start();
+    // Ambience: a looped breeze, and every 12 to 30 s a bird far off. A bird waits for sound to be allowed,
+    // or every one held back would sing at once.
+    const wind = ctx.createGain();
+    wind.gain.value = WIND;
+    wind.connect(this.master);
+    void this.load('audio/sfx/wind.mp3').then((buffer) => this.play(buffer, wind, true));
+    const sing = () => {
+      if (ctx.state === 'running') this.vary(BIRDS, BIRD * (0.5 + Math.random() * 0.5));
+      setTimeout(sing, 12000 + Math.random() * 18000);
+    };
+    setTimeout(sing, 6000);
 
     // Both loops run throughout; the mood only moves their gains.
     for (const mood of ['calm', 'enraged'] as const) {
@@ -70,7 +64,7 @@ export class Audio {
       this.tracks.set(mood, gain);
       void this.load(`audio/music/${mood}.mp3`).then((buffer) => this.play(buffer, gain, true));
     }
-    for (const url of [START, CHIME, VICTORY, ...STEPS, ...HURTS.player, ...HURTS.npc, ...GRUNTS, ...FALLS, ...SWINGS.player, ...SWINGS.npc, ...HITS, ...HEAVY_HITS]) void this.load(url);
+    for (const url of [START, CHIME, VICTORY, ...STEPS, ...HURTS.player, ...HURTS.npc, ...GRUNTS, ...FALLS, ...SWINGS.player, ...SWINGS.npc, ...HITS, ...HEAVY_HITS, ...BIRDS]) void this.load(url);
   }
 
   /** The fight begins. */
