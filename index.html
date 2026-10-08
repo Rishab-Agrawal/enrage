@@ -12,7 +12,7 @@
     <title>enrage</title>
   </head>
   <body>
-    <main id="app">
+    <main id="app" data-screen="title">
       <canvas id="game-canvas" aria-label="Fight arena"></canvas>
       <div id="vignette" aria-hidden="true"></div>
 
@@ -45,9 +45,15 @@
 
       <aside id="debug"></aside>
 
-      <div id="pause" hidden>
+      <div id="title">
         <h1>enrage</h1>
-        <p>Click to start</p>
+        <p>Talk him into a fight</p>
+        <span>Click to start</span>
+      </div>
+
+      <div id="pause">
+        <h1>Paused</h1>
+        <p>Click to resume</p>
         <div class="help">
           <section>
             <h2>How to play</h2>

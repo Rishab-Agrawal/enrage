@@ -2,12 +2,13 @@ import type { Mood } from '../game/events';
 import type { VoiceState } from './Voice';
 
 export type Outcome = 'victory' | 'defeat' | null;
+export type Screen = 'title' | 'fight' | 'paused';
 
 type HudState = {
   player: number; // 0..1
   npc: number; // 0..1
   mood: Mood;
-  paused: boolean;
+  screen: Screen;
   voice: VoiceState;
   voiceLeft: number; // 0..1
   regenerating: boolean;
@@ -35,9 +36,6 @@ export class Hud {
   private readonly goal = $('#voice p');
   private readonly voiceTimer = $('#voice .timer');
   private readonly result = $('#result');
-  private readonly pause = $('#pause');
-  private readonly pauseTitle = $('#pause h1');
-  private readonly pausePrompt = $('#pause > p');
   private readonly resultTitle = $('#result h1');
   private readonly resultText = $('#result p');
   private chips = { player: 1, npc: 1 };
@@ -70,20 +68,13 @@ export class Hud {
     if (state.voice !== this.last.voice) this.voice.className = state.voice;
     // The arc's tail stays at twelve while its head sweeps clockwise after it.
     this.voiceTimer.style.strokeDashoffset = String(state.voiceLeft - 1);
-    if (state.paused !== this.last.paused) {
-      this.pause.hidden = !state.paused;
-      // The first pause is the briefing; once the fight starts, the card is a pause.
-      if (this.last.paused !== undefined) {
-        this.pauseTitle.textContent = 'Paused';
-        this.pausePrompt.textContent = 'Click to resume';
-      }
-    }
-    if (state.paused !== this.last.paused || state.outcome !== this.last.outcome) this.voice.hidden = state.paused || !!state.outcome;
+    if (state.screen !== this.last.screen) this.app.dataset.screen = state.screen;
     if (state.regenerating !== this.last.regenerating) this.playerSection.classList.toggle('regen', state.regenerating);
     this.app.classList.toggle('hurt', state.player < 0.3 && !state.outcome);
 
     if (state.outcome !== this.last.outcome) {
       this.result.hidden = !state.outcome;
+      this.voice.hidden = !!state.outcome;
       this.result.className = state.outcome ?? '';
       this.resultTitle.textContent = state.outcome === 'victory' ? 'Victory' : 'Defeat';
       this.resultText.textContent =

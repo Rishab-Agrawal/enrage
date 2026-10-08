@@ -8,7 +8,7 @@ import { Player } from '../entities/Player';
 import { Audio } from '../systems/Audio';
 import { CameraRig } from '../systems/CameraRig';
 import { DebugPanel } from '../systems/DebugPanel';
-import { Hud, type Outcome } from '../systems/Hud';
+import { Hud, type Outcome, type Screen } from '../systems/Hud';
 import { Vfx } from '../systems/Vfx';
 import { Voice } from '../systems/Voice';
 import { createSeededRandom } from '../utils/random';
@@ -57,8 +57,7 @@ export class Game {
   private hitstop = 0;
   private elapsed = 0;
   private frame = 0;
-  /** The fight opens paused, on the briefing. */
-  private paused = true;
+  private screen: Screen = 'title';
   /** Held still for screenshots, without the pause card. */
   private frozen = false;
   private readonly offset = new THREE.Vector3();
@@ -79,7 +78,6 @@ export class Game {
     );
     this.buildScene();
     this.rematch();
-    this.step(STEP); // poses the fighters, which the briefing holds still
     this.installTestHooks();
   }
 
@@ -132,17 +130,17 @@ export class Game {
   private update(delta: number): void {
     this.frame += 1;
     resizeRenderer(this.renderer, this.camera);
-    // Losing the mouse (Esc, alt-tab) pauses the fight; capturing it again resumes.
-    if (this.input.consume('pause') && !this.outcome) this.setPaused(true);
-    else if (this.paused && this.input.captured) this.setPaused(false);
-    const running = !this.paused && !this.frozen;
+    // Losing the mouse (Esc, alt-tab) pauses the fight; capturing it starts or resumes it.
+    if (this.input.consume('pause') && this.screen === 'fight' && !this.outcome) this.show('paused');
+    else if (this.screen !== 'fight' && this.input.captured) this.show('fight');
+    const running = this.screen !== 'paused' && !this.frozen;
     if (running) this.step(delta);
     this.hud.update(
       {
         player: this.player.health / tuning.playerMaxHealth,
         npc: this.npc.health / tuning.npcMaxHealth,
         mood: this.npc.mood,
-        paused: this.paused,
+        screen: this.screen,
         voice: this.voice.state,
         voiceLeft: this.voice.remaining,
         regenerating: this.npc.mood === 'calm' && this.player.health < tuning.playerMaxHealth && this.player.state !== 'down',
@@ -154,9 +152,9 @@ export class Game {
     this.publishDiagnostics();
   }
 
-  private setPaused(paused: boolean): void {
-    this.paused = paused;
-    // A pause lets go of the mic, and presses made during it don't carry into the fight.
+  private show(screen: Screen): void {
+    this.screen = screen;
+    // A pause lets go of the mic, and presses made off the fight don't carry into it.
     this.voice.update(0, false, false);
     this.input.clear();
   }
@@ -164,13 +162,14 @@ export class Game {
   private step(delta: number): void {
     this.elapsed += delta;
     if (this.input.consume('rematch') && this.outcome) this.rematch();
-    this.voice.update(delta, this.input.consume('speak'), this.input.speaking);
+    const playing = this.screen === 'fight';
+    if (playing) this.voice.update(delta, this.input.consume('speak'), this.input.speaking);
 
     // Hitstop slows the fight, never the camera or effects.
     this.hitstop -= delta;
     const fightDelta = this.hitstop > 0 ? delta * 0.06 : delta;
     const live = !this.outcome;
-    this.player.update(fightDelta, live ? this.input : null, this.npc.position, this.npc.mood === 'calm', this.events);
+    this.player.update(fightDelta, live && playing ? this.input : null, this.npc.position, this.npc.mood === 'calm', this.events);
     if (live) this.npc.update(fightDelta, this.player.position, this.events);
     this.resolve();
     // Animate once bodies are where they end up this frame: locomotion shows the actual displacement.
@@ -183,7 +182,8 @@ export class Game {
     this.npc.character.rim.value.lerp(rage ? RAGE_RIM : PLAYER_RIM, 1 - Math.exp(-5 * delta));
     this.vfx.update(delta, this.npc.position, rage ? 'enraged' : 'calm');
     this.arena.update(this.elapsed);
-    this.cameraRig.update(delta, this.player.position, this.player.yaw);
+    if (playing) this.cameraRig.update(delta, this.player.position, this.player.yaw);
+    else this.cameraRig.title(this.elapsed, this.offset.addVectors(this.player.position, this.npc.position).multiplyScalar(0.5));
   }
 
   /** Combat rules: a blow lands only where the fist meets the other's body, and only an enraged NPC is hurt; bodies don't overlap. */
@@ -274,7 +274,7 @@ export class Game {
       },
       setState: (name: string) => {
         this.rematch();
-        this.setPaused(false);
+        this.show('fight');
         if (name === 'enraged') {
           this.setMood('enraged');
           settle(3.2);
