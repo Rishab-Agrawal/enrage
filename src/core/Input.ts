@@ -88,9 +88,10 @@ export class Input {
     return this.pressed.delete(intent);
   }
 
-  /** Forget latched presses, e.g. clicks made on the result screen. */
+  /** Forget latched presses and mouse travel, e.g. made on the result screen. */
   clear(): void {
     this.pressed.clear();
+    this.look = 0;
   }
 
   dispose(): void {

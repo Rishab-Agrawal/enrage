@@ -364,6 +364,17 @@ test('fighting in rounds and resting while he is calm wins', async ({ page }) =>
   expect(errors).toEqual([]);
 });
 
+test('a rematch faces her at him, whatever the mouse did on the result screen', async ({ page }) => {
+  const errors = await start(page);
+  await capture(page);
+  await page.evaluate(() => window.__THREE_GAME_TEST_HOOKS__?.setState('defeat'));
+  await look(page, 1.5);
+  await page.keyboard.press('KeyR');
+  await expect.poll(async () => (await read(page)).outcome).toBeNull();
+  expect((await read(page)).player.yaw).toBeCloseTo(Math.PI, 2);
+  expect(errors).toEqual([]);
+});
+
 test('placed, a body stands in its new pose at once, not rising from the one it left', async ({ page }) => {
   await start(page);
   const [standing, placed] = await page.evaluate(async () => {
