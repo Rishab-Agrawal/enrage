@@ -562,20 +562,29 @@ kbd {
 }
 
 #title h1 {
-  margin: 0;
+  /* Room under the box for the g's descender. */
+  margin: 0 0 0.15em;
   font-size: clamp(4.5rem, 12vw, 9rem);
   font-weight: 900;
   line-height: 1;
   letter-spacing: 0.04em;
-  /* Room for the g's descender, which the clipped gradient must cover. */
-  padding-bottom: 0.15em;
-  background: linear-gradient(#fff6dc, var(--gold) 55%, #c98a3c);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  text-shadow: none;
-  filter: drop-shadow(0 5px 0 var(--ink)) drop-shadow(0 0 40px rgba(255, 190, 90, 0.45));
+  color: var(--paper);
+  /* Inked like the characters: painted under the fill, the stroke shows only outside it. */
+  -webkit-text-stroke: 0.09em var(--ink);
+  paint-order: stroke fill;
+  text-shadow: 0 0.05em 0 var(--ink), 0 0.12em 0.3em rgba(40, 24, 10, 0.35);
   animation: rise 1.2s ease-out both;
+}
+
+/* The rage in "enrage" catches as the title settles. */
+#title h1 b {
+  animation: ignite 0.6s 1s ease-out both;
+}
+
+@keyframes ignite {
+  from {
+    color: var(--paper);
+  }
 }
 
 #title p {
