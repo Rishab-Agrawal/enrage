@@ -8,9 +8,8 @@ export class Input {
   private readonly keys = new Set<string>();
   private readonly pressed = new Set<'strike' | 'dodge' | 'rematch' | 'speak' | 'pause'>();
   private look = 0;
-  /** `performance.now()` before which mouse travel is ignored, and before which she isn't moved at all. */
-  private lookFrom = 0;
-  private stillUntil = 0;
+  /** While set, moves, strikes, dodges and mouse travel are dropped, not saved for later; the mic and Esc still work. */
+  still = false;
 
   private readonly onKeyDown = (event: KeyboardEvent) => {
     if (event.repeat) return;
@@ -40,7 +39,7 @@ export class Input {
   };
   private readonly onContextMenu = (event: MouseEvent) => event.preventDefault();
   private readonly onMouseMove = (event: MouseEvent) => {
-    if (this.captured && event.timeStamp >= this.lookFrom) this.look += event.movementX;
+    if (this.captured && !this.still) this.look += event.movementX;
   };
 
   constructor(private readonly surface: HTMLElement) {
@@ -90,21 +89,6 @@ export class Input {
 
   consume(intent: 'strike' | 'dodge' | 'rematch' | 'speak' | 'pause'): boolean {
     return this.pressed.delete(intent);
-  }
-
-  /** Ignore mouse travel for `seconds`: the hand that just pressed R is still settling on the mouse. */
-  holdLook(seconds: number): void {
-    this.lookFrom = performance.now() + seconds * 1000;
-  }
-
-  /** Ignore moves, strikes and dodges too, as the click that starts the fight settles and the camera swoops in. */
-  hold(seconds: number): void {
-    this.holdLook(seconds);
-    this.stillUntil = this.lookFrom;
-  }
-
-  private get still(): boolean {
-    return performance.now() < this.stillUntil;
   }
 
   /** Forget latched presses and mouse travel, e.g. made on the result screen. */

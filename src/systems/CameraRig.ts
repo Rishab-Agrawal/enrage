@@ -19,6 +19,10 @@ export class CameraRig {
 
   constructor(private readonly camera: THREE.PerspectiveCamera) {}
 
+  get gliding(): boolean {
+    return this.glide < 1;
+  }
+
   shake(amount: number): void {
     this.trauma = Math.min(1, this.trauma + amount);
   }

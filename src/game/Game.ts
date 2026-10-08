@@ -20,6 +20,8 @@ import { ARENA_RADIUS, tuning } from './tuning';
 const STEP = 1 / 60;
 /** How long a line of Gorran's stays up, s. */
 const LINE_TIME = 2.5;
+/** Seconds after the camera settles behind her before she answers controls: the hand that clicked or pressed R is still settling. */
+const SETTLE = 0.5;
 /** Radius of a fist, m. */
 const FIST = 0.1;
 const arm = new THREE.Line3();
@@ -58,6 +60,8 @@ export class Game {
   private outcome: Outcome = null;
   private outcomeTimer = 0;
   private hitstop = 0;
+  /** Seconds the camera has sat behind her. */
+  private settled = 0;
   private elapsed = 0;
   private line = '';
   private lineLeft = 0;
@@ -129,7 +133,7 @@ export class Game {
     this.events.length = 0;
     this.line = '';
     this.input.clear();
-    this.input.holdLook(1);
+    this.settled = 0;
     this.debug.sync();
     this.cameraRig.update(0, this.player.position, this.player.yaw, true);
   }
@@ -163,7 +167,6 @@ export class Game {
   }
 
   private show(screen: Screen): void {
-    if (this.screen === 'title') this.input.hold(2);
     this.screen = screen;
     // A pause lets go of the mic, and presses made off the fight don't carry into it.
     this.voice.update(0, false, false);
@@ -183,6 +186,8 @@ export class Game {
     this.hitstop -= delta;
     const fightDelta = this.hitstop > 0 ? delta * 0.06 : delta;
     const live = !this.outcome;
+    this.settled = this.cameraRig.gliding ? 0 : this.settled + delta;
+    this.input.still = this.settled < SETTLE;
     this.player.update(fightDelta, live && playing ? this.input : null, this.npc.position, this.npc.mood === 'calm', this.events);
     if (live) this.npc.update(fightDelta, this.player.position, this.events);
     this.resolve();
@@ -350,6 +355,7 @@ export class Game {
         health: this.player.health,
         stamina: this.player.stamina,
         state: this.player.state,
+        still: this.input.still,
       },
       npc: {
         position: { x: this.npc.position.x, y: this.npc.position.y, z: this.npc.position.z },

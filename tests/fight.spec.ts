@@ -42,7 +42,7 @@ async function capture(page: Page): Promise<void> {
   await page.mouse.down();
   await page.mouse.up();
   await expect.poll(() => page.evaluate(() => document.pointerLockElement?.id)).toBe('game-canvas');
-  await page.waitForTimeout(2000); // she answers input only two seconds into the fight
+  await expect.poll(async () => (await read(page)).player.still).toBe(false);
 }
 
 /** Slide the mouse sideways as far as turns her by `radians`, positive left, once it is captured. */
@@ -189,7 +189,7 @@ test('a click captures the mouse without striking; then the mouse turns her, unt
   expect(errors).toEqual([]);
 });
 
-test('for two seconds after the click that starts the fight, she neither moves nor turns', async ({ page }) => {
+test('until the camera has sat behind her for a moment after the click that starts the fight, she neither moves nor turns', async ({ page }) => {
   const errors = await start(page);
   await page.mouse.down();
   await page.mouse.up();
@@ -422,7 +422,7 @@ test('fighting in rounds and resting while he is calm wins', async ({ page }) =>
   expect(errors).toEqual([]);
 });
 
-test('a rematch faces her at him, whatever the mouse did on the result screen or in its first second', async ({ page }) => {
+test('a rematch faces her at him, whatever the mouse did on the result screen or as it starts', async ({ page }) => {
   const errors = await start(page);
   await capture(page);
   await page.evaluate(() => window.__THREE_GAME_TEST_HOOKS__?.setState('defeat'));
