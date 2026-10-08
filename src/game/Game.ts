@@ -158,7 +158,6 @@ export class Game {
         npc: this.npc.health / tuning.npcMaxHealth,
         mood: this.npc.mood,
         regenerating: this.npc.mood === 'calm' && this.player.health < tuning.playerMaxHealth && this.player.state !== 'down',
-        hint: this.hint(),
         outcome: this.outcomeTimer > 1.4 ? this.outcome : null,
         npcHealthLeft: Math.ceil(this.npc.health),
       },
@@ -242,14 +241,6 @@ export class Game {
     this.audio.stinger(this.outcome === 'victory');
     if (this.outcome === 'defeat') this.npc.standDown();
     this.debug.sync();
-  }
-
-  private hint(): string {
-    if (this.outcome) return '';
-    const health = this.player.health / tuning.playerMaxHealth;
-    if (this.npc.mood === 'enraged') return health < 0.35 ? 'You can’t outlast him. Calm him down to rest.' : '';
-    if (this.npc.health === tuning.npcMaxHealth && health > 0.99) return 'He won’t fight while calm. Enrage him.';
-    return health > 0.95 ? 'Rested. Enrage him to fight on.' : 'He’s calm. Catch your breath.';
   }
 
   private installTestHooks(): void {

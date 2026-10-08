@@ -7,9 +7,13 @@ type HudState = {
   npc: number; // 0..1
   mood: Mood;
   regenerating: boolean;
-  hint: string;
   outcome: Outcome;
   npcHealthLeft: number;
+};
+
+const GOALS: Record<Mood, string> = {
+  calm: '<b class="enraged">Enrage</b> him to fight',
+  enraged: '<b class="calm">Pacify</b> him to rest and heal',
 };
 
 const $ = <T extends HTMLElement>(selector: string) => document.querySelector(selector) as T;
@@ -23,7 +27,8 @@ export class Hud {
   private readonly npcFill = $('.npc .fill');
   private readonly npcChip = $('.npc .chip');
   private readonly npcPortrait = $<HTMLImageElement>('.npc img');
-  private readonly hint = $('#hint');
+  private readonly voice = $('#voice');
+  private readonly goal = $('#voice p');
   private readonly result = $('#result');
   private readonly resultTitle = $('#result h1');
   private readonly resultText = $('#result p');
@@ -48,14 +53,18 @@ export class Hud {
       this.npcPortrait.className = state.mood;
       this.npcPortrait.alt = state.mood === 'calm' ? 'Calm' : 'Enraged';
       this.npcPortrait.src = `/portraits/gorran-${state.mood}.webp`;
-      if (this.last.mood) this.npcPortrait.animate([{ transform: 'scale(1.25)' }, { transform: 'scale(1)' }], { duration: 450, easing: 'cubic-bezier(.22,1,.36,1)' });
+      this.goal.innerHTML = GOALS[state.mood];
+      if (this.last.mood) {
+        this.npcPortrait.animate([{ transform: 'scale(1.25)' }, { transform: 'scale(1)' }], { duration: 450, easing: 'cubic-bezier(.22,1,.36,1)' });
+        this.goal.animate([{ opacity: 0, transform: 'translateY(8px)' }, {}], { duration: 450, easing: 'cubic-bezier(.22,1,.36,1)' });
+      }
     }
     if (state.regenerating !== this.last.regenerating) this.playerSection.classList.toggle('regen', state.regenerating);
-    if (state.hint !== this.last.hint) this.hint.textContent = state.hint;
     this.app.classList.toggle('hurt', state.player < 0.3 && !state.outcome);
 
     if (state.outcome !== this.last.outcome) {
       this.result.hidden = !state.outcome;
+      this.voice.hidden = !!state.outcome;
       this.result.className = state.outcome ?? '';
       this.resultTitle.textContent = state.outcome === 'victory' ? 'Victory' : 'Defeat';
       this.resultText.textContent =
