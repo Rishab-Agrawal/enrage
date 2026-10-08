@@ -40,9 +40,10 @@ export class CameraRig {
     this.camera.lookAt(this.look.copy(this.focus).addScaledVector(f, LOOK_AHEAD).setY(this.focus.y + LOOK_HEIGHT));
     this.glide = snap ? 1 : Math.min(1, this.glide + delta / GLIDE);
     if (this.glide < 1) {
-      const t = THREE.MathUtils.smootherstep(this.glide, 0, 1);
-      this.camera.position.lerpVectors(this.from.position, this.camera.position, t);
-      this.camera.quaternion.slerpQuaternions(this.from.rotation, this.camera.quaternion, t);
+      // Back from the follow pose toward the title shot: the camera is the target, so it can't be an argument.
+      const t = 1 - THREE.MathUtils.smootherstep(this.glide, 0, 1);
+      this.camera.position.lerp(this.from.position, t);
+      this.camera.quaternion.slerp(this.from.rotation, t);
     }
 
     this.trauma = Math.max(0, this.trauma - delta * 1.6);
