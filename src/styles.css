@@ -58,6 +58,31 @@ body,
   pointer-events: none;
 }
 
+.fighter {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-content: start;
+  align-items: end;
+  column-gap: 12px;
+}
+
+.npc {
+  grid-template-columns: 1fr auto;
+}
+
+.fighter img {
+  grid-row: 1 / span 2;
+  width: 64px;
+  height: 64px;
+  border: 2px solid var(--gold);
+  background: var(--frame);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
+}
+
+.npc img {
+  grid-column: 2;
+}
+
 .fighter h2 {
   margin: 0 0 6px;
   font-size: 1.15rem;
