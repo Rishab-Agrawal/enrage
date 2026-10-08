@@ -9,8 +9,10 @@ const takes = (name: string, count: number) => Array.from({ length: count }, (_,
 const STEPS = takes('step', 2);
 const HURTS = takes('hurt', 3);
 const GRUNTS = takes('grunt', 3);
+const HITS = takes('hit', 3);
+const HEAVY_HITS = takes('heavy-hit', 3);
 
-/** Web Audio: procedural impacts, swings, calm chime, outcome stingers and wind; recorded music, voice and effects. */
+/** Web Audio: procedural swings, calm chime, outcome stingers and wind; recorded music, voice and effects. */
 export class Audio {
   // Browsers hold a context made before the first click or key press suspended; that press resumes it.
   private readonly context = new AudioContext();
@@ -64,7 +66,7 @@ export class Audio {
       this.tracks.set(mood, gain);
       void this.load(`audio/music/${mood}.mp3`).then((buffer) => this.play(buffer, gain, true));
     }
-    for (const url of [START, ...STEPS, ...HURTS, ...GRUNTS]) void this.load(url);
+    for (const url of [START, ...STEPS, ...HURTS, ...GRUNTS, ...HITS, ...HEAVY_HITS]) void this.load(url);
   }
 
   /** The fight begins. */
@@ -91,9 +93,9 @@ export class Audio {
     this.noiseBurst(heavy ? 0.32 : 0.18, heavy ? 500 : 1400, heavy ? 1800 : 4200, heavy ? 0.22 : 0.16);
   }
 
+  /** A blow lands; `heavy` for Gorran's, on her. */
   hit(heavy: boolean): void {
-    this.thump(heavy ? 70 : 120, heavy ? 0.5 : 0.32, heavy ? 0.9 : 0.6);
-    this.noiseBurst(0.08, 2500, 900, heavy ? 0.5 : 0.35);
+    this.vary(heavy ? HEAVY_HITS : HITS, heavy ? 1 : 0.7);
   }
 
   whoosh(): void {
@@ -175,20 +177,6 @@ export class Audio {
     source.connect(filter).connect(gain).connect(this.master);
     source.start(now, Math.random());
     source.stop(now + duration);
-  }
-
-  private thump(frequency: number, duration: number, volume: number): void {
-    const ctx = this.context;
-    const now = ctx.currentTime;
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.frequency.setValueAtTime(frequency * 2.2, now);
-    osc.frequency.exponentialRampToValueAtTime(frequency * 0.6, now + duration);
-    gain.gain.setValueAtTime(volume, now);
-    gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
-    osc.connect(gain).connect(this.master);
-    osc.start(now);
-    osc.stop(now + duration);
   }
 
   private tone(frequency: number, delay: number, duration: number, volume: number, type: OscillatorType): void {
