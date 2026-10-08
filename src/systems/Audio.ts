@@ -4,7 +4,7 @@ import { voiceFile } from '../game/lines';
 /** Music level, under the effects. */
 const MUSIC = 0.3;
 const START = 'audio/sfx/start.mp3';
-const STEPS = [1, 2, 3].map((i) => `audio/sfx/step-${i}.mp3`);
+const STEPS = [1, 2].map((i) => `audio/sfx/step-${i}.mp3`);
 
 /** Web Audio: procedural impacts, swings, roar, calm chime, outcome stingers and wind; recorded music, voice and effects. */
 export class Audio {
