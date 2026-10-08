@@ -8,7 +8,7 @@ export const tuning = {
   playerStrafeSpeed: 2,
   /** Rad per pixel of mouse travel. */
   mouseTurn: 0.003,
-  strikeDamage: 10,
+  strikeDamage: 15,
   npcMaxHealth: 400,
   npcRunSpeed: 5.5,
   punchDamage: 15,

@@ -44,10 +44,10 @@ Everything physical happens on touch. A blow lands only if the striking fist, sa
 | | Player | NPC |
 | --- | --- | --- |
 | Health | 100, regen 3/s only while he is calm | 400, never heals |
-| Damage | 10 per strike (jab/cross alternate) | punch and haymaker 15 each, + knockback |
+| Damage | 15 per strike (jab/cross alternate) | punch and haymaker 15 each, + knockback |
 | Rhythm | strike every ~0.45 s, dodge 0.32 s with i-frames, 0.7 s cooldown | wind-up 0.5–0.9 s, ~1.5 s attack cycle |
 
-Rough maths: a straight trade drains the player in about 18 s while dealing at most ~330 damage, so winning takes about one rest.
+Rough maths: a straight trade drains the player in about 18 s while dealing at most ~500 damage, more than his 400 health, so a clean trade can win without a rest.
 
 ## Arena
 
