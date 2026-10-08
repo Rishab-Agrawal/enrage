@@ -1,4 +1,4 @@
-const DEEPGRAM = 'wss://api.deepgram.com/v1/listen?model=nova-3&smart_format=true&keyterm=Gorran';
+const DEEPGRAM = 'wss://api.deepgram.com/v1/listen?model=nova-3&smart_format=true&keyterm=Gorran&keyterm=Wren';
 /** How often the recorder hands audio to the socket, ms. */
 const CHUNK = 100;
 
