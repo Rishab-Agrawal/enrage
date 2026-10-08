@@ -205,6 +205,28 @@ test('until the camera has glided in behind her after the click that starts the 
   expect(errors).toEqual([]);
 });
 
+test('what she says while Space is held shows in the debug panel', async ({ page }) => {
+  // Deepgram stubbed: a silent mic, a fake token, and a socket that answers CloseStream with a fixed transcript.
+  await page.addInitScript(() => {
+    navigator.mediaDevices.getUserMedia = async () => new AudioContext().createMediaStreamDestination().stream;
+  });
+  await page.route('/api/stt-token', (route) => route.fulfill({ json: { access_token: 'test' } }));
+  await page.routeWebSocket('wss://api.deepgram.com/**', (socket) =>
+    socket.onMessage((message) => {
+      if (typeof message !== 'string' || JSON.parse(message).type !== 'CloseStream') return;
+      socket.send(JSON.stringify({ type: 'Results', is_final: true, channel: { alternatives: [{ transcript: 'You look tired.' }] } }));
+      socket.close();
+    }),
+  );
+  const errors = await start(page);
+  await capture(page);
+  await page.keyboard.down('Space');
+  await page.waitForTimeout(400);
+  await page.keyboard.up('Space');
+  await expect(page.locator('#debug .heard')).toHaveText('You look tired.');
+  expect(errors).toEqual([]);
+});
+
 test('losing the mouse pauses the fight and lets go of the mic; capturing it again resumes', async ({ page }) => {
   const errors = await start(page);
   await capture(page);

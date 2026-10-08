@@ -10,3 +10,4 @@ references/ccgs/
 artifacts/dev/
 *.tmp.*
 *.webm
+.env.local

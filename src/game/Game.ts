@@ -9,6 +9,7 @@ import { Audio } from '../systems/Audio';
 import { CameraRig } from '../systems/CameraRig';
 import { DebugPanel } from '../systems/DebugPanel';
 import { Hud, type Outcome, type Screen } from '../systems/Hud';
+import { Speech } from '../systems/Speech';
 import { Vfx } from '../systems/Vfx';
 import { Voice } from '../systems/Voice';
 import { createSeededRandom } from '../utils/random';
@@ -46,6 +47,7 @@ export class Game {
   private readonly vfx = new Vfx();
   private readonly audio = new Audio();
   private readonly voice = new Voice();
+  private readonly speech = new Speech((text) => this.debug.heard(text));
   private readonly hud = new Hud(() => this.rematch());
   private readonly debug: DebugPanel;
   private readonly loop = new Loop(
@@ -141,6 +143,7 @@ export class Game {
     else if (this.screen !== 'fight' && this.input.captured) this.show('fight');
     const running = this.screen !== 'paused' && !this.frozen;
     if (running) this.step(delta);
+    this.speech.hold(this.voice.state === 'listening');
     this.hud.update(
       {
         player: this.player.health / tuning.playerMaxHealth,

@@ -6,6 +6,7 @@ import { tuning } from '../game/tuning';
 export class DebugPanel {
   private readonly gui = new GUI({ title: 'Debug', container: document.querySelector<HTMLElement>('#debug') ?? undefined });
   private readonly state: { mood: Mood };
+  private readonly heardText = document.createElement('p');
 
   constructor(
     private readonly getMood: () => Mood,
@@ -18,6 +19,8 @@ export class DebugPanel {
       .name('NPC mood')
       .onChange((mood: Mood) => setMood(mood));
     this.gui.add({ rematch }, 'rematch').name('Rematch');
+    this.heardText.className = 'heard';
+    this.gui.$children.append(this.heardText);
     const balance = this.gui.addFolder('Balance').close();
     balance.add(tuning, 'playerRegen', 0, 20, 0.5).name('player regen /s');
     balance.add(tuning, 'strikeDamage', 1, 40, 1).name('strike damage');
@@ -35,6 +38,11 @@ export class DebugPanel {
   sync(): void {
     this.state.mood = this.getMood();
     for (const controller of this.gui.controllersRecursive()) controller.updateDisplay();
+  }
+
+  /** What speech-to-text made of her last turn. */
+  heard(text: string): void {
+    this.heardText.textContent = text || '(nothing heard)';
   }
 
   setHidden(hidden: boolean): void {
