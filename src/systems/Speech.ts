@@ -28,10 +28,11 @@ export class Speech {
 
   private async listen(released: Promise<void>): Promise<string> {
     this.mic ??= navigator.mediaDevices.getUserMedia({ audio: true });
-    const recorder = new MediaRecorder(await this.mic);
+    // One format in every browser: Safari would otherwise record MP4, which Deepgram can't stream.
+    const recorder = new MediaRecorder(await this.mic, { mimeType: 'audio/webm;codecs=opus' });
     const queued: Blob[] = [];
     let send: (chunk: Blob) => void = (chunk) => queued.push(chunk);
-    // Firefox's recorder hands over empty chunks between pages, and Deepgram takes an empty message as the end of the stream.
+    // A recorder may hand over an empty chunk, and Deepgram takes an empty message as the end of the stream.
     recorder.ondataavailable = (event) => event.data.size > 0 && send(event.data);
     const stopped = new Promise((resolve) => (recorder.onstop = resolve));
     recorder.start(CHUNK);

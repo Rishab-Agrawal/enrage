@@ -206,7 +206,7 @@ test('until the camera has glided in behind her after the click that starts the 
 });
 
 test('what she says while Space is held shows in the debug panel', async ({ page }) => {
-  // Deepgram stubbed: a silent mic whose recorder leads with an empty chunk, as Firefox's does, a fake token, and a socket
+  // Deepgram stubbed: a silent mic whose recorder leads with an empty chunk, as recorders may, a fake token, and a socket
   // that, like Deepgram, ends the stream on an empty message and answers CloseStream with a fixed transcript.
   await page.addInitScript(() => {
     navigator.mediaDevices.getUserMedia = async () => new AudioContext().createMediaStreamDestination().stream;
