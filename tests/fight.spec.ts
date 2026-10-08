@@ -42,7 +42,7 @@ async function capture(page: Page): Promise<void> {
   await page.mouse.down();
   await page.mouse.up();
   await expect.poll(() => page.evaluate(() => document.pointerLockElement?.id)).toBe('game-canvas');
-  await page.waitForTimeout(1000); // the mouse turns her only a second into the fight
+  await page.waitForTimeout(2000); // she answers input only two seconds into the fight
 }
 
 /** Slide the mouse sideways as far as turns her by `radians`, positive left, once it is captured. */
@@ -186,6 +186,22 @@ test('a click captures the mouse without striking; then the mouse turns her, unt
   expect(await turned(-0.6)).toBeCloseTo(-0.6, 3); // sliding right turns her clockwise from above
   await page.evaluate(() => document.exitPointerLock());
   expect(await turned(0.6)).toBe(0);
+  expect(errors).toEqual([]);
+});
+
+test('for two seconds after the click that starts the fight, she neither moves nor turns', async ({ page }) => {
+  const errors = await start(page);
+  await page.mouse.down();
+  await page.mouse.up();
+  await expect.poll(() => page.evaluate(() => document.pointerLockElement?.id)).toBe('game-canvas');
+  const before = await read(page);
+  await page.keyboard.down('KeyW');
+  await look(page, 1);
+  await page.waitForTimeout(500);
+  const after = await read(page);
+  await page.keyboard.up('KeyW');
+  expect(after.player.position).toEqual(before.player.position);
+  expect(after.player.yaw).toBe(before.player.yaw);
   expect(errors).toEqual([]);
 });
 

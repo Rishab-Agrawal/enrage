@@ -8,13 +8,14 @@ export class Input {
   private readonly keys = new Set<string>();
   private readonly pressed = new Set<'strike' | 'dodge' | 'rematch' | 'speak' | 'pause'>();
   private look = 0;
-  /** `performance.now()` before which mouse travel is ignored. */
+  /** `performance.now()` before which mouse travel is ignored, and before which she isn't moved at all. */
   private lookFrom = 0;
+  private stillUntil = 0;
 
   private readonly onKeyDown = (event: KeyboardEvent) => {
     if (event.repeat) return;
     // Shift sprints forward; with no movement key held, it dashes where the body faces.
-    if (event.key === 'Shift' && this.movement(new THREE.Vector2()).lengthSq() === 0) this.pressed.add('dodge');
+    if (event.key === 'Shift' && !this.still && this.movement(new THREE.Vector2()).lengthSq() === 0) this.pressed.add('dodge');
     this.keys.add(event.code);
     if (event.code === 'KeyR') this.pressed.add('rematch');
     if (event.code === 'Space') this.pressed.add('speak');
@@ -35,7 +36,7 @@ export class Input {
     // Raw movement: Chrome's default lock recentres the cursor, and fast travel then spikes or stalls at the window's
     // edge. Where raw input is unsupported, the plain lock. Firefox returns no promise.
     if (!this.captured) return void this.lock();
-    if (event.button === 0) this.pressed.add('strike');
+    if (event.button === 0 && !this.still) this.pressed.add('strike');
   };
   private readonly onContextMenu = (event: MouseEvent) => event.preventDefault();
   private readonly onMouseMove = (event: MouseEvent) => {
@@ -63,6 +64,7 @@ export class Input {
 
   /** WASD/arrows as x (right) and y (forward), each -1, 0 or 1. */
   movement(target: THREE.Vector2): THREE.Vector2 {
+    if (this.still) return target.set(0, 0);
     const held = (a: string, b: string) => (this.keys.has(a) || this.keys.has(b) ? 1 : 0);
     return target.set(held('KeyD', 'ArrowRight') - held('KeyA', 'ArrowLeft'), held('KeyW', 'ArrowUp') - held('KeyS', 'ArrowDown'));
   }
@@ -90,9 +92,19 @@ export class Input {
     return this.pressed.delete(intent);
   }
 
-  /** Ignore mouse travel for a second: the hand that just clicked or pressed R is still settling on the mouse. */
-  holdLook(): void {
-    this.lookFrom = performance.now() + 1000;
+  /** Ignore mouse travel for `seconds`: the hand that just pressed R is still settling on the mouse. */
+  holdLook(seconds: number): void {
+    this.lookFrom = performance.now() + seconds * 1000;
+  }
+
+  /** Ignore moves, strikes and dodges too, as the click that starts the fight settles and the camera swoops in. */
+  hold(seconds: number): void {
+    this.holdLook(seconds);
+    this.stillUntil = this.lookFrom;
+  }
+
+  private get still(): boolean {
+    return performance.now() < this.stillUntil;
   }
 
   /** Forget latched presses and mouse travel, e.g. made on the result screen. */
