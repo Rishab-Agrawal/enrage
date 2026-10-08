@@ -23,8 +23,6 @@ export class Hud {
   private readonly npcFill = $('.npc .fill');
   private readonly npcChip = $('.npc .chip');
   private readonly npcPortrait = $<HTMLImageElement>('.npc img');
-  private readonly mood = $('#mood');
-  private readonly moodLabel = $('#mood span');
   private readonly hint = $('#hint');
   private readonly result = $('#result');
   private readonly resultTitle = $('#result h1');
@@ -47,15 +45,14 @@ export class Hud {
     this.npcChip.style.transform = `scaleX(${this.chips.npc})`;
 
     if (state.mood !== this.last.mood) {
-      this.mood.className = `mood ${state.mood}`;
-      this.moodLabel.textContent = state.mood === 'calm' ? 'Calm' : 'Enraged';
+      this.npcPortrait.className = state.mood;
+      this.npcPortrait.alt = state.mood === 'calm' ? 'Calm' : 'Enraged';
       this.npcPortrait.src = `/portraits/gorran-${state.mood}.webp`;
-      if (this.last.mood) this.mood.animate([{ transform: 'scale(1.5)' }, { transform: 'scale(1)' }], { duration: 450, easing: 'cubic-bezier(.22,1,.36,1)' });
+      if (this.last.mood) this.npcPortrait.animate([{ transform: 'scale(1.25)' }, { transform: 'scale(1)' }], { duration: 450, easing: 'cubic-bezier(.22,1,.36,1)' });
     }
     if (state.regenerating !== this.last.regenerating) this.playerSection.classList.toggle('regen', state.regenerating);
     if (state.hint !== this.last.hint) this.hint.textContent = state.hint;
     this.app.classList.toggle('hurt', state.player < 0.3 && !state.outcome);
-    this.mood.hidden = Boolean(state.outcome);
 
     if (state.outcome !== this.last.outcome) {
       this.result.hidden = !state.outcome;

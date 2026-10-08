@@ -145,59 +145,18 @@ body,
   }
 }
 
-.mood {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
-  margin-top: 8px;
-  font-weight: 900;
-  font-size: 0.95rem;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  text-shadow: 0 2px 0 var(--ink);
+.npc img.calm {
+  outline: 3px solid var(--calm);
 }
 
-.mood svg {
-  width: 30px;
-  height: 30px;
-  padding: 4px;
-  border: 2px solid currentColor;
-  background: var(--frame);
-  transform: rotate(45deg);
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 2;
-  stroke-linecap: round;
-}
-
-.mood svg path {
-  transform: rotate(-45deg);
-  transform-origin: center;
-}
-
-.mood.calm {
-  color: var(--calm);
-}
-
-.mood.enraged {
-  color: var(--rage);
+.npc img.enraged {
+  outline: 3px solid var(--rage);
   animation: smoulder 1.2s ease-in-out infinite;
-}
-
-.mood.calm .icon-rage,
-.mood.enraged .icon-calm {
-  display: none;
-}
-
-.mood.enraged .icon-rage {
-  fill: currentColor;
-  stroke: none;
 }
 
 @keyframes smoulder {
   50% {
-    filter: drop-shadow(0 0 8px var(--rage));
+    box-shadow: 0 0 14px var(--rage);
   }
 }
 
@@ -257,7 +216,6 @@ kbd {
   animation: rise 0.5s ease-out;
 }
 
-.mood[hidden],
 #result[hidden],
 #loading[hidden] {
   display: none;

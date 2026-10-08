@@ -12,7 +12,7 @@ The first playable slice: one fight, one NPC, one hilltop arena. No levels, no c
 - **Lose, learn, restart:** your bar empties → defeat card showing his remaining health → instant rematch (R).
 - **Risk and reward:** staying in to land one more hit against getting caught by his punch. Calming him early is safe but slow.
 - **A better player:** dodges through his wind-ups, lands full combos, and rests less.
-- **Communicating the next decision:** his mood badge, his rage embers and rim light, his roar on enrage, and the wind-up before each attack.
+- **Communicating the next decision:** his portrait's mood ring, his rage embers and rim light, his roar on enrage, and the wind-up before each attack.
 - **Non-goals:** levels, multiple NPCs, chat/voice, LLM, mobile/touch, gamepad.
 
 ## Core loop contract
