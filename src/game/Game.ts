@@ -10,6 +10,7 @@ import { CameraRig } from '../systems/CameraRig';
 import { DebugPanel } from '../systems/DebugPanel';
 import { Hud, type Outcome } from '../systems/Hud';
 import { Vfx } from '../systems/Vfx';
+import { Voice } from '../systems/Voice';
 import { createSeededRandom } from '../utils/random';
 import { Arena, SUN_DIRECTION } from '../world/Arena';
 import type { FightEvent, Mood } from './events';
@@ -41,6 +42,7 @@ export class Game {
   private readonly cameraRig = new CameraRig(this.camera);
   private readonly vfx = new Vfx();
   private readonly audio = new Audio();
+  private readonly voice = new Voice();
   private readonly hud = new Hud(() => this.rematch());
   private readonly debug: DebugPanel;
   private readonly loop = new Loop(
@@ -133,6 +135,7 @@ export class Game {
   private step(delta: number): void {
     this.elapsed += delta;
     if (this.input.consume('rematch') && this.outcome) this.rematch();
+    this.voice.update(delta, this.input.consume('speak'), this.input.speaking);
 
     // Hitstop slows the fight, never the camera or effects.
     this.hitstop -= delta;
@@ -157,6 +160,8 @@ export class Game {
         player: this.player.health / tuning.playerMaxHealth,
         npc: this.npc.health / tuning.npcMaxHealth,
         mood: this.npc.mood,
+        voice: this.voice.state,
+        voiceLeft: this.voice.remaining,
         regenerating: this.npc.mood === 'calm' && this.player.health < tuning.playerMaxHealth && this.player.state !== 'down',
         outcome: this.outcomeTimer > 1.4 ? this.outcome : null,
         npcHealthLeft: Math.ceil(this.npc.health),

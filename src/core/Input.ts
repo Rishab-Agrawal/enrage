@@ -6,7 +6,7 @@ import * as THREE from 'three';
  */
 export class Input {
   private readonly keys = new Set<string>();
-  private readonly pressed = new Set<'strike' | 'dodge' | 'rematch'>();
+  private readonly pressed = new Set<'strike' | 'dodge' | 'rematch' | 'speak'>();
   private look = 0;
 
   private readonly onKeyDown = (event: KeyboardEvent) => {
@@ -15,6 +15,7 @@ export class Input {
     if (event.key === 'Shift' && this.movement(new THREE.Vector2()).lengthSq() === 0) this.pressed.add('dodge');
     this.keys.add(event.code);
     if (event.code === 'KeyR') this.pressed.add('rematch');
+    if (event.code === 'Space') this.pressed.add('speak');
   };
   private readonly onKeyUp = (event: KeyboardEvent) => this.keys.delete(event.code);
   // Focus moving to another window or into a widget takes the keyups with it (lil-gui's swallow them): let held keys go.
@@ -62,11 +63,15 @@ export class Input {
     return look;
   }
 
+  get speaking(): boolean {
+    return this.keys.has('Space');
+  }
+
   get sprinting(): boolean {
     return this.keys.has('ShiftLeft') || this.keys.has('ShiftRight');
   }
 
-  consume(intent: 'strike' | 'dodge' | 'rematch'): boolean {
+  consume(intent: 'strike' | 'dodge' | 'rematch' | 'speak'): boolean {
     return this.pressed.delete(intent);
   }
 

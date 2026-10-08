@@ -196,19 +196,61 @@ body,
   color: var(--rage);
 }
 
+/* The SVG draws in px: its viewBox matches its size, centred on the 24-unit icon. */
 #voice svg {
   width: 60px;
   height: 60px;
-  padding: 15px;
-  border: 2px solid var(--gold);
   border-radius: 50%;
-  background: var(--frame);
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
   fill: none;
   stroke: var(--paper);
   stroke-width: 2;
   stroke-linecap: round;
   stroke-linejoin: round;
+  transition: opacity 0.3s, filter 0.3s;
+}
+
+#voice circle {
+  fill: var(--frame);
+  stroke: var(--gold);
+  transition: stroke 0.3s;
+}
+
+#voice .timer {
+  fill: none;
+  stroke-width: 3;
+  stroke-dasharray: 1;
+  stroke-linecap: butt;
+  opacity: 0;
+}
+
+#voice:is(.listening, .cooldown) circle {
+  stroke: rgba(233, 199, 123, 0.3);
+}
+
+#voice:is(.listening, .cooldown) .timer {
+  stroke: var(--paper);
+  opacity: 1;
+}
+
+#voice.listening svg {
+  stroke: var(--gold);
+  animation: listen 1.2s ease-in-out infinite;
+}
+
+@keyframes listen {
+  0%,
+  100% {
+    filter: drop-shadow(0 0 3px #fff3d6) drop-shadow(0 0 10px var(--gold));
+  }
+  50% {
+    filter: drop-shadow(0 0 5px #fff3d6) drop-shadow(0 0 22px var(--gold));
+  }
+}
+
+#voice.cooldown :is(svg, span) {
+  opacity: 0.55;
+  filter: grayscale(1);
 }
 
 #voice span {

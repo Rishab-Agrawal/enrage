@@ -1,4 +1,5 @@
 import type { Mood } from '../game/events';
+import type { VoiceState } from './Voice';
 
 export type Outcome = 'victory' | 'defeat' | null;
 
@@ -6,6 +7,8 @@ type HudState = {
   player: number; // 0..1
   npc: number; // 0..1
   mood: Mood;
+  voice: VoiceState;
+  voiceLeft: number; // 0..1
   regenerating: boolean;
   outcome: Outcome;
   npcHealthLeft: number;
@@ -29,6 +32,7 @@ export class Hud {
   private readonly npcPortrait = $<HTMLImageElement>('.npc img');
   private readonly voice = $('#voice');
   private readonly goal = $('#voice p');
+  private readonly voiceTimer = $('#voice .timer');
   private readonly result = $('#result');
   private readonly resultTitle = $('#result h1');
   private readonly resultText = $('#result p');
@@ -59,6 +63,9 @@ export class Hud {
         this.goal.animate([{ opacity: 0, transform: 'translateY(8px)' }, {}], { duration: 450, easing: 'cubic-bezier(.22,1,.36,1)' });
       }
     }
+    if (state.voice !== this.last.voice) this.voice.className = state.voice;
+    // The arc's tail stays at twelve while its head sweeps clockwise after it.
+    this.voiceTimer.style.strokeDashoffset = String(state.voiceLeft - 1);
     if (state.regenerating !== this.last.regenerating) this.playerSection.classList.toggle('regen', state.regenerating);
     this.app.classList.toggle('hurt', state.player < 0.3 && !state.outcome);
 
