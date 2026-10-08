@@ -264,7 +264,6 @@ export class Game {
           this.say(LINES.mood[event.mood]);
           if (event.mood === 'enraged') {
             this.vfx.roar();
-            this.audio.roar();
             this.cameraRig.shake(0.5);
           } else {
             this.audio.chime();

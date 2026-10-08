@@ -6,7 +6,7 @@ const MUSIC = 0.3;
 const START = 'audio/sfx/start.mp3';
 const STEPS = [1, 2].map((i) => `audio/sfx/step-${i}.mp3`);
 
-/** Web Audio: procedural impacts, swings, roar, calm chime, outcome stingers and wind; recorded music, voice and effects. */
+/** Web Audio: procedural impacts, swings, calm chime, outcome stingers and wind; recorded music, voice and effects. */
 export class Audio {
   // Browsers hold a context made before the first click or key press suspended; that press resumes it.
   private readonly context = new AudioContext();
@@ -89,28 +89,6 @@ export class Audio {
 
   whoosh(): void {
     this.noiseBurst(0.28, 600, 2400, 0.18);
-  }
-
-  roar(): void {
-    const ctx = this.context;
-    const now = ctx.currentTime;
-    const osc = ctx.createOscillator();
-    const filter = ctx.createBiquadFilter();
-    const gain = ctx.createGain();
-    osc.type = 'sawtooth';
-    osc.frequency.setValueAtTime(95, now);
-    osc.frequency.linearRampToValueAtTime(70, now + 1.1);
-    filter.type = 'lowpass';
-    filter.frequency.setValueAtTime(300, now);
-    filter.frequency.linearRampToValueAtTime(1200, now + 0.25);
-    filter.frequency.linearRampToValueAtTime(250, now + 1.1);
-    gain.gain.setValueAtTime(0.0001, now);
-    gain.gain.exponentialRampToValueAtTime(0.5, now + 0.12);
-    gain.gain.exponentialRampToValueAtTime(0.0001, now + 1.2);
-    osc.connect(filter).connect(gain).connect(this.master);
-    osc.start(now);
-    osc.stop(now + 1.25);
-    this.noiseBurst(1.0, 400, 900, 0.25);
   }
 
   chime(): void {
