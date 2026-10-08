@@ -145,18 +145,21 @@ body,
   }
 }
 
-.npc img.calm {
-  outline: 3px solid var(--calm);
+/* Mood ring traces his cutout's alpha; no downward shadow, so the bust's cut edge stays bare. */
+.npc img {
+  --ring: var(--calm);
+  --outline: drop-shadow(2px 0 0 var(--ring)) drop-shadow(-2px 0 0 var(--ring)) drop-shadow(0 -2px 0 var(--ring));
+  filter: var(--outline);
 }
 
 .npc img.enraged {
-  outline: 3px solid var(--rage);
+  --ring: var(--rage);
   animation: smoulder 1.2s ease-in-out infinite;
 }
 
 @keyframes smoulder {
   50% {
-    box-shadow: 0 0 14px var(--rage);
+    filter: var(--outline) drop-shadow(0 0 8px var(--rage));
   }
 }
 
