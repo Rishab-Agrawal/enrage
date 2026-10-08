@@ -41,4 +41,4 @@ Python is `py`; `python` is the Windows Store stub.
 
 NPC enrage/calm decisions come from an LLM: stub that call in tests and bot playtests so they stay deterministic.
 
-Run the tests a change can break, all of them when it touches shared code; check what none cover with a screenshot.
+Run the tests a change can break, and the full suite only when required (like touching shared code); check what none cover with a screenshot.
