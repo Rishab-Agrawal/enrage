@@ -127,15 +127,19 @@ export class Npc {
         if (this.timer >= ROAR_TIME) this.enter('chase');
         break;
       case 'chase': {
-        // He swings once she'll still be in reach as the blow lands, judging by her speed toward him.
+        // He swings once she'll still be in reach as the blow lands, judging by her speed toward him: he follows her off.
         const attack = ATTACKS[this.attack];
-        if (distance - closing * windUp(attack) <= attack.range || distance <= CLINCH) this.startAttack(events);
+        if (distance - Math.max(0, closing) * windUp(attack) <= attack.range || distance <= CLINCH) this.startAttack(events);
         else this.walk(this.toPlayer.normalize(), tuning.npcRunSpeed, delta);
         break;
       }
       case 'attack':
-        // He tracks her through the wind-up, committed after contact: sidestepping late works.
-        if (this.contactAt > 0) aimToward(this.character, yawTo(this.toPlayer), 5, delta);
+        // He tracks her through the wind-up, stepping after her as fast as she backs off, up to his run: only a dash
+        // outruns the blow. Committed after contact: sidestepping late works.
+        if (this.contactAt > 0) {
+          aimToward(this.character, yawTo(this.toPlayer), 5, delta);
+          this.position.addScaledVector(this.toPlayer.normalize(), THREE.MathUtils.clamp(-closing, 0, tuning.npcRunSpeed) * delta);
+        }
         if (this.contactAt > 0 && this.timer >= this.contactAt) {
           this.contactAt = 0;
           const { hand, knockback } = ATTACKS[this.attack];

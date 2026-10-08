@@ -369,7 +369,7 @@ test('an action owns the whole body unless it tracks the aim: then his hips pivo
   expect(tracked.twist).toBeLessThanOrEqual(0.8);
 });
 
-test('walking back or sideways, before or as he swings, does not dodge his blows', async ({ page }) => {
+test('walking away, back or forward, or sideways, before or as he swings, does not dodge his blows', async ({ page }) => {
   await start(page);
   const misses = await page.evaluate(async () => {
     const THREE = await import('/node_modules/three/build/three.module.js' as string);
@@ -377,8 +377,8 @@ test('walking back or sideways, before or as he swings, does not dodge his blows
     const { Npc } = await import('/src/entities/Npc.ts' as string);
     const gltf = await new GLTFLoader().loadAsync('models/npc.glb');
     const misses: string[] = [];
-    // She walks back at her backing speed or sideways at her strafing speed: all along, or 0.2 s into each of his swings.
-    for (const [back, side] of [[1.5, 0], [0, 2]]) {
+    // She walks away at her backing or walking speed, or sideways at her strafing speed: all along, or 0.2 s into each of his swings.
+    for (const [speed, side, how] of [[1.5, 0, 'back'], [2, 0, 'forward'], [0, 2, 'side']] as const) {
       for (const reactive of [false, true]) {
         for (const pick of [0.1, 0.9]) {
           const npc = new Npc(gltf, () => pick); // punches only, then haymakers only
@@ -389,7 +389,7 @@ test('walking back or sideways, before or as he swings, does not dodge his blows
           for (let t = 0; t < 20; t += 1 / 60) {
             const away = player.clone().sub(npc.position).setY(0).normalize();
             if (!reactive || (npc.state === 'attack' && t - swungAt > 0.2)) {
-              player.addScaledVector(away, back / 60).addScaledVector(new THREE.Vector3(-away.z, 0, away.x), side / 60);
+              player.addScaledVector(away, speed / 60).addScaledVector(new THREE.Vector3(-away.z, 0, away.x), side / 60);
             }
             if (player.length() > 13) player.setLength(13); // inside the arena's edge
             npc.update(1 / 60, player, events);
@@ -404,7 +404,7 @@ test('walking back or sideways, before or as he swings, does not dodge his blows
             }
             events.length = 0;
           }
-          if (hits < 0.85 * swings) misses.push(`${back ? 'back' : 'side'} ${reactive ? 'on his swing' : 'all along'} ${pick < 0.5 ? 'punch' : 'haymaker'}: ${hits}/${swings}`);
+          if (hits < 0.85 * swings) misses.push(`${how} ${reactive ? 'on his swing' : 'all along'} ${pick < 0.5 ? 'punch' : 'haymaker'}: ${hits}/${swings}`);
         }
       }
     }
