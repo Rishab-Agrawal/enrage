@@ -1,4 +1,4 @@
-/** What Gorran says: one line of a set, at random. */
+/** What Gorran says: one line of a set, at random. `scripts/voice-lines.mjs` records them: rerun it after an edit. */
 export const LINES = {
   /** Shoving her off while calm. */
   shove: ['Please go away.', 'Leave me alone.', 'I don’t want a fight.'],
@@ -15,3 +15,6 @@ export const LINES = {
   /** He beat her. */
   won: ['I feel better now.', 'Done and dusted.', 'Be quiet next time.'],
 };
+
+/** Where a line's recording is served, from its words. */
+export const voiceFile = (line: string) => `audio/voice/${line.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}.mp3`;

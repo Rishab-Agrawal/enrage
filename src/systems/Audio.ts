@@ -1,15 +1,19 @@
 import type { Mood } from '../game/events';
+import { voiceFile } from '../game/lines';
 
 /** Music level, under the effects. */
 const MUSIC = 0.3;
 
-/** Web Audio: procedural impacts, swings, roar, calm chime, outcome stingers and wind; a music loop per mood. */
+/** Web Audio: procedural impacts, swings, roar, calm chime, outcome stingers and wind; a music loop per mood; Gorran's voice. */
 export class Audio {
   private context: AudioContext | null = null;
   private master: GainNode | null = null;
   private noise: AudioBuffer | null = null;
   private readonly tracks = new Map<Mood, GainNode>();
   private mood: Mood = 'calm';
+  private readonly recordings = new Map<string, Promise<AudioBuffer>>();
+  private said = '';
+  private voice: AudioBufferSourceNode | null = null;
 
   constructor() {
     const unlock = () => {
@@ -75,6 +79,30 @@ export class Audio {
     for (const [track, gain] of this.tracks) gain.gain.setTargetAtTime(track === mood ? MUSIC : 0, ctx.currentTime, 0.6);
   }
 
+  /** Gorran says `line` aloud, cutting off whatever he was saying. */
+  speak(line: string): void {
+    const ctx = this.context;
+    if (!ctx || !this.master) return;
+    const master = this.master;
+    this.said = line;
+    if (!this.recordings.has(line)) this.recordings.set(line, this.load(voiceFile(line)));
+    void this.recordings.get(line)!.then((buffer) => {
+      // A later line may have loaded first.
+      if (this.said !== line) return;
+      this.voice?.stop();
+      this.voice = ctx.createBufferSource();
+      this.voice.buffer = buffer;
+      this.voice.connect(master);
+      this.voice.start();
+    });
+  }
+
+  private load(url: string): Promise<AudioBuffer> {
+    return fetch(url)
+      .then((response) => response.arrayBuffer())
+      .then((data) => this.context!.decodeAudioData(data));
+  }
+
   private unlock(): void {
     if (this.context) return;
     const ctx = new AudioContext();
@@ -111,16 +139,13 @@ export class Audio {
       gain.gain.value = mood === this.mood ? MUSIC : 0;
       gain.connect(this.master);
       this.tracks.set(mood, gain);
-      void fetch(`audio/music/${mood}.mp3`)
-        .then((response) => response.arrayBuffer())
-        .then((data) => ctx.decodeAudioData(data))
-        .then((buffer) => {
-          const source = ctx.createBufferSource();
-          source.buffer = buffer;
-          source.loop = true;
-          source.connect(gain);
-          source.start();
-        });
+      void this.load(`audio/music/${mood}.mp3`).then((buffer) => {
+        const source = ctx.createBufferSource();
+        source.buffer = buffer;
+        source.loop = true;
+        source.connect(gain);
+        source.start();
+      });
     }
   }
 

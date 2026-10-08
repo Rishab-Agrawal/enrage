@@ -293,6 +293,7 @@ export class Game {
   private say(lines: string[]): void {
     const fresh = lines.filter((line) => line !== this.line);
     this.line = fresh[Math.floor(Math.random() * fresh.length)];
+    this.audio.speak(this.line);
     this.lineLeft = LINE_TIME;
   }
 
