@@ -3,26 +3,68 @@ import { voiceFile } from '../game/lines';
 
 /** Music level, under the effects. */
 const MUSIC = 0.3;
+const START = 'audio/sfx/start.mp3';
 
-/** Web Audio: procedural impacts, swings, roar, calm chime, outcome stingers and wind; a music loop per mood; Gorran's voice. */
+/** Web Audio: procedural impacts, swings, roar, calm chime, outcome stingers and wind; recorded music, voice and effects. */
 export class Audio {
-  private context: AudioContext | null = null;
-  private master: GainNode | null = null;
-  private noise: AudioBuffer | null = null;
+  // Browsers hold a context made before the first click or key press suspended; that press resumes it.
+  private readonly context = new AudioContext();
+  private readonly master = this.context.createGain();
+  private readonly noise = this.context.createBuffer(1, this.context.sampleRate * 2, this.context.sampleRate);
   private readonly tracks = new Map<Mood, GainNode>();
   private mood: Mood = 'calm';
-  private readonly recordings = new Map<string, Promise<AudioBuffer>>();
+  private readonly buffers = new Map<string, Promise<AudioBuffer>>();
   private said = '';
   private voice: AudioBufferSourceNode | null = null;
 
   constructor() {
-    const unlock = () => {
-      this.unlock();
-      window.removeEventListener('pointerdown', unlock);
-      window.removeEventListener('keydown', unlock);
+    const ctx = this.context;
+    const resume = () => {
+      void ctx.resume();
+      window.removeEventListener('pointerdown', resume);
+      window.removeEventListener('keydown', resume);
     };
-    window.addEventListener('pointerdown', unlock);
-    window.addEventListener('keydown', unlock);
+    window.addEventListener('pointerdown', resume);
+    window.addEventListener('keydown', resume);
+
+    this.master.gain.value = 0.8;
+    this.master.connect(ctx.destination);
+    const data = this.noise.getChannelData(0);
+    for (let i = 0; i < data.length; i += 1) data[i] = Math.random() * 2 - 1;
+
+    // Wind bed: looped noise through a slowly wandering band-pass.
+    const wind = ctx.createBufferSource();
+    wind.buffer = this.noise;
+    wind.loop = true;
+    const band = ctx.createBiquadFilter();
+    band.type = 'bandpass';
+    band.frequency.value = 420;
+    band.Q.value = 0.6;
+    const lfo = ctx.createOscillator();
+    const depth = ctx.createGain();
+    lfo.frequency.value = 0.07;
+    depth.gain.value = 180;
+    lfo.connect(depth).connect(band.frequency);
+    const level = ctx.createGain();
+    level.gain.value = 0.05;
+    wind.connect(band).connect(level).connect(this.master);
+    wind.start();
+    lfo.start();
+
+    // Both loops run throughout; the mood only moves their gains.
+    for (const mood of ['calm', 'enraged'] as const) {
+      const gain = ctx.createGain();
+      gain.gain.value = mood === this.mood ? MUSIC : 0;
+      gain.connect(this.master);
+      this.tracks.set(mood, gain);
+      void this.load(`audio/music/${mood}.mp3`).then((buffer) => this.play(buffer, gain, true));
+    }
+    void this.load(START);
+  }
+
+  /** The fight begins. */
+  start(): void {
+    void this.load(START).then((buffer) => this.play(buffer));
   }
 
   swing(heavy: boolean): void {
@@ -40,7 +82,6 @@ export class Audio {
 
   roar(): void {
     const ctx = this.context;
-    if (!ctx || !this.master) return;
     const now = ctx.currentTime;
     const osc = ctx.createOscillator();
     const filter = ctx.createBiquadFilter();
@@ -74,84 +115,43 @@ export class Audio {
   music(mood: Mood): void {
     if (mood === this.mood) return;
     this.mood = mood;
-    const ctx = this.context;
-    if (!ctx) return;
-    for (const [track, gain] of this.tracks) gain.gain.setTargetAtTime(track === mood ? MUSIC : 0, ctx.currentTime, 0.6);
+    for (const [track, gain] of this.tracks) gain.gain.setTargetAtTime(track === mood ? MUSIC : 0, this.context.currentTime, 0.6);
   }
 
   /** Gorran says `line` aloud, cutting off whatever he was saying. */
   speak(line: string): void {
-    const ctx = this.context;
-    if (!ctx || !this.master) return;
-    const master = this.master;
     this.said = line;
-    if (!this.recordings.has(line)) this.recordings.set(line, this.load(voiceFile(line)));
-    void this.recordings.get(line)!.then((buffer) => {
+    void this.load(voiceFile(line)).then((buffer) => {
       // A later line may have loaded first.
       if (this.said !== line) return;
       this.voice?.stop();
-      this.voice = ctx.createBufferSource();
-      this.voice.buffer = buffer;
-      this.voice.connect(master);
-      this.voice.start();
+      this.voice = this.play(buffer);
     });
   }
 
+  /** `url`'s decoded audio, fetched once. */
   private load(url: string): Promise<AudioBuffer> {
-    return fetch(url)
-      .then((response) => response.arrayBuffer())
-      .then((data) => this.context!.decodeAudioData(data));
+    let buffer = this.buffers.get(url);
+    if (!buffer) {
+      buffer = fetch(url)
+        .then((response) => response.arrayBuffer())
+        .then((data) => this.context.decodeAudioData(data));
+      this.buffers.set(url, buffer);
+    }
+    return buffer;
   }
 
-  private unlock(): void {
-    if (this.context) return;
-    const ctx = new AudioContext();
-    this.context = ctx;
-    this.master = ctx.createGain();
-    this.master.gain.value = 0.8;
-    this.master.connect(ctx.destination);
-    this.noise = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate);
-    const data = this.noise.getChannelData(0);
-    for (let i = 0; i < data.length; i += 1) data[i] = Math.random() * 2 - 1;
-
-    // Wind bed: looped noise through a slowly wandering band-pass.
-    const wind = ctx.createBufferSource();
-    wind.buffer = this.noise;
-    wind.loop = true;
-    const band = ctx.createBiquadFilter();
-    band.type = 'bandpass';
-    band.frequency.value = 420;
-    band.Q.value = 0.6;
-    const lfo = ctx.createOscillator();
-    const depth = ctx.createGain();
-    lfo.frequency.value = 0.07;
-    depth.gain.value = 180;
-    lfo.connect(depth).connect(band.frequency);
-    const level = ctx.createGain();
-    level.gain.value = 0.05;
-    wind.connect(band).connect(level).connect(this.master);
-    wind.start();
-    lfo.start();
-
-    // Both loops run throughout; the mood only moves their gains.
-    for (const mood of ['calm', 'enraged'] as const) {
-      const gain = ctx.createGain();
-      gain.gain.value = mood === this.mood ? MUSIC : 0;
-      gain.connect(this.master);
-      this.tracks.set(mood, gain);
-      void this.load(`audio/music/${mood}.mp3`).then((buffer) => {
-        const source = ctx.createBufferSource();
-        source.buffer = buffer;
-        source.loop = true;
-        source.connect(gain);
-        source.start();
-      });
-    }
+  private play(buffer: AudioBuffer, out: AudioNode = this.master, loop = false): AudioBufferSourceNode {
+    const source = this.context.createBufferSource();
+    source.buffer = buffer;
+    source.loop = loop;
+    source.connect(out);
+    source.start();
+    return source;
   }
 
   private noiseBurst(duration: number, from: number, to: number, volume: number): void {
     const ctx = this.context;
-    if (!ctx || !this.master || !this.noise) return;
     const now = ctx.currentTime;
     const source = ctx.createBufferSource();
     source.buffer = this.noise;
@@ -171,7 +171,6 @@ export class Audio {
 
   private thump(frequency: number, duration: number, volume: number): void {
     const ctx = this.context;
-    if (!ctx || !this.master) return;
     const now = ctx.currentTime;
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
@@ -186,7 +185,6 @@ export class Audio {
 
   private tone(frequency: number, delay: number, duration: number, volume: number, type: OscillatorType): void {
     const ctx = this.context;
-    if (!ctx || !this.master) return;
     const now = ctx.currentTime + delay;
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
