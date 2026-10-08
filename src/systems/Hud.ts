@@ -22,6 +22,7 @@ export class Hud {
   private readonly playerSection = $('.fighter.player');
   private readonly npcFill = $('.npc .fill');
   private readonly npcChip = $('.npc .chip');
+  private readonly npcPortrait = $<HTMLImageElement>('.npc img');
   private readonly mood = $('#mood');
   private readonly moodLabel = $('#mood span');
   private readonly hint = $('#hint');
@@ -48,6 +49,7 @@ export class Hud {
     if (state.mood !== this.last.mood) {
       this.mood.className = `mood ${state.mood}`;
       this.moodLabel.textContent = state.mood === 'calm' ? 'Calm' : 'Enraged';
+      this.npcPortrait.src = `/portraits/gorran-${state.mood}.webp`;
       if (this.last.mood) this.mood.animate([{ transform: 'scale(1.5)' }, { transform: 'scale(1)' }], { duration: 450, easing: 'cubic-bezier(.22,1,.36,1)' });
     }
     if (state.regenerating !== this.last.regenerating) this.playerSection.classList.toggle('regen', state.regenerating);
