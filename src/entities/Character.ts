@@ -120,6 +120,8 @@ export class Character {
   private readonly upperBones: THREE.Object3D[] = [];
   private readonly upperPose: THREE.Quaternion[];
   private readonly layer = { weight: 0, target: 0, fade: 0.1 };
+  /** Set by a teleport: the next update takes up its pose outright instead of blending in from the last one. */
+  private snap = false;
   /** Action -> the ground its take covers by clip time, in the model's frame: the clip plays in place and moves the body by this. */
   private readonly travels = new Map<THREE.AnimationAction, THREE.Interpolant>();
   private readonly model: THREE.Object3D;
@@ -181,6 +183,7 @@ export class Character {
     this.pivoting = null;
     this.last.copy(this.root.position);
     this.velocity.set(0, 0, 0);
+    this.snap = true;
   }
 
   /** Turn on the spot by `angle`, about the hips or a world point `about`: the root swings round it, which isn't motion. */
@@ -247,6 +250,12 @@ export class Character {
     if (delta > 0) this.velocity.subVectors(this.root.position, this.last).setY(0).divideScalar(delta);
     this.last.copy(this.root.position);
     if (this.idle) this.animateGait(delta);
+    if (this.snap) {
+      for (const action of this.actions.values()) action.weight = this.targets.get(action) ?? 0;
+      this.rates.clear();
+      this.layer.weight = this.layer.target;
+      this.snap = false;
+    }
     // Ease every weight toward its target as a critically damped spring, 95% there in `fade` s: a blend eases in as well
     // as out, so no change of pose starts with a jolt. Renormalise so the pose never mixes in the bind pose.
     const stiffness = 4.74 / this.fade;

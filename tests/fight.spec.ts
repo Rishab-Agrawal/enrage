@@ -350,6 +350,27 @@ test('fighting in rounds and resting while he is calm wins', async ({ page }) =>
   expect(errors).toEqual([]);
 });
 
+test('placed, a body stands in its new pose at once, not rising from the one it left', async ({ page }) => {
+  await start(page);
+  const [standing, placed] = await page.evaluate(async () => {
+    const { GLTFLoader } = await import('/node_modules/three/examples/jsm/loaders/GLTFLoader.js' as string);
+    const { Character } = await import('/src/entities/Character.ts' as string);
+    const gltf = await new GLTFLoader().loadAsync('models/player.glb');
+    return [false, true].map((downed) => {
+      const character = new Character(gltf, 1.65);
+      if (downed) {
+        character.play('defeat', { loop: false, speed: 1.2 });
+        for (let i = 0; i < 120; i++) character.update(1 / 60);
+      }
+      character.place(0, 0, 0);
+      character.locomote('idle');
+      character.update(1 / 60);
+      return character.joint('Hip').y as number;
+    });
+  });
+  expect(placed).toBeCloseTo(standing, 2);
+});
+
 test('an action owns the whole body unless it tracks the aim: then his hips pivot round to it', async ({ page }) => {
   await start(page);
   const [owned, tracked] = await page.evaluate(async () => {
