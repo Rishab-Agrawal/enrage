@@ -287,7 +287,8 @@ export class Game {
     if (this.npc.health <= 0) this.outcome = 'victory';
     else if (this.player.health <= 0) this.outcome = 'defeat';
     if (!this.outcome) return;
-    this.audio.stinger(this.outcome === 'victory');
+    // Losing needs no stinger: his gloat and the enraged music carry it.
+    if (this.outcome === 'victory') this.audio.victory();
     if (this.outcome === 'defeat') {
       this.npc.standDown();
       this.say(LINES.won);

@@ -4,6 +4,7 @@ import { voiceFile } from '../game/lines';
 /** Music level, under the effects. */
 const MUSIC = 0.3;
 const START = 'audio/sfx/start.mp3';
+const CHIME = 'audio/sfx/chime.mp3';
 /** `count` takes of an effect, to pick from at random. */
 const takes = (name: string, count: number) => Array.from({ length: count }, (_, i) => `audio/sfx/${name}-${i + 1}.mp3`);
 const STEPS = takes('step', 2);
@@ -12,7 +13,7 @@ const GRUNTS = takes('grunt', 3);
 const HITS = takes('hit', 2);
 const HEAVY_HITS = takes('heavy-hit', 3);
 
-/** Web Audio: procedural swings, calm chime, outcome stingers and wind; recorded music, voice and effects. */
+/** Web Audio: procedural swings, victory stinger and wind; recorded music, voice and effects. */
 export class Audio {
   // Browsers hold a context made before the first click or key press suspended; that press resumes it.
   private readonly context = new AudioContext();
@@ -66,7 +67,7 @@ export class Audio {
       this.tracks.set(mood, gain);
       void this.load(`audio/music/${mood}.mp3`).then((buffer) => this.play(buffer, gain, true));
     }
-    for (const url of [START, ...STEPS, ...HURTS, ...GRUNTS, ...HITS, ...HEAVY_HITS]) void this.load(url);
+    for (const url of [START, CHIME, ...STEPS, ...HURTS, ...GRUNTS, ...HITS, ...HEAVY_HITS]) void this.load(url);
   }
 
   /** The fight begins. */
@@ -102,13 +103,13 @@ export class Audio {
     this.noiseBurst(0.28, 600, 2400, 0.18);
   }
 
+  /** Gorran calms down. */
   chime(): void {
-    [523.25, 659.25, 783.99].forEach((f, i) => this.tone(f, 0.12 * i, 1.4, 0.08, 'sine'));
+    void this.load(CHIME).then((buffer) => this.play(buffer));
   }
 
-  stinger(won: boolean): void {
-    const notes = won ? [392, 493.88, 587.33, 783.99] : [329.63, 311.13, 261.63, 196];
-    notes.forEach((f, i) => this.tone(f, i * 0.16, 1.6, 0.1, won ? 'triangle' : 'sine'));
+  victory(): void {
+    [392, 493.88, 587.33, 783.99].forEach((f, i) => this.tone(f, i * 0.16, 1.6, 0.1, 'triangle'));
   }
 
   /** Crossfades the music to `mood`'s loop. */
