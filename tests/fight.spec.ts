@@ -130,6 +130,34 @@ test('W walks, Shift sprints, S backs up, A/D step sideways, diagonals are no fa
   expect(errors).toEqual([]);
 });
 
+test('a strike lunges at him only if he is nearly where she faces, and never turns her', async ({ page }) => {
+  await start(page);
+  const ends = await page.evaluate(async () => {
+    const THREE = await import('/node_modules/three/build/three.module.js' as string);
+    const { GLTFLoader } = await import('/node_modules/three/examples/jsm/loaders/GLTFLoader.js' as string);
+    const { Player } = await import('/src/entities/Player.ts' as string);
+    const gltf = await new GLTFLoader().loadAsync('models/player.glb');
+    // He stands 2 m off, slightly off her line, then well off to her side; she jabs once.
+    return [0.2, 1].map((bearing) => {
+      const player = new Player(gltf);
+      const yaw = player.yaw + bearing;
+      const npc = player.position.clone().add(new THREE.Vector3(Math.sin(yaw), 0, Math.cos(yaw)).multiplyScalar(2));
+      const facing = player.yaw;
+      let strike = true;
+      const consume = (intent: string) => intent === 'strike' && strike && !(strike = false);
+      const input = { sprinting: false, consumeLook: () => 0, consume, movement: (v: { set(x: number, y: number): void }) => v.set(0, 0) };
+      for (let t = 0; t < 1; t += 1 / 60) {
+        player.update(1 / 60, input, npc, false, []);
+        player.character.update(1 / 60);
+      }
+      return { distance: player.position.distanceTo(npc), turned: player.yaw - facing };
+    });
+  });
+  expect(ends[0].distance).toBeLessThan(1.55);
+  expect(ends[1].distance).toBeGreaterThan(1.8);
+  for (const { turned } of ends) expect(turned).toBe(0);
+});
+
 test('a full bar holds 5 s of sprint and refills as fast, after a 1 s pause once emptied; a Shift held through it only walks her, and a fresh press runs on the part-refilled bar', async ({ page }) => {
   await start(page);
   const log = await page.evaluate(async () => {
@@ -149,7 +177,7 @@ test('a full bar holds 5 s of sprint and refills as fast, after a 1 s pause once
     const log: { t: number; speed: number; stamina: number; winded: boolean; state: string }[] = [];
     for (; t < 14; t += 1 / 60) {
       const before = player.position.clone();
-      player.update(1 / 60, input, false, []);
+      player.update(1 / 60, input, player.position.clone().setZ(-99), false, []);
       player.character.update(1 / 60);
       log.push({ t, speed: player.position.distanceTo(before) * 60, stamina: player.stamina, winded: player.winded, state: player.state });
     }

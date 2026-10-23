@@ -195,7 +195,7 @@ export class Game {
     const live = !this.outcome;
     // Controls wait for the camera to glide in behind her: the hand that clicked to start is still settling on the mouse.
     this.input.still = this.cameraRig.gliding;
-    this.player.update(fightDelta, live && playing ? this.input : null, this.npc.mood === 'calm', this.events);
+    this.player.update(fightDelta, live && playing ? this.input : null, this.npc.position, this.npc.mood === 'calm', this.events);
     if (live) this.npc.update(fightDelta, this.player.position, this.events);
     this.resolve();
     // Animate once bodies are where they end up this frame: locomotion shows the actual displacement.

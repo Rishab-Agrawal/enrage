@@ -4,7 +4,7 @@ import type { Input } from '../core/Input';
 import type { FightEvent } from '../game/events';
 import { tuning } from '../game/tuning';
 import { Character } from './Character';
-import { angleTo } from './steering';
+import { angleTo, yawTo } from './steering';
 
 /** Clip-second windows: `contact` is when the striking `hand` lands (measured from the clip's extension frame). */
 const STRIKES = [
@@ -20,6 +20,8 @@ const DASH_COST = 0.75;
 const STAMINA_PAUSE = 1;
 /** Share of her sprint's speed she keeps while A/D steer it. */
 const STEERED_RUN = 0.95;
+/** A strike lunges at him only within this of where she faces, rad: as far off as one can still land from the lunge's end. */
+const LUNGE_CONE = 0.4;
 const HURT_TIME = 0.42;
 /** A shove sends her reeling back this fast, m/s, out of control for REEL_TIME. */
 const SHOVE_SPEED = 14;
@@ -33,6 +35,7 @@ type State = 'move' | 'strike' | 'dodge' | 'hurt' | 'reel' | 'down';
 export class Player {
   readonly character: Character;
   /** Her own movement; `knock`, the blows she takes, rides on top of it and dies away. */
+  private readonly toNpc = new THREE.Vector3();
   private readonly velocity = new THREE.Vector3();
   private readonly knock = new THREE.Vector3();
   readonly radius = 0.35;
@@ -96,7 +99,7 @@ export class Player {
    * Her legs answer input except while she strikes, dodges or is down: a flinch plays on her upper body only.
    * `resting`: she heals only while the NPC is calm, so running from his rage buys nothing.
    */
-  update(delta: number, input: Input | null, resting: boolean, events: FightEvent[]): void {
+  update(delta: number, input: Input | null, npc: THREE.Vector3, resting: boolean, events: FightEvent[]): void {
     this.timer += delta;
     this.dodgeCooldown -= delta;
     this.bufferTimer -= delta;
@@ -111,6 +114,7 @@ export class Player {
     } else {
       this.move.set(0, 0);
     }
+    this.toNpc.subVectors(npc, this.position).setY(0);
     if (!input?.sprinting) this.spent = false;
     const sprint = this.move.y > 0 && !!input?.sprinting && !this.spent;
     this.drained = this.stamina === 0 && !sprint ? this.drained + delta : 0;
@@ -132,6 +136,11 @@ export class Player {
       this.velocity.multiplyScalar(Math.exp(-6 * delta));
     } else if (this.state === 'strike') {
       this.velocity.multiplyScalar(Math.exp(-12 * delta));
+      // Through the wind-up, she closes the last half-metre on him if he's in front of her; she never turns, so where she faces stays hers.
+      const gap = this.toNpc.length() - 1.45;
+      if (this.timer < this.contactAt && gap > 0 && gap < 1.2 && Math.abs(angleTo(this.yaw, yawTo(this.toNpc))) < LUNGE_CONE) {
+        this.position.addScaledVector(this.toNpc.normalize(), Math.min(gap, 3 * delta));
+      }
     } else {
       // The mouse turns her; W/S walk her along her facing and A/D step her sideways, on a diagonal no faster than
       // straight. Shift runs her forward only, so A/D then only steer her run a little, and slow it to STEERED_RUN.
