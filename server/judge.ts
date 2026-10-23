@@ -37,17 +37,17 @@ const TURNS: Record<Mood, Noul> = {
   },
 };
 
-/** How far her newest line moves him, asked apart from `TURNS` so Jev's two answers check each other. */
+/** How far her newest line moves him, asked apart from `TURNS` so Jev's two answers check each other: level 3 is where `TURNS` says yes. */
 const EFFECT: Record<Mood, Score> = {
   calm: {
     type: 'score',
     instructions: `${SCENE} He is calm. How angry does her newest line make him?`,
-    criteria: ['Not at all.', 'Barely: he shrugs it off.', 'Somewhat: it annoys him.', 'A lot: it angers him.', 'Completely: he wants to fight.'],
+    criteria: ['Not at all.', 'Barely: he shrugs it off.', 'Somewhat: it annoys him, but not enough to fight.', 'Enough: he fights her.', 'Completely: he is furious.'],
   },
   enraged: {
     type: 'score',
     instructions: `${SCENE} He is enraged. How much does her newest line calm him?`,
-    criteria: ['Not at all, or it angers him more.', 'Barely: he stays angry.', 'Somewhat: he softens.', 'A lot: he cools down.', 'Completely: he lets the fight go.'],
+    criteria: ['Not at all, or it angers him more.', 'Barely: he stays angry.', 'Somewhat: he softens, but keeps fighting.', 'Enough: he stops fighting.', 'Completely: he forgives her.'],
   },
 };
 
@@ -71,8 +71,9 @@ export function judge({ fight, ...turn }: Turn): Promise<boolean> {
     async ({ mood, worked, newest }: Omit<Turn, 'fight'>): Promise<boolean> => {
       classifiers[mood] ??= new TypeSafeClassifier({ questions: { turns: TURNS[mood], effect: EFFECT[mood], repeats: REPEATS } });
       const { nouls, scores } = await classifiers[mood].invoke({ worked, newest }, { metadata });
-      // The effect double-checks `turns`: it vetoes a line it puts nearer "Somewhat" (2) than "A lot" (3).
-      return nouls.turns.noul * (1 - nouls.repeats.noul) > 0.5 && scores.effect.score > 2.5;
+        // The effect double-checks `turns`, vetoing a line it doesn't lean past "Somewhat" (2) toward "Enough" (3). Its
+      // average sits below its top guess, as its other guesses pull it toward the middle: a bar at 2.5 would outrank `turns`.
+      return nouls.turns.noul * (1 - nouls.repeats.noul) > 0.5 && scores.effect.score > 2;
     },
     { name: 'judge', metadata },
   )(turn);
