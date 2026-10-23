@@ -38,8 +38,11 @@ api.get('/api/stt-token', async (_request, response) => {
   response.status(grant.status).type('json').send(await grant.text());
 });
 
-/** Fights already told of. Their ids take a few MB a year at most, as the daily budget caps how many start. */
-const fights = new Set<string>();
+// A player left the title screen for the fight.
+api.post('/api/play', (_request, response) => {
+  void tell('🎮 Someone started playing.');
+  response.sendStatus(204);
+});
 
 // Whether her newest line turns Gorran's mood. Only JSON is parsed: another site can't send that without CORS, which this API doesn't allow.
 api.post('/api/judge', express.json(), async (request, response) => {
@@ -47,11 +50,6 @@ api.post('/api/judge', express.json(), async (request, response) => {
   if (!turn.success) {
     response.sendStatus(400);
     return;
-  }
-  const { fight } = turn.data;
-  if (fight && !fights.has(fight)) {
-    fights.add(fight);
-    void tell('🎮 Someone started a fight.');
   }
   response.json({ turns: await judge(turn.data) });
 });

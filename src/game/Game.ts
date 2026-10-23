@@ -151,7 +151,10 @@ export class Game {
     // Losing the mouse (Esc, alt-tab) pauses the fight; capturing it starts or resumes it.
     if (this.input.consume('pause') && this.screen === 'fight' && !this.outcome) this.show('paused');
     else if (this.screen !== 'fight' && this.input.captured) {
-      if (this.screen === 'title') this.audio.start();
+      if (this.screen === 'title') {
+        this.audio.start();
+        void fetch('/api/play', { method: 'POST' });
+      }
       this.show('fight');
     }
     const running = this.screen !== 'paused' && !this.frozen;
