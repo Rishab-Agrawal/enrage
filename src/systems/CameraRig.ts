@@ -8,8 +8,8 @@ const MAX_SHAKE = 0.35;
 /** Seconds the camera takes to glide from the title shot down behind her. */
 const GLIDE = 1.8;
 /** The title shot opens on the sky, as the loading screen showed it, holds while that fades, then tilts down over TILT s. */
-const HOLD = 0.6;
-const TILT = 2.6;
+const HOLD = 0.4;
+const TILT = 1.6;
 /** How far above the hilltop the opening shot looks, m. */
 const SKY = 14;
 
