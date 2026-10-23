@@ -1,4 +1,4 @@
-import { TypeSafeClassifier, type Noul } from '@langchain/typesafe';
+import { TypeSafeClassifier, type Noul, type Score } from '@langchain/typesafe';
 import { traceable } from 'langsmith/traceable';
 import * as z from 'zod';
 import type { Mood } from '../src/game/events';
@@ -34,6 +34,20 @@ const TURNS: Record<Mood, Noul> = {
   },
 };
 
+/** How far her newest line moves him, asked apart from `TURNS` so Jev's two answers check each other. */
+const EFFECT: Record<Mood, Score> = {
+  calm: {
+    type: 'score',
+    instructions: `${SCENE} He is calm. How angry does her newest line make him?`,
+    criteria: ['Not at all.', 'Barely: he shrugs it off.', 'Somewhat: it annoys him.', 'A lot: it angers him.', 'Completely: he wants to fight.'],
+  },
+  enraged: {
+    type: 'score',
+    instructions: `${SCENE} He is enraged. How much does her newest line calm him?`,
+    criteria: ['Not at all, or it angers him more.', 'Barely: he stays angry.', 'Somewhat: he softens.', 'A lot: he cools down.', 'Completely: he lets the fight go.'],
+  },
+};
+
 const REPEATS: Noul = {
   type: 'noul',
   instructions: `${SCENE} Does her newest line make the same point as one of her earlier lines?`,
@@ -49,9 +63,10 @@ const classifiers: Partial<Record<Mood, TypeSafeClassifier>> = {};
 /** Whether her newest line turns Gorran out of `mood`: it has to work on him, and be new. */
 export const judge = traceable(
   async ({ mood, said }: Turn): Promise<boolean> => {
-    classifiers[mood] ??= new TypeSafeClassifier({ questions: { turns: TURNS[mood], repeats: REPEATS } });
-    const { nouls } = await classifiers[mood].invoke({ earlier: said.slice(0, -1), newest: said[said.length - 1] });
-    return nouls.turns.noul * (1 - nouls.repeats.noul) > 0.5;
+    classifiers[mood] ??= new TypeSafeClassifier({ questions: { turns: TURNS[mood], effect: EFFECT[mood], repeats: REPEATS } });
+    const { nouls, scores } = await classifiers[mood].invoke({ earlier: said.slice(0, -1), newest: said[said.length - 1] });
+    // The effect only vetoes, and only a line it finds barely moves him: a double-check on `turns`, not a higher bar.
+    return nouls.turns.noul * (1 - nouls.repeats.noul) > 0.5 && scores.effect.score > 1;
   },
   { name: 'judge' },
 );
