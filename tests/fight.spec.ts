@@ -215,7 +215,7 @@ async function talk(page: Page): Promise<void> {
 /** Wait until Gorran's subtitle is one of `lines`. */
 const says = (page: Page, lines: string[]) => expect.poll(async () => lines.includes((await page.locator('#subtitle').textContent())!)).toBe(true);
 
-test('what she says goes to the judge with her earlier lines, and Gorran turns only on its verdict', async ({ page }) => {
+test('what she says goes to the judge with her lines that already worked, and Gorran turns only on its verdict', async ({ page }) => {
   // Deepgram stubbed: a silent mic whose recorder leads with an empty chunk, as recorders may, a fake token, and a socket
   // that, like Deepgram, ends the stream on an empty message and answers CloseStream with a fixed transcript.
   await page.addInitScript(() => {
@@ -235,11 +235,11 @@ test('what she says goes to the judge with her earlier lines, and Gorran turns o
       socket.close();
     }),
   );
-  // The judge stubbed: her first line leaves him as he is, her second turns him.
+  // The judge stubbed: only her second line turns him.
   const asked: unknown[] = [];
   await page.route('/api/judge', (route) => {
     asked.push(route.request().postDataJSON());
-    return route.fulfill({ json: { turns: asked.length > 1 } });
+    return route.fulfill({ json: { turns: asked.length === 2 } });
   });
   const errors = await start(page);
   await capture(page);
@@ -250,9 +250,14 @@ test('what she says goes to the judge with her earlier lines, and Gorran turns o
   await talk(page);
   await says(page, LINES.mood.enraged);
   expect((await read(page)).npc.mood).toBe('enraged');
+  await expect(page.locator('#voice')).toHaveClass('ready', { timeout: 8_000 });
+  await talk(page);
+  await says(page, LINES.unmoved.enraged);
+  const line = 'You look tired.';
   expect(asked).toEqual([
-    { mood: 'calm', said: ['You look tired.'] },
-    { mood: 'calm', said: ['You look tired.', 'You look tired.'] },
+    { mood: 'calm', worked: [], newest: line },
+    { mood: 'calm', worked: [], newest: line },
+    { mood: 'enraged', worked: [line], newest: line },
   ]);
   expect(errors).toEqual([]);
 });

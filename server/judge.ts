@@ -3,16 +3,17 @@ import { traceable } from 'langsmith/traceable';
 import * as z from 'zod';
 import type { Mood } from '../src/game/events';
 
-/** One of her turns at the mic, as the browser sends it: his mood as she spoke, and all her lines this fight, newest last. */
+/** One of her turns at the mic, as the browser sends it: his mood as she spoke, her lines that already turned him this fight, and her newest. */
 export const Turn = z.object({
   mood: z.enum(['calm', 'enraged'] satisfies Mood[]),
-  said: z.array(z.string().min(1).max(500)).min(1).max(100),
+  worked: z.array(z.string().min(1).max(500)).max(100),
+  newest: z.string().min(1).max(500),
 });
 export type Turn = z.infer<typeof Turn>;
 
 /** The scene, for every question: Jev knows only what it is told. */
 const SCENE =
-  'Gorran, a proud, hulking brawler, wants to be left alone. Wren, a young fighter, talks to him to start a fight or to stop one. `newest` is her newest line; `earlier`, her lines before it this fight.';
+  'Gorran, a proud, hulking brawler, wants to be left alone. Wren, a young fighter, talks to him to start a fight or to stop one. `newest` is her newest line; `worked`, her earlier lines this fight that turned his mood.';
 
 /** Whether her newest line turns his mood, as he is now. */
 const TURNS: Record<Mood, Noul> = {
@@ -50,21 +51,21 @@ const EFFECT: Record<Mood, Score> = {
 
 const REPEATS: Noul = {
   type: 'noul',
-  instructions: `${SCENE} Does her newest line make the same point as one of her earlier lines?`,
+  instructions: `${SCENE} Does her newest line make the same point as one of the lines in \`worked\`?`,
   criteria: {
-    true: 'The same insult, apology or appeal again, word for word or reworded.',
-    false: 'A point none of her earlier lines made.',
+    true: 'The same insult, apology or appeal as one of those lines, word for word or reworded.',
+    false: 'A point none of those lines made, or `worked` is empty.',
   },
 };
 
 /** Built on first use: a classifier throws without TYPESAFE_API_KEY, and the dev server has to start without one. */
 const classifiers: Partial<Record<Mood, TypeSafeClassifier>> = {};
 
-/** Whether her newest line turns Gorran out of `mood`: it has to work on him, and be new. */
+/** Whether her newest line turns Gorran out of `mood`: it has to work on him, and not repeat a line that already did. */
 export const judge = traceable(
-  async ({ mood, said }: Turn): Promise<boolean> => {
+  async ({ mood, worked, newest }: Turn): Promise<boolean> => {
     classifiers[mood] ??= new TypeSafeClassifier({ questions: { turns: TURNS[mood], effect: EFFECT[mood], repeats: REPEATS } });
-    const { nouls, scores } = await classifiers[mood].invoke({ earlier: said.slice(0, -1), newest: said[said.length - 1] });
+    const { nouls, scores } = await classifiers[mood].invoke({ worked, newest });
     // The effect double-checks `turns`: it vetoes a line it puts nearer "Somewhat" (2) than "A lot" (3).
     return nouls.turns.noul * (1 - nouls.repeats.noul) > 0.5 && scores.effect.score > 2.5;
   },

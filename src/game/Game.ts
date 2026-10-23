@@ -63,8 +63,8 @@ export class Game {
   private elapsed = 0;
   private line = '';
   private lineLeft = 0;
-  /** Her lines this fight, oldest first: the judge tells a new point from a repeat by them. */
-  private said: string[] = [];
+  /** Her lines that turned his mood this fight: one that repeats them doesn't work again. */
+  private worked: string[] = [];
   private frame = 0;
   private screen: Screen = 'title';
   /** Held still for screenshots, without the pause card. */
@@ -132,7 +132,7 @@ export class Game {
     this.hitstop = 0;
     this.events.length = 0;
     this.line = '';
-    this.said = [];
+    this.worked = [];
     this.input.clear();
     this.debug.sync();
     this.cameraRig.update(0, this.player.position, this.player.yaw, true);
@@ -302,13 +302,12 @@ export class Game {
   private async hear(text: string): Promise<void> {
     this.debug.heard(text);
     if (this.outcome) return;
-    const { said } = this;
+    const { worked } = this;
     const mood = this.npc.mood;
     let turns = false;
     if (text) {
-      said.push(text);
       // The server asks Jev (`server/judge.ts`); a failure leaves him unmoved.
-      turns = await fetch('/api/judge', { method: 'POST', body: JSON.stringify({ mood, said }) })
+      turns = await fetch('/api/judge', { method: 'POST', body: JSON.stringify({ mood, worked, newest: text }) })
         .then(async (response) => {
           if (!response.ok) throw new Error(`HTTP ${response.status}`);
           return ((await response.json()) as { turns: boolean }).turns;
@@ -319,9 +318,13 @@ export class Game {
         });
     }
     // A verdict that lands after the fight ended, or a rematch began, is moot.
-    if (this.outcome || said !== this.said) return;
-    if (turns) this.setMood(mood === 'calm' ? 'enraged' : 'calm');
-    else this.say(LINES.unmoved[this.npc.mood]);
+    if (this.outcome || worked !== this.worked) return;
+    if (turns) {
+      worked.push(text);
+      this.setMood(mood === 'calm' ? 'enraged' : 'calm');
+    } else {
+      this.say(LINES.unmoved[this.npc.mood]);
+    }
   }
 
   /** A line from `lines` other than the one he just said, cosmetic so off the seeded RNG. */

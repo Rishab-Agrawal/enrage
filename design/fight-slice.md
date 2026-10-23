@@ -30,7 +30,7 @@ The player strikes to empty the NPC's health. His heavy attacks create risk, and
 
 ## Mood
 
-`Npc.mood` (`'calm' | 'enraged'`) is the one piece of state set from outside the fight, through `Game.setMood`: by the judge (`server/judge.ts`), or by hand from the debug panel. Her turn at the mic turns him only if Jev finds the line would work on him and makes a point she hasn't made that fight; otherwise he answers unmoved.
+`Npc.mood` (`'calm' | 'enraged'`) is the one piece of state set from outside the fight, through `Game.setMood`: by the judge (`server/judge.ts`), or by hand from the debug panel. Her turn at the mic turns him only if Jev finds the line would work on him and makes a point none of her lines that already turned him that fight made; otherwise he answers unmoved.
 
 - **Calm:** arms folded, never attacks. He walks off to keep at least 6 m away; if she closes on him anyway, he wheels round and shoves her off with both palms, without damage: he starts as she comes, so his palms meet her as they drive out. No dash avoids the shove, and she reels back out of control, so she never touches him. Her blows don't hurt him while he is calm. This is the player's rest window. He turns as she does: head first, hips following in a step.
 - **Enraged:** roars (a 1.2 s telegraph), then chases and attacks with a punch or a haymaker. Each attack has a visible wind-up, through which he keeps stepping in faster than she can back away; the haymaker knocks her back hard.

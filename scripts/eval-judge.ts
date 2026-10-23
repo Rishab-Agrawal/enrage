@@ -10,11 +10,13 @@ const cases: (Turn & { turns: boolean })[] = JSON.parse(readFileSync('evals/case
 const client = new Client();
 if (!(await client.hasDataset({ datasetName: DATASET }))) await client.createDataset(DATASET);
 // Examples match cases by content: add the cases new to the file, delete the examples gone from it.
-const key = (mood: unknown, said: unknown, turns: unknown) => JSON.stringify([mood, said, turns]);
-const added = new Map(cases.map(({ mood, said, turns }) => [key(mood, said, turns), { inputs: { mood, said }, outputs: { turns }, dataset_name: DATASET }]));
+const key = (mood: unknown, worked: unknown, newest: unknown, turns: unknown) => JSON.stringify([mood, worked, newest, turns]);
+const added = new Map(
+  cases.map(({ mood, worked, newest, turns }) => [key(mood, worked, newest, turns), { inputs: { mood, worked, newest }, outputs: { turns }, dataset_name: DATASET }]),
+);
 const gone: string[] = [];
 for await (const { id, inputs, outputs } of client.listExamples({ datasetName: DATASET })) {
-  if (!added.delete(key(inputs.mood, inputs.said, outputs?.turns))) gone.push(id);
+  if (!added.delete(key(inputs.mood, inputs.worked, inputs.newest, outputs?.turns))) gone.push(id);
 }
 if (gone.length) await client.deleteExamples(gone);
 if (added.size) await client.createExamples([...added.values()]);
