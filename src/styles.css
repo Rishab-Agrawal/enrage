@@ -349,8 +349,7 @@ kbd {
 }
 
 #result[hidden],
-#voice[hidden],
-#loading[hidden] {
+#voice[hidden] {
   display: none;
 }
 
@@ -482,52 +481,18 @@ kbd {
   }
 }
 
+/* Stands in for the canvas, painted as the sky the title shot opens on, until the game takes over from it. */
 #loading {
   position: absolute;
   inset: 0;
-  display: grid;
-  place-content: center;
-  justify-items: center;
-  gap: 18px;
-  background: linear-gradient(#5d8fd0, #a9c7e6 55%, #f3dfb8);
+  pointer-events: none;
+  background: linear-gradient(#4a83c8 45%, #6393cf);
+  transition: opacity 0.6s, visibility 0.6s;
 }
 
-#loading h1 {
-  margin: 0;
-  font-size: 4rem;
-  font-weight: 900;
-  letter-spacing: 0.1em;
-  text-shadow: 0 4px 0 var(--ink);
-}
-
-#loading p {
-  max-width: 22em;
-  margin: 0 24px;
-  font-size: 1.2rem;
-  font-weight: 700;
-  text-align: center;
-  text-shadow: 0 2px 0 var(--ink);
-}
-
-#loading:not(.touch) p,
-#loading.touch .progress {
-  display: none;
-}
-
-.progress {
-  width: 220px;
-  height: 8px;
-  border: 2px solid var(--gold);
-  background: var(--frame);
-}
-
-.progress i {
-  display: block;
-  height: 100%;
-  background: var(--gold);
-  transform: scaleX(0);
-  transform-origin: left;
-  transition: transform 0.2s;
+#app:not([data-screen='loading'], [data-screen='desktop']) #loading {
+  opacity: 0;
+  visibility: hidden;
 }
 
 #debug {
@@ -558,7 +523,7 @@ kbd {
   transition: opacity 0.8s 0.6s;
 }
 
-#app[data-screen='title'] :is(#hud, #controls, #voice) {
+#app:not([data-screen='fight'], [data-screen='paused']) :is(#hud, #controls, #voice) {
   opacity: 0;
 }
 
@@ -579,7 +544,7 @@ kbd {
   transition: opacity 0.6s, visibility 0.6s;
 }
 
-#app:not([data-screen='title']) #title {
+#app:is([data-screen='fight'], [data-screen='paused']) #title {
   opacity: 0;
   visibility: hidden;
 }
@@ -628,4 +593,37 @@ kbd {
 #title a {
   color: inherit;
   pointer-events: auto;
+}
+
+#title .progress {
+  width: 160px;
+  height: 3px;
+  margin-top: 34px;
+  border-radius: 2px;
+  background: rgba(255, 248, 234, 0.3);
+}
+
+#title .progress i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--paper);
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 0.2s;
+}
+
+#title .desktop {
+  margin-top: 22px;
+  font-size: 1.05rem;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-shadow: none;
+}
+
+#app:not([data-screen='loading']) #title .progress,
+#app:not([data-screen='desktop']) #title .desktop,
+#app[data-screen='desktop'] #title small,
+#app:is([data-screen='loading'], [data-screen='desktop']) #title p {
+  display: none;
 }

@@ -12,8 +12,9 @@
     <title>enrage.io</title>
   </head>
   <body>
-    <main id="app" data-screen="title">
+    <main id="app" data-screen="loading">
       <canvas id="game-canvas" aria-label="Fight arena"></canvas>
+      <div id="loading" aria-hidden="true"></div>
       <div id="vignette" aria-hidden="true"></div>
 
       <header id="hud" aria-live="polite">
@@ -50,7 +51,9 @@
 
       <div id="title">
         <h1>en<b class="enraged">rage</b>.io</h1>
+        <div class="progress"><i></i></div>
         <p>Click to start</p>
+        <span class="desktop">Only playable on desktop</span>
         <small>By playing, you agree to the <a href="/terms.html" target="_blank">terms</a>.</small>
       </div>
 
@@ -88,11 +91,6 @@
         <button type="button">Rematch <kbd>R</kbd></button>
       </div>
 
-      <div id="loading">
-        <h1>enrage</h1>
-        <div class="progress"><i></i></div>
-        <p>enrage needs a keyboard, a mouse and a microphone: play it on a computer.</p>
-      </div>
     </main>
     <script type="module" src="/src/main.ts"></script>
   </body>

@@ -4,12 +4,12 @@ import * as THREE from 'three';
 import { Game } from './game/Game';
 
 const canvas = document.querySelector<HTMLCanvasElement>('#game-canvas');
-const loading = document.querySelector<HTMLElement>('#loading');
-const progress = document.querySelector<HTMLElement>('#loading .progress i');
-if (!canvas || !loading || !progress) throw new Error('Missing game markup.');
+const app = document.querySelector<HTMLElement>('#app');
+const progress = document.querySelector<HTMLElement>('#title .progress i');
+if (!canvas || !app || !progress) throw new Error('Missing game markup.');
 
-// The fight needs a keyboard and a mouse: phones and tablets get the loading screen's note instead.
-if (matchMedia('(hover: none) and (pointer: coarse)').matches) loading.classList.add('touch');
+// The fight needs a keyboard and a mouse: phones and tablets get a note instead.
+if (matchMedia('(hover: none) and (pointer: coarse)').matches) app.dataset.screen = 'desktop';
 else {
   const manager = new THREE.LoadingManager();
   manager.onProgress = (_url, loaded, total) => (progress.style.transform = `scaleX(${loaded / total})`);
@@ -18,7 +18,6 @@ else {
 
   const game = new Game(canvas, { player, npc });
   game.start();
-  loading.hidden = true;
 
   if (import.meta.hot) import.meta.hot.dispose(() => game.dispose());
 }
