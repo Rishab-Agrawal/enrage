@@ -65,8 +65,8 @@ export const judge = traceable(
   async ({ mood, said }: Turn): Promise<boolean> => {
     classifiers[mood] ??= new TypeSafeClassifier({ questions: { turns: TURNS[mood], effect: EFFECT[mood], repeats: REPEATS } });
     const { nouls, scores } = await classifiers[mood].invoke({ earlier: said.slice(0, -1), newest: said[said.length - 1] });
-    // The effect only vetoes, and only a line it finds barely moves him: a double-check on `turns`, not a higher bar.
-    return nouls.turns.noul * (1 - nouls.repeats.noul) > 0.5 && scores.effect.score > 1;
+    // The effect double-checks `turns`: it vetoes a line it puts nearer "Somewhat" (2) than "A lot" (3).
+    return nouls.turns.noul * (1 - nouls.repeats.noul) > 0.5 && scores.effect.score > 2.5;
   },
   { name: 'judge' },
 );
