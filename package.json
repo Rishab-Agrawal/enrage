@@ -10,8 +10,7 @@
     "test": "playwright test",
     "bake": "node scripts/bake-characters.mjs",
     "inspect:canvas": "node scripts/inspect-threejs-canvas.mjs",
-    "eval": "node --env-file=.env.local scripts/eval-judge.ts",
-    "redteam": "node --env-file=.env.local scripts/redteam.ts"
+    "eval": "node --env-file=.env.local scripts/eval-judge.ts"
   },
   "dependencies": {
     "@langchain/core": "^1.3.0",
@@ -24,11 +23,9 @@
   "devDependencies": {
     "@gltf-transform/core": "^4.5.1",
     "@gltf-transform/functions": "^4.5.1",
-    "@langchain/anthropic": "^1.6.0",
     "@playwright/test": "^1.60.0",
     "@types/node": "^25.9.0",
     "@types/three": "^0.184.1",
-    "langchain": "^1.5.19",
     "pngjs": "^7.0.0",
     "sharp": "^0.35.5",
     "typescript": "^6.0.3",
