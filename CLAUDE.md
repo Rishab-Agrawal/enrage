@@ -39,6 +39,8 @@ Python is `py`; `python` is the Windows Store stub.
 
 API keys go in `.env.local`, which git ignores, never `.env`.
 
+A push to main deploys to Railway, whose variables hold the keys. Only Railway has `TELEGRAM_CHAT_ID`, so only the deployed server messages the owner.
+
 ## Testing
 
 NPC enrage/calm decisions come from Jev: stub `/api/judge` in tests and bot playtests so they stay deterministic. `npm run eval` calls it for real, on purpose: it measures the judge on `evals/cases.json`. To red-team the judge, POST lines to the dev server's `/api/judge` and add the misses to `evals/cases.json`, once the user has checked their labels.

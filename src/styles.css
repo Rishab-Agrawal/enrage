@@ -500,6 +500,20 @@ kbd {
   text-shadow: 0 4px 0 var(--ink);
 }
 
+#loading p {
+  max-width: 22em;
+  margin: 0 24px;
+  font-size: 1.2rem;
+  font-weight: 700;
+  text-align: center;
+  text-shadow: 0 2px 0 var(--ink);
+}
+
+#loading:not(.touch) p,
+#loading.touch .progress {
+  display: none;
+}
+
 .progress {
   width: 220px;
   height: 8px;
@@ -603,4 +617,15 @@ kbd {
   letter-spacing: 0.35em;
   text-transform: uppercase;
   animation: rise 1.2s 0.3s ease-out both, breathe 2.4s 1.5s ease-in-out infinite;
+}
+
+#title small {
+  margin-top: auto;
+  padding-bottom: 20px;
+  font-size: 0.85rem;
+}
+
+#title a {
+  color: inherit;
+  pointer-events: auto;
 }

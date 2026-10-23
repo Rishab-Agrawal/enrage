@@ -49,7 +49,8 @@ export class Game {
   private readonly voice = new Voice();
   private readonly speech = new Speech((text) => this.hear(text));
   private readonly hud = new Hud(() => this.rematch());
-  private readonly debug: DebugPanel;
+  /** Development only, like the test hooks and diagnostics: the deployed game has none of them. */
+  private readonly debug?: DebugPanel;
   private readonly loop = new Loop(
     (delta) => this.update(delta),
     () => this.renderer.render(this.scene, this.camera),
@@ -83,14 +84,16 @@ export class Game {
     this.player = new Player(models.player);
     this.npc = new Npc(models.npc, () => this.rng());
     this.arena = new Arena({ a: this.player.position, b: this.npc.position });
-    this.debug = new DebugPanel(
-      () => this.npc.mood,
-      (mood) => this.setMood(mood),
-      () => this.rematch(),
-    );
+    if (import.meta.env.DEV) {
+      this.debug = new DebugPanel(
+        () => this.npc.mood,
+        (mood) => this.setMood(mood),
+        () => this.rematch(),
+      );
+    }
     this.buildScene();
     this.rematch();
-    this.installTestHooks();
+    if (import.meta.env.DEV) this.installTestHooks();
   }
 
   start(): void {
@@ -101,13 +104,13 @@ export class Game {
   setMood(mood: Mood): void {
     if (this.outcome) return;
     this.npc.setMood(mood, this.events);
-    this.debug.sync();
+    this.debug?.sync();
   }
 
   dispose(): void {
     this.loop.stop();
     this.input.dispose();
-    this.debug.dispose();
+    this.debug?.dispose();
     this.renderer.dispose();
     window.__THREE_GAME_DIAGNOSTICS__ = undefined;
     window.__THREE_GAME_TEST_HOOKS__ = undefined;
@@ -138,7 +141,7 @@ export class Game {
     this.worked = [];
     this.fight = crypto.randomUUID();
     this.input.clear();
-    this.debug.sync();
+    this.debug?.sync();
     this.cameraRig.update(0, this.player.position, this.player.yaw, true);
   }
 
@@ -171,7 +174,7 @@ export class Game {
       },
       running ? delta : 0,
     );
-    this.publishDiagnostics();
+    if (import.meta.env.DEV) this.publishDiagnostics();
   }
 
   private show(screen: Screen): void {
@@ -299,19 +302,23 @@ export class Game {
       this.npc.standDown();
       this.say(LINES.won);
     }
-    this.debug.sync();
+    this.debug?.sync();
   }
 
   /** Her turn at the mic, as heard: his mood turns if the judge says her words do, else he answers as he is. */
   private async hear(text: string): Promise<void> {
-    this.debug.heard(text);
+    this.debug?.heard(text);
     if (this.outcome) return;
     const { worked, fight } = this;
     const mood = this.npc.mood;
     let turns = false;
     if (text) {
       // The server asks Jev (`server/judge.ts`); a failure leaves him unmoved.
-      turns = await fetch('/api/judge', { method: 'POST', body: JSON.stringify({ mood, worked, newest: text, fight }) })
+      turns = await fetch('/api/judge', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mood, worked, newest: text, fight }),
+      })
         .then(async (response) => {
           if (!response.ok) throw new Error(`HTTP ${response.status}`);
           return ((await response.json()) as { turns: boolean }).turns;
@@ -379,7 +386,7 @@ export class Game {
       },
       // Ambient motion runs on fight time, which setPausedForScreenshot already freezes.
       setReducedMotion: () => {},
-      hideDebugUi: (hidden: boolean) => this.debug.setHidden(hidden),
+      hideDebugUi: (hidden: boolean) => this.debug?.setHidden(hidden),
     };
   }
 
