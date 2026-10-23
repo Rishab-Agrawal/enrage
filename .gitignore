@@ -11,3 +11,4 @@ artifacts/dev/
 *.tmp.*
 *.webm
 .env.local
+.claude/skills/
