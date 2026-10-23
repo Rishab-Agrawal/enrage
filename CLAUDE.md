@@ -2,7 +2,7 @@
 
 ## Goal
 
-A browser game where the player advances through levels by beating NPCs one by one. To be able to engage with the NPC in combat the user will have to enrage the NPC first, without which the user will not be able to get close to the NPC. The NPC never heals, but the user heals at a certain rate, which should often be too slow for the user to be able to defeat the NPC without some "resting time", but for the user to get that time they need to calm the NPC down. To enrage/calm the NPC, the user will type/say things, and it will be processed by a system one model like Jev or OpenAI's decision API.
+A browser game where the player advances through levels by beating NPCs one by one. To be able to engage with the NPC in combat the user will have to enrage the NPC first, without which the user will not be able to get close to the NPC. The NPC never heals, but the user heals at a certain rate, which should often be too slow for the user to be able to defeat the NPC without some "resting time", but for the user to get that time they need to calm the NPC down. To enrage/calm the NPC, the user will type/say things, and it will be judged by Jev, a system one model.
 
 ## Look
 
@@ -37,8 +37,10 @@ A bug, bloat or over-engineering usually points to something larger: weak design
 
 Python is `py`; `python` is the Windows Store stub.
 
+API keys go in `.env.local`, which git ignores, never `.env`.
+
 ## Testing
 
-NPC enrage/calm decisions come from an LLM: stub that call in tests and bot playtests so they stay deterministic.
+NPC enrage/calm decisions come from Jev: stub `/api/judge` in tests and bot playtests so they stay deterministic. `npm run eval` and `npm run redteam` call it for real, on purpose: they measure the judge. The red-team agent labels the cases it adds to `evals/cases.json`: review them before committing.
 
 Run the tests a change can break, and the full suite only when required (like touching shared code); check what none cover with a screenshot.

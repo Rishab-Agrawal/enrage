@@ -1,6 +1,6 @@
 # Fight slice
 
-The first playable slice: one fight, one NPC, one hilltop arena. No levels, no chat, no LLM.
+The first playable slice: one fight, one NPC, one hilltop arena. No levels, no chat.
 
 ## Brief
 
@@ -13,7 +13,7 @@ The first playable slice: one fight, one NPC, one hilltop arena. No levels, no c
 - **Risk and reward:** staying in to land one more hit against getting caught by his punch. Calming him early is safe but slow.
 - **A better player:** dodges through his wind-ups, lands full combos, and rests less.
 - **Communicating the next decision:** his portrait's mood ring, the goal over the mic (enrage him to fight, pacify him to rest), his rage embers and rim light, his roar on enrage, and the wind-up before each attack.
-- **Non-goals:** levels, multiple NPCs, chat/voice beyond the push-to-talk turn (hold Space up to 15 s, then the mic rests 5 s), LLM, mobile/touch, gamepad.
+- **Non-goals:** levels, multiple NPCs, chat/voice beyond the push-to-talk turn (hold Space up to 15 s, then the mic rests 5 s), mobile/touch, gamepad.
 
 ## Core loop contract
 
@@ -30,7 +30,7 @@ The player strikes to empty the NPC's health. His heavy attacks create risk, and
 
 ## Mood
 
-`Npc.mood` (`'calm' | 'enraged'`) is the one piece of state a future system (the LLM) sets, through `Fight.setMood`. For now the debug panel sets it.
+`Npc.mood` (`'calm' | 'enraged'`) is the one piece of state set from outside the fight, through `Game.setMood`: by the judge (`server/judge.ts`), or by hand from the debug panel. Her turn at the mic turns him only if Jev finds the line would work on him and makes a point she hasn't made that fight; otherwise he answers unmoved.
 
 - **Calm:** arms folded, never attacks. He walks off to keep at least 6 m away; if she closes on him anyway, he wheels round and shoves her off with both palms, without damage: he starts as she comes, so his palms meet her as they drive out. No dash avoids the shove, and she reels back out of control, so she never touches him. Her blows don't hurt him while he is calm. This is the player's rest window. He turns as she does: head first, hips following in a step.
 - **Enraged:** roars (a 1.2 s telegraph), then chases and attacks with a punch or a haymaker. Each attack has a visible wind-up, through which he keeps stepping in faster than she can back away; the haymaker knocks her back hard.

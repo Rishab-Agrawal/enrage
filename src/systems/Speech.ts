@@ -15,11 +15,16 @@ export class Speech {
 
   constructor(private readonly onHeard: (text: string) => void) {}
 
-  /** Follow the push-to-talk state: a turn starts when it goes true and ends when it goes false. */
+  /** Follow the push-to-talk state: a turn starts when it goes true and ends when it goes false, in one `onHeard` ('' if nothing was heard). */
   hold(on: boolean): void {
     if (on && !this.letGo) {
       const released = new Promise<void>((resolve) => (this.letGo = resolve));
-      this.listen(released).then(this.onHeard, (error) => console.warn('Speech-to-text failed:', error));
+      this.listen(released)
+        .catch((error) => {
+          console.warn('Speech-to-text failed:', error);
+          return '';
+        })
+        .then(this.onHeard);
     } else if (!on && this.letGo) {
       this.letGo();
       this.letGo = undefined;

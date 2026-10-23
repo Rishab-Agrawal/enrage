@@ -43,7 +43,7 @@ export class Npc {
   readonly character: Character;
   readonly radius = 0.55;
   health = tuning.npcMaxHealth;
-  /** The NPC's temper. The only state an outside system (debug panel now, LLM later) sets, via `setMood`. */
+  /** The NPC's temper. The only state an outside system (the judge, or the debug panel) sets, via `setMood`. */
   mood: Mood = 'calm';
   state: State = 'calm';
   private timer = 0;

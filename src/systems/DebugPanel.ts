@@ -2,7 +2,7 @@ import GUI from 'lil-gui';
 import type { Mood } from '../game/events';
 import { tuning } from '../game/tuning';
 
-/** Stand-in for the conversation system: sets the NPC's mood, plus live balance tuning. */
+/** Sets the NPC's mood by hand, shows what she was heard to say, and tunes balance live. */
 export class DebugPanel {
   private readonly gui = new GUI({ title: 'Debug', container: document.querySelector<HTMLElement>('#debug') ?? undefined });
   private readonly state: { mood: Mood };
@@ -34,7 +34,7 @@ export class DebugPanel {
     balance.add(tuning, 'playerStamina', 1, 20, 0.5).name('player stamina (s of sprint)');
   }
 
-  /** Reflect a mood set elsewhere (rematch, test hooks, a future LLM). */
+  /** Reflect a mood set elsewhere (rematch, test hooks, the judge). */
   sync(): void {
     this.state.mood = this.getMood();
     for (const controller of this.gui.controllersRecursive()) controller.updateDisplay();

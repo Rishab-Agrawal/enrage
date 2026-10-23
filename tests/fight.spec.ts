@@ -205,7 +205,17 @@ test('until the camera has glided in behind her after the click that starts the 
   expect(errors).toEqual([]);
 });
 
-test('what she says while Space is held shows in the debug panel', async ({ page }) => {
+/** Hold Space for a turn at the mic. */
+async function talk(page: Page): Promise<void> {
+  await page.keyboard.down('Space');
+  await page.waitForTimeout(400);
+  await page.keyboard.up('Space');
+}
+
+/** Wait until Gorran's subtitle is one of `lines`. */
+const says = (page: Page, lines: string[]) => expect.poll(async () => lines.includes((await page.locator('#subtitle').textContent())!)).toBe(true);
+
+test('what she says goes to the judge with her earlier lines, and Gorran turns only on its verdict', async ({ page }) => {
   // Deepgram stubbed: a silent mic whose recorder leads with an empty chunk, as recorders may, a fake token, and a socket
   // that, like Deepgram, ends the stream on an empty message and answers CloseStream with a fixed transcript.
   await page.addInitScript(() => {
@@ -225,12 +235,25 @@ test('what she says while Space is held shows in the debug panel', async ({ page
       socket.close();
     }),
   );
+  // The judge stubbed: her first line leaves him as he is, her second turns him.
+  const asked: unknown[] = [];
+  await page.route('/api/judge', (route) => {
+    asked.push(route.request().postDataJSON());
+    return route.fulfill({ json: { turns: asked.length > 1 } });
+  });
   const errors = await start(page);
   await capture(page);
-  await page.keyboard.down('Space');
-  await page.waitForTimeout(400);
-  await page.keyboard.up('Space');
+  await talk(page);
   await expect(page.locator('#debug .heard')).toHaveText('You look tired.');
+  await says(page, LINES.unmoved.calm);
+  await expect(page.locator('#voice')).toHaveClass('ready', { timeout: 8_000 });
+  await talk(page);
+  await says(page, LINES.mood.enraged);
+  expect((await read(page)).npc.mood).toBe('enraged');
+  expect(asked).toEqual([
+    { mood: 'calm', said: ['You look tired.'] },
+    { mood: 'calm', said: ['You look tired.', 'You look tired.'] },
+  ]);
   expect(errors).toEqual([]);
 });
 
@@ -252,16 +275,13 @@ test('losing the mouse pauses the fight and lets go of the mic; capturing it aga
   expect(errors).toEqual([]);
 });
 
-test('Gorran answers her turn at the mic as he is, and speaks up as his mood turns', async ({ page }) => {
+test('Gorran speaks up as his mood turns', async ({ page }) => {
   const errors = await start(page);
   await capture(page);
-  const says = (lines: string[]) => expect.poll(async () => lines.includes((await page.locator('#subtitle').textContent())!)).toBe(true);
-  await page.keyboard.press('Space');
-  await says(LINES.unmoved.calm);
   await setMood(page, 'enraged');
-  await says(LINES.mood.enraged);
+  await says(page, LINES.mood.enraged);
   await setMood(page, 'calm');
-  await says(LINES.mood.calm);
+  await says(page, LINES.mood.calm);
   expect(errors).toEqual([]);
 });
 
