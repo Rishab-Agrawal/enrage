@@ -9,11 +9,15 @@ type Result = { type: string; is_final?: boolean; channel?: { alternatives: { tr
  * Audio recorded before the socket opens is queued, so no words are lost to the connection.
  */
 export class Speech {
-  /** Asked for once, then kept open: a fresh request each press would clip her first words. */
   private mic?: Promise<MediaStream>;
   private letGo?: () => void;
 
   constructor(private readonly onHeard: (text: string) => void) {}
+
+  /** The mic, asked for once and then kept open: a fresh one each turn would clip her first words while it warms up. */
+  open(): Promise<MediaStream> {
+    return (this.mic ??= navigator.mediaDevices.getUserMedia({ audio: true }));
+  }
 
   /** Follow the push-to-talk state: a turn starts when it goes true and ends when it goes false, in one `onHeard` ('' if nothing was heard). */
   hold(on: boolean): void {
@@ -32,9 +36,8 @@ export class Speech {
   }
 
   private async listen(released: Promise<void>): Promise<string> {
-    this.mic ??= navigator.mediaDevices.getUserMedia({ audio: true });
     // One format in every browser: Safari would otherwise record MP4, which Deepgram can't stream.
-    const recorder = new MediaRecorder(await this.mic, { mimeType: 'audio/webm;codecs=opus' });
+    const recorder = new MediaRecorder(await this.open(), { mimeType: 'audio/webm;codecs=opus' });
     const queued: Blob[] = [];
     let send: (chunk: Blob) => void = (chunk) => queued.push(chunk);
     // A recorder may hand over an empty chunk, and Deepgram takes an empty message as the end of the stream.

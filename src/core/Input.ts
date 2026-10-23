@@ -42,7 +42,11 @@ export class Input {
     if (this.captured && !this.still) this.look += event.movementX;
   };
 
-  constructor(private readonly surface: HTMLElement) {
+  /** `beforeCapture` runs on each capturing click, before the mouse is captured: a prompt it raises shows the cursor to answer it. */
+  constructor(
+    private readonly surface: HTMLElement,
+    private readonly beforeCapture: () => Promise<unknown>,
+  ) {
     window.addEventListener('keydown', this.onKeyDown);
     window.addEventListener('keyup', this.onKeyUp);
     window.addEventListener('blur', this.onBlur);
@@ -54,6 +58,7 @@ export class Input {
   }
 
   private async lock(): Promise<void> {
+    await this.beforeCapture().catch(() => {});
     try {
       await this.surface.requestPointerLock({ unadjustedMovement: true });
     } catch (error) {

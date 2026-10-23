@@ -78,7 +78,8 @@ export class Game {
     models: { player: GLTF; npc: GLTF },
   ) {
     this.renderer = createRenderer(canvas);
-    this.input = new Input(canvas);
+    // The mic's permission prompt comes with the click that starts the fight, and it has warmed up by her first turn.
+    this.input = new Input(canvas, () => this.speech.open());
     this.player = new Player(models.player);
     this.npc = new Npc(models.npc, () => this.rng());
     this.arena = new Arena({ a: this.player.position, b: this.npc.position });
