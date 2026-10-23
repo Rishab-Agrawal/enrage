@@ -65,6 +65,8 @@ export class Game {
   private lineLeft = 0;
   /** Her lines that turned his mood this fight: one that repeats them doesn't work again. */
   private worked: string[] = [];
+  /** This fight's id: a verdict from an earlier one is moot, and LangSmith threads the fight's verdicts by it. */
+  private fight = '';
   private frame = 0;
   private screen: Screen = 'title';
   /** Held still for screenshots, without the pause card. */
@@ -133,6 +135,7 @@ export class Game {
     this.events.length = 0;
     this.line = '';
     this.worked = [];
+    this.fight = crypto.randomUUID();
     this.input.clear();
     this.debug.sync();
     this.cameraRig.update(0, this.player.position, this.player.yaw, true);
@@ -302,12 +305,12 @@ export class Game {
   private async hear(text: string): Promise<void> {
     this.debug.heard(text);
     if (this.outcome) return;
-    const { worked } = this;
+    const { worked, fight } = this;
     const mood = this.npc.mood;
     let turns = false;
     if (text) {
       // The server asks Jev (`server/judge.ts`); a failure leaves him unmoved.
-      turns = await fetch('/api/judge', { method: 'POST', body: JSON.stringify({ mood, worked, newest: text }) })
+      turns = await fetch('/api/judge', { method: 'POST', body: JSON.stringify({ mood, worked, newest: text, fight }) })
         .then(async (response) => {
           if (!response.ok) throw new Error(`HTTP ${response.status}`);
           return ((await response.json()) as { turns: boolean }).turns;
@@ -318,7 +321,7 @@ export class Game {
         });
     }
     // A verdict that lands after the fight ended, or a rematch began, is moot.
-    if (this.outcome || worked !== this.worked) return;
+    if (this.outcome || fight !== this.fight) return;
     if (turns) {
       worked.push(text);
       this.setMood(mood === 'calm' ? 'enraged' : 'calm');

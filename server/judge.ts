@@ -8,6 +8,8 @@ export const Turn = z.object({
   mood: z.enum(['calm', 'enraged'] satisfies Mood[]),
   worked: z.array(z.string().min(1).max(500)).max(100),
   newest: z.string().min(1).max(500),
+  /** The fight it's from: LangSmith groups a fight's verdicts into one thread by it. */
+  fight: z.uuid().optional(),
 });
 export type Turn = z.infer<typeof Turn>;
 
@@ -62,12 +64,16 @@ const REPEATS: Noul = {
 const classifiers: Partial<Record<Mood, TypeSafeClassifier>> = {};
 
 /** Whether her newest line turns Gorran out of `mood`: it has to work on him, and not repeat a line that already did. */
-export const judge = traceable(
-  async ({ mood, worked, newest }: Turn): Promise<boolean> => {
-    classifiers[mood] ??= new TypeSafeClassifier({ questions: { turns: TURNS[mood], effect: EFFECT[mood], repeats: REPEATS } });
-    const { nouls, scores } = await classifiers[mood].invoke({ worked, newest });
-    // The effect double-checks `turns`: it vetoes a line it puts nearer "Somewhat" (2) than "A lot" (3).
-    return nouls.turns.noul * (1 - nouls.repeats.noul) > 0.5 && scores.effect.score > 2.5;
-  },
-  { name: 'judge' },
-);
+export function judge({ fight, ...turn }: Turn): Promise<boolean> {
+  // A thread's runs all carry its id, the classifier's included.
+  const metadata = { thread_id: fight };
+  return traceable(
+    async ({ mood, worked, newest }: Omit<Turn, 'fight'>): Promise<boolean> => {
+      classifiers[mood] ??= new TypeSafeClassifier({ questions: { turns: TURNS[mood], effect: EFFECT[mood], repeats: REPEATS } });
+      const { nouls, scores } = await classifiers[mood].invoke({ worked, newest }, { metadata });
+      // The effect double-checks `turns`: it vetoes a line it puts nearer "Somewhat" (2) than "A lot" (3).
+      return nouls.turns.noul * (1 - nouls.repeats.noul) > 0.5 && scores.effect.score > 2.5;
+    },
+    { name: 'judge', metadata },
+  )(turn);
+}

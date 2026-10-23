@@ -254,10 +254,11 @@ test('what she says goes to the judge with her lines that already worked, and Go
   await talk(page);
   await says(page, LINES.unmoved.enraged);
   const line = 'You look tired.';
+  const { fight } = asked[0] as { fight: string };
   expect(asked).toEqual([
-    { mood: 'calm', worked: [], newest: line },
-    { mood: 'calm', worked: [], newest: line },
-    { mood: 'enraged', worked: [line], newest: line },
+    { mood: 'calm', worked: [], newest: line, fight },
+    { mood: 'calm', worked: [], newest: line, fight },
+    { mood: 'enraged', worked: [line], newest: line, fight },
   ]);
   expect(errors).toEqual([]);
 });
