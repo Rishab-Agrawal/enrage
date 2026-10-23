@@ -56,10 +56,10 @@ const EFFECT: Record<Mood, Score> = {
 
 const REPEATS: Noul = {
   type: 'noul',
-  instructions: `${SCENE} Does her newest line make the same point as one of the lines in \`worked\`?`,
+  instructions: `${SCENE} Does her newest line say again what one of the lines in \`worked\` said?`,
   criteria: {
-    true: 'The same insult, apology or appeal as one of those lines, word for word or reworded.',
-    false: 'A point none of those lines made, or `worked` is empty.',
+    true: 'The same thing again, word for word or reworded: an insult about the same thing, or an apology after an apology.',
+    false: 'Something none of those lines said, even if it is the same kind of line: an insult about something else, or praise or peace after an apology. Or `worked` is empty.',
   },
 };
 
@@ -74,9 +74,10 @@ export function judge({ fight, ...turn }: Turn): Promise<boolean> {
     async ({ mood, worked, newest }: Omit<Turn, 'fight'>): Promise<boolean> => {
       classifiers[mood] ??= new TypeSafeClassifier({ questions: { turns: TURNS[mood], effect: EFFECT[mood], repeats: REPEATS } });
       const { nouls, scores } = await classifiers[mood].invoke({ worked, newest }, { metadata });
-        // The effect double-checks `turns`, vetoing a line it doesn't lean past "Somewhat" (2) toward "Enough" (3). Its
+      // Each answer gates on its own: multiplied, Jev's rarely-certain `repeats` would tax every line.
+      // The effect double-checks `turns`, vetoing a line it doesn't lean past "Somewhat" (2) toward "Enough" (3). Its
       // average sits below its top guess, as its other guesses pull it toward the middle: a bar at 2.5 would outrank `turns`.
-      return nouls.turns.noul * (1 - nouls.repeats.noul) > 0.5 && scores.effect.score > 2;
+      return nouls.turns.noul > 0.5 && nouls.repeats.noul < 0.5 && scores.effect.score > 2;
     },
     { name: 'judge', metadata },
   )(turn);

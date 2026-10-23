@@ -27,5 +27,9 @@
   {"mood":"calm","worked":[],"newest":"I don't care about you.","turns":false},
   {"mood":"enraged","worked":["You fight like a scared old man."],"newest":"I'm sorry. You're amazing.","turns":true},
   {"mood":"enraged","worked":["You fight like a scared old man."],"newest":"You're actually very amazing. I'm really sorry I said that.","turns":true},
-  {"mood":"enraged","worked":["You fight like a scared old man."],"newest":"I'm really sorry.","turns":false}
+  {"mood":"enraged","worked":["You fight like a scared old man."],"newest":"I'm really sorry.","turns":false},
+  {"mood":"calm","worked":["I could easily beat you. You're extremely weak.","I'm really sorry. You're actually amazing."],"newest":"You're the dumbest person I've ever met.","turns":true},
+  {"mood":"calm","worked":["I could easily beat you. You're extremely weak.","I'm really sorry. You're actually amazing."],"newest":"I can't believe you're this dumb. Even your name sucks.","turns":true},
+  {"mood":"calm","worked":["I could easily beat you. You're extremely weak.","I'm really sorry. You're actually amazing."],"newest":"Really scared of me, aren't you?","turns":true},
+  {"mood":"calm","worked":["I could easily beat you. You're extremely weak.","I'm really sorry. You're actually amazing."],"newest":"I'm sure even a small kid could beat you too. You're an extremely weak loser.","turns":false}
 ]
