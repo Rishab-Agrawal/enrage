@@ -149,7 +149,7 @@ test('a full bar holds 5 s of sprint and refills as fast, after a 1 s pause once
     const log: { t: number; speed: number; stamina: number; winded: boolean; state: string }[] = [];
     for (; t < 14; t += 1 / 60) {
       const before = player.position.clone();
-      player.update(1 / 60, input, player.position.clone().setZ(-99), false, []);
+      player.update(1 / 60, input, false, []);
       player.character.update(1 / 60);
       log.push({ t, speed: player.position.distanceTo(before) * 60, stamina: player.stamina, winded: player.winded, state: player.state });
     }
