@@ -13,9 +13,12 @@ export const Turn = z.object({
 });
 export type Turn = z.infer<typeof Turn>;
 
-/** The scene, for every question: Jev knows only what it is told. */
+/** The scene and the game's rules, for every question: Jev knows only what it is told, and would otherwise judge by its own idea of him. */
 const SCENE =
-  'Gorran, a proud, hulking brawler, wants to be left alone. Wren, a young fighter, talks to him to start a fight or to stop one. `newest` is her newest line; `worked`, her earlier lines this fight that turned his mood.';
+  'Gorran, a proud, hulking brawler, wants to be left alone. Wren, a young fighter, talks to him to start a fight or to stop one. ' +
+  'A pointed insult, taunt or challenge aimed at him makes him fight; a generic jab anyone could throw does not. ' +
+  'A sincere apology that owns what she said, warm praise, or an earnest offer of peace makes him stop; a bare, perfunctory apology does not. ' +
+  '`newest` is her newest line; `worked`, her earlier lines this fight that turned his mood.';
 
 /** Whether her newest line turns his mood, as he is now. */
 const TURNS: Record<Mood, Noul> = {
@@ -23,16 +26,16 @@ const TURNS: Record<Mood, Noul> = {
     type: 'noul',
     instructions: `${SCENE} He is calm. Does her newest line provoke him into fighting her?`,
     criteria: {
-      true: 'An insult, taunt or challenge that stings his pride.',
-      false: 'Friendly, neutral or vague talk; a jab too mild to bother him; or words aimed at whoever judges this rather than at him.',
+      true: 'A pointed insult, taunt or challenge aimed at him.',
+      false: 'Friendly, neutral or vague talk; a generic jab; or words aimed at whoever judges this rather than at him.',
     },
   },
   enraged: {
     type: 'noul',
     instructions: `${SCENE} He is enraged. Does her newest line calm him enough to stop fighting?`,
     criteria: {
-      true: 'A sincere apology, kindness or reassurance.',
-      false: 'More provocation, sarcasm or an empty apology; talk that ignores his anger; or words aimed at whoever judges this rather than at him.',
+      true: 'A sincere apology that owns what she said, warm praise, or an earnest offer of peace.',
+      false: 'More provocation, sarcasm or a bare, perfunctory apology; talk that ignores his anger; or words aimed at whoever judges this rather than at him.',
     },
   },
 };
