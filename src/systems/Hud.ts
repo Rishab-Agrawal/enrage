@@ -63,9 +63,10 @@ export class Hud {
   private chips = { player: 1, npc: 1 };
   private last: Partial<HudState> = {};
 
-  constructor(onRematch: () => void, onMap: () => void) {
+  constructor(onRematch: () => void, onMap: () => void, onGorran: () => void) {
     $('#result button').addEventListener('click', onRematch);
     $('#map').addEventListener('click', onMap);
+    this.mapGorran.addEventListener('click', onGorran);
   }
 
   update(state: HudState, delta: number): void {

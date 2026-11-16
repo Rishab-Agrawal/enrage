@@ -237,6 +237,10 @@ body,
   background: var(--ink);
 }
 
+#app[data-screen='map'] #map img {
+  cursor: pointer;
+}
+
 #map .wren {
   fill: var(--paper);
   stroke: var(--ink);

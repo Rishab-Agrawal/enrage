@@ -685,11 +685,26 @@ test('M opens the map, freeing the mouse and holding the fight; a click on it ke
   expect(wren[1]).toBeGreaterThan(50);
   expect(wren[2]).toBeCloseTo(0, 2);
   const { elapsed } = await read(page);
-  await page.locator('#map').click();
+  await page.locator('#map').click({ position: { x: 10, y: 10 } });
   expect((await read(page)).elapsed).toBe(elapsed);
   await expect(page.locator('#app')).toHaveAttribute('data-screen', 'map');
   await page.mouse.click(40, 400);
   await expect(page.locator('#app')).toHaveAttribute('data-screen', 'fight');
+  expect(errors).toEqual([]);
+});
+
+test('a click on Gorran in the open map takes her back to where the fight starts, facing him, and closes the map', async ({ page }) => {
+  const errors = await start(page);
+  await capture(page);
+  await page.evaluate(() => window.__THREE_GAME_TEST_HOOKS__?.place(120, 150, 1));
+  await page.keyboard.press('KeyM');
+  await expect(page.locator('#app')).toHaveAttribute('data-screen', 'map');
+  await page.locator('#map img').click();
+  await expect(page.locator('#app')).toHaveAttribute('data-screen', 'fight');
+  const { player } = await read(page);
+  expect(player.position.x).toBeCloseTo(0, 1);
+  expect(player.position.z).toBeCloseTo(6, 1);
+  expect(player.yaw).toBeCloseTo(Math.PI, 2);
   expect(errors).toEqual([]);
 });
 

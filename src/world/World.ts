@@ -529,14 +529,41 @@ function createRocks(rng: () => number, obstacles: Obstacle[]): THREE.Mesh[] {
 }
 
 type Plant = 'broadleaf' | 'fir' | 'shrub' | 'heather';
+/** Leaf cards to a spray. */
+const CARDS = 24;
+const UP = new THREE.Vector3(0, 1, 0);
+
+/** A scatter of small pointed leaves, pale so each plant tints it: what a leaf card shows. */
+function leafTexture(rng: () => number): THREE.CanvasTexture {
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = 256;
+  const ctx = canvas.getContext('2d') as CanvasRenderingContext2D;
+  for (let i = 0; i < 80; i += 1) {
+    const [angle, out] = [rng() * Math.PI * 2, Math.sqrt(rng()) * 92];
+    ctx.setTransform(1, 0, 0, 1, 128 + Math.cos(angle) * out, 128 + Math.sin(angle) * out);
+    ctx.rotate(angle + (rng() - 0.5) * 2);
+    const shade = 195 + rng() * 60;
+    ctx.fillStyle = `rgb(${shade},${shade},${shade})`;
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.quadraticCurveTo(17, -13, 42, 0);
+    ctx.quadraticCurveTo(17, 13, 0, 0);
+    ctx.fill();
+  }
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return texture;
+}
 
 /**
- * A plant, 1 m tall before its instance scales it. A broadleaf: a trunk flaring at the root and forking into boughs,
- * under billows of leaves. A fir: ragged tiers. A shrub: low billows. Heather: spikes of lilac over a green tuft.
+ * A plant, 1 m tall before its instance scales it, in two groups: its wood, then its leaf cards. A broadleaf: a trunk
+ * flaring at the root and forking into boughs, each bearing a spray of leaves. A fir: ragged tiers. A shrub: low
+ * sprays. Heather: spikes of lilac over a green tuft.
  */
 function plantGeometry(rng: () => number, kind: Plant): THREE.BufferGeometry {
   const [color, lit, v] = [new THREE.Color(), new THREE.Color(), new THREE.Vector3()];
   const parts: THREE.BufferGeometry[] = [];
+  const leaves = { position: [] as number[], normal: [] as number[], uv: [] as number[], color: [] as number[], index: [] as number[] };
   // Each part is lit from above and shaded beneath, dappled, and takes `shape` to its vertices.
   const part = (geometry: THREE.BufferGeometry, low: string, high: string, shape: (v: THREE.Vector3) => void = () => {}) => {
     geometry.deleteAttribute('uv');
@@ -551,14 +578,29 @@ function plantGeometry(rng: () => number, kind: Plant): THREE.BufferGeometry {
     geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
     parts.push(geometry.index ? geometry.toNonIndexed() : geometry);
   };
-  // A mass of leaves about `centre`: softly lumpy, flatter beneath than above.
-  const billow = (radius: number, centre: THREE.Vector3, detail: number) => {
-    const seed = rng() * 50;
-    part(new THREE.IcosahedronGeometry(radius, detail), '#32602a', '#a6c455', (p) => {
-      p.multiplyScalar(0.88 + fbm(p.x * 6 + seed, p.z * 6 + p.y * 5, 2) * 0.26);
-      p.y *= p.y < 0 ? 0.6 : 0.9;
-      p.add(centre);
-    });
+  const [out, turn, foot] = [new THREE.Vector3(), new THREE.Quaternion(), new THREE.Vector3()];
+  // A bough from `from`, `thick` at its foot, bearing a spray of leaves about `centre`: cards at every angle, flatter
+  // beneath than above, each lit as its place on the round of the spray, so the whole shades as one mass.
+  const spray = (radius: number, centre: THREE.Vector3, from: THREE.Vector3, thick: number) => {
+    const length = centre.distanceTo(from);
+    const bough = new THREE.CylinderGeometry(thick / 3, thick, length, 5).translate(0, length / 2, 0);
+    part(bough.applyQuaternion(turn.setFromUnitVectors(UP, v.subVectors(centre, from).normalize())).translate(...from.toArray()), '#4f3524', '#7a5639');
+    for (let card = 0; card < CARDS; card += 1) {
+      const [y, angle] = [rng() * 2 - 1, rng() * Math.PI * 2];
+      out.set(Math.cos(angle) * Math.sqrt(1 - y * y), y, Math.sin(angle) * Math.sqrt(1 - y * y));
+      color.set('#32602a').lerp(lit.set('#a6c455'), THREE.MathUtils.clamp(out.y * 0.5 + 0.5 + (rng() - 0.5) * 0.4, 0, 1));
+      turn.set(rng() - 0.5, rng() - 0.5, rng() - 0.5, rng() - 0.5).normalize();
+      const [first, reach] = [leaves.position.length / 3, radius * (0.55 + rng() * 0.45)];
+      for (const [u, w] of [[0, 0], [1, 0], [0, 1], [1, 1]]) {
+        v.set(u - 0.5, w - 0.5, 0).multiplyScalar(radius * 1.1).applyQuaternion(turn).addScaledVector(out, reach);
+        v.y *= out.y < 0 ? 0.6 : 0.9;
+        leaves.position.push(...v.add(centre).toArray());
+        leaves.normal.push(...out.toArray());
+        leaves.uv.push(u, w);
+        leaves.color.push(...color.toArray());
+      }
+      leaves.index.push(first, first + 1, first + 2, first + 2, first + 1, first + 3);
+    }
   };
   const around = (i: number, out: number, height: number) => new THREE.Vector3(Math.cos(i * 2.4 + rng() * 0.5) * out, height, Math.sin(i * 2.4 + rng() * 0.5) * out);
   if (kind === 'fir') {
@@ -573,29 +615,33 @@ function plantGeometry(rng: () => number, kind: Plant): THREE.BufferGeometry {
       });
     }
   } else if (kind === 'broadleaf') {
-    part(new THREE.CylinderGeometry(0.03, 0.05, 0.5, 8, 4).translate(0, 0.25, 0), '#4f3524', '#7a5639', (p) => {
+    part(new THREE.CylinderGeometry(0.03, 0.05, 0.45, 8, 4).translate(0, 0.225, 0), '#4f3524', '#7a5639', (p) => {
       // Roots flare, and the trunk leans a little as it climbs.
       const flare = 1 + 0.9 * (1 - THREE.MathUtils.smoothstep(p.y, 0, 0.14));
       p.set(p.x * flare + p.y * p.y * 0.12, p.y, p.z * flare);
     });
-    for (let i = 0; i < 3; i += 1) {
-      part(new THREE.CylinderGeometry(0.012, 0.022, 0.26, 5).translate(0, 0.13, 0).rotateZ(0.7 + rng() * 0.3).rotateY(i * 2.1 + rng()).translate(0, 0.4 + i * 0.03, 0), '#4f3524', '#7a5639');
+    // The trunk forks into boughs that reach into the sprays they bear: one up the middle, the rest spread round it.
+    const fork = new THREE.Vector3(0.02, 0.42, 0);
+    for (let i = 0; i < 7; i += 1) {
+      const centre = i ? around(i, 0.2 + rng() * 0.14, 0.56 + rng() * 0.22) : new THREE.Vector3(0, 0.8 + rng() * 0.12, 0);
+      spray(i ? 0.15 + rng() * 0.06 : 0.22, centre, fork, 0.024);
     }
-    // One big billow on top, smaller ones crowding round and under it.
-    billow(0.25, new THREE.Vector3(0, 0.74 + rng() * 0.2, 0), 3);
-    for (let i = 1; i < 11; i += 1) billow(0.1 + rng() * 0.09, around(i, 0.14 + rng() * 0.14, 0.5 + rng() * 0.2), 2);
   } else if (kind === 'shrub') {
-    for (let i = 0; i < 5; i += 1) billow(0.22 + rng() * 0.12, around(i, i && 0.2 + rng() * 0.2, 0.2 + rng() * 0.12), 2);
+    for (let i = 0; i < 5; i += 1) spray(0.22 + rng() * 0.12, around(i, i && 0.2 + rng() * 0.2, 0.2 + rng() * 0.12), foot, 0.02);
   } else {
-    billow(0.2, new THREE.Vector3(0, 0.1, 0), 1);
+    spray(0.2, new THREE.Vector3(0, 0.1, 0), foot, 0.01);
     for (let i = 0; i < 11; i += 1) {
       const spike = new THREE.ConeGeometry(0.045, 0.62, 5).translate(0, 0.31, 0).rotateZ(0.08 + rng() * 0.45).rotateY(i * 2.4 + rng());
       part(spike.translate(...around(i, rng() * 0.12, 0.08).toArray()), '#8a6fd6', '#d8c4ff');
     }
   }
-  const plant = mergeVertices(mergeGeometries(parts));
-  plant.computeVertexNormals();
-  return plant;
+  const wood = mergeVertices(mergeGeometries(parts));
+  wood.computeVertexNormals();
+  wood.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(wood.getAttribute('position').count * 2), 2));
+  const foliage = new THREE.BufferGeometry();
+  for (const name of ['position', 'normal', 'color', 'uv'] as const) foliage.setAttribute(name, new THREE.Float32BufferAttribute(leaves[name], name === 'uv' ? 2 : 3));
+  foliage.setIndex(leaves.index);
+  return mergeGeometries([wood, foliage], true);
 }
 
 /** Tree tints: most as they are, some turned to yellow-green or to teal. */
@@ -650,17 +696,21 @@ function createPlants(rng: () => number, land: Float32Array, obstacles: Obstacle
     }
   }
   obstacles.push(...trees);
-  const material = new THREE.MeshToonMaterial({ vertexColors: true, gradientMap: toonGradient });
+  const leafy = new THREE.MeshToonMaterial({ vertexColors: true, gradientMap: toonGradient, map: leafTexture(rng), alphaTest: 0.3, side: THREE.DoubleSide });
+  // Both faces of a card keep the normal it was given.
+  leafy.onBeforeCompile = (shader) => {
+    shader.fragmentShader = `#undef DOUBLE_SIDED\n${shader.fragmentShader}`;
+  };
+  const materials = [new THREE.MeshToonMaterial({ vertexColors: true, gradientMap: toonGradient }), leafy];
   const tint = new THREE.Color();
   return kinds.map(({ geometry, spots }, kind) => {
-    const mesh = new THREE.InstancedMesh(geometry, material, spots.length);
+    const mesh = new THREE.InstancedMesh(geometry, materials, spots.length);
     spots.forEach((matrix, i) => {
       mesh.setMatrixAt(i, matrix);
       // Heather keeps its lilac.
       mesh.setColorAt(i, tint.fromArray(kind === HEATHER ? TINTS[0] : TINTS[Math.floor(rng() * TINTS.length)]).multiplyScalar(0.85 + rng() * 0.3));
     });
     mesh.castShadow = mesh.receiveShadow = true;
-    addOutline(mesh, 0.004);
     return mesh;
   });
 }

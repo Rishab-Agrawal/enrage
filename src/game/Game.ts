@@ -61,6 +61,7 @@ export class Game {
   private readonly hud = new Hud(
     () => this.rematch(),
     () => this.show('map'),
+    () => this.travel(),
   );
   /** Development only, like the test hooks and diagnostics: the deployed game has none of them. */
   private readonly debug?: DebugPanel;
@@ -208,6 +209,14 @@ export class Game {
     // A pause lets go of the mic, and presses made off the fight don't carry into it.
     this.voice.update(0, false, false);
     this.input.clear();
+  }
+
+  /** A click on Gorran in the open map takes her back to where she first faced him, and closes the map. */
+  private travel(): void {
+    if (this.screen !== 'map') return;
+    this.player.toStart();
+    this.cameraRig.update(0, this.player.position, this.player.yaw, true);
+    void this.input.capture();
   }
 
   private step(delta: number): void {

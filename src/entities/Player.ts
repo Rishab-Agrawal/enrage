@@ -83,11 +83,16 @@ export class Player {
     return this.state === 'dodge' || this.state === 'down';
   }
 
+  /** Stands her where a fight starts, facing him. */
+  toStart(): void {
+    this.character.place(0, 6, Math.PI);
+  }
+
   reset(): void {
     this.health = tuning.playerMaxHealth;
     this.stamina = tuning.playerStamina;
     this.spent = false;
-    this.character.place(0, 6, Math.PI);
+    this.toStart();
     this.velocity.set(0, 0, 0);
     this.knock.set(0, 0, 0);
     this.dodgeCooldown = 0;
