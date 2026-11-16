@@ -32,3 +32,12 @@ export function fbm(x: number, y: number, octaves = 4): number {
   }
   return sum / norm;
 }
+
+/** GLSL: `noise(p)`, smooth value noise in [0, 1], for the shaders. */
+export const NOISE_GLSL = /* glsl */ `
+  float noise(vec2 p) {
+    vec2 i = floor(p), f = fract(p);
+    f = f * f * (3.0 - 2.0 * f);
+    vec4 h = fract(sin(vec4(dot(i, vec2(127.1, 311.7)), dot(i + vec2(1, 0), vec2(127.1, 311.7)), dot(i + vec2(0, 1), vec2(127.1, 311.7)), dot(i + 1.0, vec2(127.1, 311.7)))) * 43758.5453);
+    return mix(mix(h.x, h.y, f.x), mix(h.z, h.w, f.x), f.y);
+  }`;

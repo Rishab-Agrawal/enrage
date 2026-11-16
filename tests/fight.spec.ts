@@ -696,11 +696,11 @@ test('M opens the map, freeing the mouse and holding the fight; a click on it ke
 test('she wades into the sea only so deep, however long she runs at it', async ({ page }) => {
   const errors = await start(page);
   await capture(page);
-  await page.evaluate(() => window.__THREE_GAME_TEST_HOOKS__?.place(60, 250, 0));
+  await page.evaluate(() => window.__THREE_GAME_TEST_HOOKS__?.place(-60, 256, 0));
   for (const key of ['KeyW', 'ShiftLeft']) await page.keyboard.down(key);
   await page.waitForTimeout(4000);
   const { position } = (await read(page)).player;
-  expect(position.z).toBeGreaterThan(252);
+  expect(position.z).toBeGreaterThan(258);
   expect(position.y).toBeGreaterThan(SEA_LEVEL - 1);
   expect(position.y).toBeLessThan(SEA_LEVEL - 0.6);
   expect(errors).toEqual([]);

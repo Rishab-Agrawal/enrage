@@ -11,10 +11,13 @@ export const MAP_SIZE = 840;
 /** The sea, the lake and the river all lie at this height. */
 export const SEA_LEVEL = -12;
 
-/** The height of one of the massif's ledges, m. */
-const LEDGE = 7;
+/** Heights of the land's ledges, m: tall up the massif, low across the country. */
+const LEDGES = [12, 4];
 const { lerp, smoothstep, clamp } = THREE.MathUtils;
 const mound = (x: number, z: number, cx: number, cz: number, radius: number) => Math.exp(-((x - cx) ** 2 + (z - cz) ** 2) / radius ** 2);
+
+/** `height` stepped into ledges `step` high: flats, each ending in a sheer rise. */
+const ledged = (height: number, step: number) => (Math.floor(height / step) + smoothstep(height / step - Math.floor(height / step), 0.9, 1)) * step;
 
 /** The river's course from the lake to the south-east shore, and how far its bends swing off the straight line, m. */
 const RIVER = { x: 125, z: -55, toX: 0.8, toZ: 0.6, length: 300, swing: 24 };
@@ -34,10 +37,11 @@ function shape(x: number, z: number): number {
   let land = -4 + (fbm(x * 0.0035 + 3, z * 0.0035 - 7, 5) - 0.5) * 44 + (fbm(x * 0.014, z * 0.014) - 0.5) * 11;
   const ridge = 1 - Math.abs(fbm(x * 0.006 + 40, z * 0.006) * 2 - 1);
   land += mound(x, z, -80, -230, 120) * (10 + 78 * ridge * ridge + (fbm(x * 0.03, z * 0.03) - 0.5) * 16);
-  // The massif rises in ledges: grassy flats parted by cliffs, with ramps between them where the ledges give out.
-  const ledges = Math.min(1, mound(x, z, -80, -230, 150) * 1.6) * smoothstep(fbm(x * 0.012 + 5, z * 0.012), 0.38, 0.52);
-  const ledge = land / LEDGE - Math.floor(land / LEDGE);
-  land = lerp(land, (Math.floor(land / LEDGE) + smoothstep(ledge, 0.72, 1)) * LEDGE, ledges);
+  // The land rises in ledges, grassy flats parted by cliffs, with ramps between them where the ledges give out: tall
+  // ones up the massif, and low ones here and there across the country, clear of the hilltop.
+  const tall = Math.min(1, mound(x, z, -80, -230, 150) * 1.6) * smoothstep(fbm(x * 0.012 + 5, z * 0.012), 0.38, 0.52);
+  const low = smoothstep(fbm(x * 0.01 - 40, z * 0.01 + 13), 0.52, 0.57) * smoothstep(Math.hypot(x, z), 80, 140) * (1 - tall);
+  land = lerp(lerp(land, ledged(land, LEDGES[0]), tall), ledged(land, LEDGES[1]), low);
   land -= mound(x, z, RIVER.x, RIVER.z, 50) * 17 + mound(x, z, -60, 190, 30) * 12;
   // The river runs in a broad vale, its bed shallow enough to wade.
   const river = riverDistance(x, z);

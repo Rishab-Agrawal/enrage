@@ -26,8 +26,9 @@ const LINE_TIME = 2.5;
 const FIST = 0.1;
 /** Out of the arena this long, s, she has left the fight. */
 const LEAVE_TIME = 5;
-/** The steepest ground she climbs, m risen per m, and the deepest water she wades, m. */
+/** The steepest ground she climbs, m risen per m; the steepest she steps down, past which is a cliff; and the deepest water she wades, m. */
 const MAX_SLOPE = 0.8;
+const CLIFF = 1.1;
 const WADE_DEPTH = 0.8;
 const arm = new THREE.Line3();
 const nearest = new THREE.Vector3();
@@ -291,7 +292,7 @@ export class Game {
     for (const body of [this.player.position, this.npc.position]) body.y = groundHeight(body.x, body.z);
   }
 
-  /** The land turns her aside: round trunks and boulders, off slopes too steep to climb and out of water too deep to wade. */
+  /** The land turns her aside: round trunks and boulders, off slopes too steep to climb, back from cliffs' edges and out of water too deep to wade. */
   private roam(): void {
     const body = this.player.position;
     for (const { x, z, radius } of this.world.obstacles) {
@@ -303,11 +304,14 @@ export class Game {
     const steepness = slope.lengthSq();
     // Metres this frame's step climbed: taken back along the slope where she can't climb, or can't go deeper.
     const climb = (body.x - this.from.x) * slope.x + (body.z - this.from.z) * slope.y;
-    const deep = groundHeight(body.x, body.z) < SEA_LEVEL - WADE_DEPTH;
-    if (climb > 0 ? steepness > MAX_SLOPE ** 2 : deep) {
+    if (climb > 0 ? steepness > MAX_SLOPE ** 2 : groundHeight(body.x, body.z) < SEA_LEVEL - WADE_DEPTH) {
       body.x -= (slope.x * climb) / steepness;
       body.z -= (slope.y * climb) / steepness;
     }
+    // That slope is an estimate. Whatever it says, no step drops her off a cliff or takes her well out of her depth.
+    const fall = groundHeight(this.from.x, this.from.z) - groundHeight(body.x, body.z);
+    const sheer = fall > CLIFF * Math.hypot(body.x - this.from.x, body.z - this.from.z);
+    if (sheer || (fall > 0 && groundHeight(body.x, body.z) < SEA_LEVEL - WADE_DEPTH - 0.15)) body.copy(this.from);
   }
 
   /** Feedback for this frame's events, then clear them. */
