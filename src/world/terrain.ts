@@ -6,9 +6,13 @@ export const WORLD_SIZE = 1200;
 export const CELLS = 480;
 export const CELL = WORLD_SIZE / CELLS;
 const HALF = WORLD_SIZE / 2;
+/** Side of the square the map shows, m: the island and its shallows. */
+export const MAP_SIZE = 840;
 /** The sea, the lake and the river all lie at this height. */
 export const SEA_LEVEL = -12;
 
+/** The height of one of the massif's ledges, m. */
+const LEDGE = 7;
 const { lerp, smoothstep, clamp } = THREE.MathUtils;
 const mound = (x: number, z: number, cx: number, cz: number, radius: number) => Math.exp(-((x - cx) ** 2 + (z - cz) ** 2) / radius ** 2);
 
@@ -30,6 +34,10 @@ function shape(x: number, z: number): number {
   let land = -4 + (fbm(x * 0.0035 + 3, z * 0.0035 - 7, 5) - 0.5) * 44 + (fbm(x * 0.014, z * 0.014) - 0.5) * 11;
   const ridge = 1 - Math.abs(fbm(x * 0.006 + 40, z * 0.006) * 2 - 1);
   land += mound(x, z, -80, -230, 120) * (10 + 78 * ridge * ridge + (fbm(x * 0.03, z * 0.03) - 0.5) * 16);
+  // The massif rises in ledges: grassy flats parted by cliffs, with ramps between them where the ledges give out.
+  const ledges = Math.min(1, mound(x, z, -80, -230, 150) * 1.6) * smoothstep(fbm(x * 0.012 + 5, z * 0.012), 0.38, 0.52);
+  const ledge = land / LEDGE - Math.floor(land / LEDGE);
+  land = lerp(land, (Math.floor(land / LEDGE) + smoothstep(ledge, 0.72, 1)) * LEDGE, ledges);
   land -= mound(x, z, RIVER.x, RIVER.z, 50) * 17 + mound(x, z, -60, 190, 30) * 12;
   // The river runs in a broad vale, its bed shallow enough to wade.
   const river = riverDistance(x, z);

@@ -1,5 +1,5 @@
 import type { Mood } from '../game/events';
-import { MAP_SIZE } from '../world/World';
+import { MAP_SIZE } from '../world/terrain';
 import type { VoiceState } from './Voice';
 
 export type Outcome = 'victory' | 'defeat' | null;

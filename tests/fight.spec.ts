@@ -226,6 +226,18 @@ test('a click captures the mouse without striking; then the mouse turns her, unt
   expect(errors).toEqual([]);
 });
 
+test('the mouse tilts the view up and down, within limits, without turning her', async ({ page }) => {
+  await start(page);
+  await capture(page);
+  const mouse = mice.get(page)!;
+  const { yaw } = (await read(page)).player;
+  await page.mouse.move(mouse.x, (mouse.y += 100));
+  await expect.poll(async () => (await read(page)).camera.pitch).toBeCloseTo(100 * tuning.mouseTurn, 2);
+  await page.mouse.move(mouse.x, (mouse.y -= 600), { steps: 6 });
+  await expect.poll(async () => (await read(page)).camera.pitch).toBe(-0.8);
+  expect((await read(page)).player.yaw).toBe(yaw);
+});
+
 test('until the camera has glided in behind her after the click that starts the fight, she neither moves nor turns', async ({ page }) => {
   const errors = await start(page);
   await page.mouse.down();

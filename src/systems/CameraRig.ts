@@ -5,6 +5,12 @@ const DISTANCE = 5;
 const HEIGHT = 2.3;
 const LOOK_AHEAD = 3;
 const LOOK_HEIGHT = 1.2;
+/** The camera's arm from the point it looks at, m, and the arm's angle above level at rest, rad. */
+const ARM = Math.hypot(DISTANCE + LOOK_AHEAD, HEIGHT - LOOK_HEIGHT);
+const REST = Math.atan2(HEIGHT - LOOK_HEIGHT, DISTANCE + LOOK_AHEAD);
+/** How far the view tilts off its rest, rad: up, and down. The camera itself sinks no lower than LOWEST. */
+const PITCH = [-0.8, 0.9];
+const LOWEST = -0.2;
 const MAX_SHAKE = 0.35;
 /** The camera keeps this far above the ground, m: a rise behind her lifts it. */
 const CLEARANCE = 0.5;
@@ -16,7 +22,10 @@ const TILT = 1.6;
 /** How far above the hilltop the opening shot looks, m. */
 const SKY = 14;
 
-/** Third-person follow: locked behind the player, so the view turns exactly as she does. Shake is trauma². */
+/**
+ * Third-person follow: locked behind the player, so the view turns exactly as she does; the mouse's travel up and down
+ * swings it over her or down toward the ground. Shake is trauma².
+ */
 export class CameraRig {
   private trauma = 0;
   private readonly forward = new THREE.Vector3();
@@ -24,11 +33,17 @@ export class CameraRig {
   private readonly look = new THREE.Vector3();
   private readonly from = { position: new THREE.Vector3(), rotation: new THREE.Quaternion() };
   private glide = 1;
+  /** Tilt of the view off its rest, rad, downward positive. */
+  pitch = 0;
 
   constructor(private readonly camera: THREE.PerspectiveCamera) {}
 
   get gliding(): boolean {
     return this.glide < 1;
+  }
+
+  tilt(amount: number): void {
+    this.pitch = THREE.MathUtils.clamp(this.pitch + amount, PITCH[0], PITCH[1]);
   }
 
   shake(amount: number): void {
@@ -48,10 +63,15 @@ export class CameraRig {
   update(delta: number, player: THREE.Vector3, yaw: number, snap = false): void {
     const f = this.forward.set(Math.sin(yaw), 0, Math.cos(yaw));
     this.focus.lerp(player, snap ? 1 : 1 - Math.exp(-8 * delta));
+    // The camera swings on its arm about the point ahead of her that it looks at.
     const { position } = this.camera;
-    position.copy(this.focus).addScaledVector(f, -DISTANCE);
-    position.y = Math.max(this.focus.y + HEIGHT, groundHeight(position.x, position.z) + CLEARANCE);
-    this.camera.lookAt(this.look.copy(this.focus).addScaledVector(f, LOOK_AHEAD).setY(this.focus.y + LOOK_HEIGHT));
+    const swing = Math.max(this.pitch, LOWEST) + REST;
+    this.look.copy(this.focus).addScaledVector(f, LOOK_AHEAD).setY(this.focus.y + LOOK_HEIGHT);
+    position.copy(this.look).addScaledVector(f, -ARM * Math.cos(swing));
+    position.y = Math.max(this.look.y + ARM * Math.sin(swing), groundHeight(position.x, position.z) + CLEARANCE);
+    // Tilted up past where the camera can sink, the view lifts off that point instead.
+    this.look.y += Math.max(0, LOWEST - this.pitch) * ARM;
+    this.camera.lookAt(this.look);
     this.glide = snap ? 1 : Math.min(1, this.glide + delta / GLIDE);
     if (this.glide < 1) {
       // Back from the follow pose toward the title shot: the camera is the target, so it can't be an argument.

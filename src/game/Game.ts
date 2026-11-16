@@ -253,7 +253,10 @@ export class Game {
     this.vfx.update(delta, this.npc.position, rage ? 'enraged' : 'calm');
     // He stands down once she's beaten, but the music stays with the loss until the rematch.
     this.audio.music(rage || this.outcome === 'defeat' ? 'enraged' : 'calm');
-    if (playing) this.cameraRig.update(delta, this.player.position, this.player.yaw);
+    if (playing) {
+      this.cameraRig.tilt(this.input.consumeTilt() * tuning.mouseTurn);
+      this.cameraRig.update(delta, this.player.position, this.player.yaw);
+    }
     else this.cameraRig.title(this.elapsed, this.offset.addVectors(this.player.position, this.npc.position).multiplyScalar(0.5));
     this.world.update(this.elapsed, this.camera);
   }
@@ -491,6 +494,7 @@ export class Game {
         mood: this.npc.mood,
         state: this.npc.state,
       },
+      camera: { pitch: this.cameraRig.pitch },
       renderer: {
         calls: info.render.calls,
         triangles: info.render.triangles,

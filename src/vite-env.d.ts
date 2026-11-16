@@ -13,6 +13,8 @@ interface ThreeGameDiagnostics {
   /** `yaw` is where she steers, which W walks along and the camera looks along; `facing` her hips' yaw; `speed` is measured ground speed; `stride` the ground speed the legs show, null mid-action; `still` while she ignores controls, as a fight starts. */
   player: { position: Vec3; yaw: number; facing: number; speed: number; stride: number | null; health: number; stamina: number; state: string; still: boolean };
   npc: { position: Vec3; stride: number | null; health: number; mood: 'calm' | 'enraged'; state: string };
+  /** `pitch`: how far the view is tilted off its rest, rad, downward positive. */
+  camera: { pitch: number };
   renderer: { calls: number; triangles: number; geometries: number; textures: number };
   canvas: { clientWidth: number; clientHeight: number; width: number; height: number; dpr: number };
 }

@@ -10,6 +10,7 @@ export class Input {
   private readonly keys = new Set<string>();
   private readonly pressed = new Set<Intent>();
   private look = 0;
+  private tilt = 0;
   /** While set, moves, strikes, dodges and mouse travel are dropped, not saved for later; the mic and Esc still work. */
   still = false;
 
@@ -42,7 +43,9 @@ export class Input {
   };
   private readonly onContextMenu = (event: MouseEvent) => event.preventDefault();
   private readonly onMouseMove = (event: MouseEvent) => {
-    if (this.captured && !this.still) this.look += event.movementX;
+    if (!this.captured || this.still) return;
+    this.look += event.movementX;
+    this.tilt += event.movementY;
   };
 
   /** `beforeCapture` runs on each capturing click, before the mouse is captured: a prompt it raises shows the cursor to answer it. */
@@ -84,6 +87,13 @@ export class Input {
     return look;
   }
 
+  /** Vertical mouse travel since the last call, px, downward positive. */
+  consumeTilt(): number {
+    const tilt = this.tilt;
+    this.tilt = 0;
+    return tilt;
+  }
+
   get captured(): boolean {
     return document.pointerLockElement === this.surface;
   }
@@ -103,7 +113,7 @@ export class Input {
   /** Forget latched presses and mouse travel, e.g. made on the result screen. */
   clear(): void {
     this.pressed.clear();
-    this.look = 0;
+    this.look = this.tilt = 0;
   }
 
   dispose(): void {
