@@ -14,7 +14,7 @@ import { Vfx } from '../systems/Vfx';
 import { Voice } from '../systems/Voice';
 import { createSeededRandom } from '../utils/random';
 import { SEA_LEVEL, groundHeight, groundSlope } from '../world/terrain';
-import { SUN_DIRECTION, World } from '../world/World';
+import { type Obstacle, World, pushOut, within } from '../world/World';
 import type { FightEvent, Mood } from './events';
 import { LINES } from './lines';
 import { ARENA_RADIUS, inArena, tuning } from './tuning';
@@ -30,17 +30,18 @@ const LEAVE_TIME = 5;
 const MAX_SLOPE = 0.8;
 const CLIFF = 1.1;
 const WADE_DEPTH = 0.8;
-const arm = new THREE.Line3();
-const nearest = new THREE.Vector3();
-const centre = new THREE.Vector3();
+const [shoulder, fist] = [new THREE.Vector2(), new THREE.Vector2()];
 
-/** Whether the arm from `from` to the fist `at` meets the upright cylinder of `radius` at (x, z), seen from above. */
-function reaches(from: THREE.Vector3, at: THREE.Vector3, { x, z }: { x: number; z: number }, radius: number): boolean {
-  arm.start.copy(from).setY(0);
-  arm.end.copy(at).setY(0);
-  centre.set(x, 0, z);
-  return arm.closestPointToPoint(centre, true, nearest).distanceTo(centre) <= radius + FIST;
+/** Whether the arm from `from` to the fist `at` meets `body`, seen from above. */
+function reaches(from: THREE.Vector3, at: THREE.Vector3, body: Obstacle): boolean {
+  // In the body's frame it is the unit circle: the arm meets it where the arm's nearest point to the middle lies inside.
+  within(body, from.x, from.z, FIST, shoulder);
+  within(body, at.x, at.z, FIST, fist).sub(shoulder);
+  const along = THREE.MathUtils.clamp(-shoulder.dot(fist) / fist.lengthSq() || 0, 0, 1);
+  return shoulder.addScaledVector(fist, along).lengthSq() <= 1;
 }
+/** A fighter's body as an obstacle: an upright cylinder. */
+const cylinder = ({ position, radius }: { position: THREE.Vector3; radius: number }): Obstacle => ({ x: position.x, z: position.z, along: radius, across: radius, cos: 1, sin: 0 });
 const PLAYER_RIM = new THREE.Color('#ffd9a0').multiplyScalar(0.3);
 const RAGE_RIM = new THREE.Color('#ff3a14').multiplyScalar(0.75);
 
@@ -52,7 +53,6 @@ export class Game {
   private readonly player: Player;
   private readonly npc: Npc;
   private readonly world: World;
-  private readonly sun = new THREE.DirectionalLight('#ffd49a', 2.9);
   private readonly cameraRig = new CameraRig(this.camera);
   private readonly vfx = new Vfx();
   private readonly audio = new Audio();
@@ -136,15 +136,7 @@ export class Game {
   }
 
   private buildScene(): void {
-    this.scene.fog = new THREE.Fog('#ead9b8', 70, 650);
-    const sun = this.sun;
-    sun.castShadow = true;
-    // Wide enough that the trees whose long shadows reach her are in it.
-    sun.shadow.mapSize.set(4096, 4096);
-    Object.assign(sun.shadow.camera, { left: -32, right: 32, top: 32, bottom: -32, near: 1, far: 160 });
-    sun.shadow.bias = -0.0002;
-    sun.shadow.normalBias = 0.03;
-    this.scene.add(sun, sun.target, new THREE.HemisphereLight('#c8d8f0', '#7d7a3e', 1.2));
+    this.scene.fog = this.world.sky.fog;
     this.scene.add(this.world.group, this.player.character.root, this.npc.character.root, this.vfx.group);
     this.player.character.rim.value.copy(PLAYER_RIM);
   }
@@ -246,8 +238,6 @@ export class Game {
     this.judge(delta);
     this.away = heard ? 0 : this.away + delta;
     if (live && this.away >= LEAVE_TIME && this.away - delta < LEAVE_TIME) this.disengage();
-    this.sun.target.position.copy(this.player.position);
-    this.sun.position.copy(this.player.position).addScaledVector(SUN_DIRECTION, 70);
 
     const rage = this.npc.mood === 'enraged' && this.npc.state !== 'down';
     this.npc.character.rim.value.lerp(rage ? RAGE_RIM : PLAYER_RIM, 1 - Math.exp(-5 * delta));
@@ -271,13 +261,13 @@ export class Game {
       if (event.type === 'shove') this.player.shove(this.npc.position);
       if (event.type !== 'contact') continue;
       if (event.who === 'player') {
-        if (this.npc.mood === 'enraged' && this.npc.state !== 'down' && reaches(this.player.position, event.at, this.npc.position, this.npc.radius)) {
+        if (this.npc.mood === 'enraged' && this.npc.state !== 'down' && reaches(this.player.position, event.at, cylinder(this.npc))) {
           this.npc.takeHit(event.damage);
           this.events.push({ type: 'hit', who: 'npc', at: event.at, damage: event.damage });
-        } else if (this.world.obstacles.some((tree) => tree.trunk && reaches(this.player.position, event.at, tree, tree.radius))) {
+        } else if (this.world.obstacles.some((obstacle) => reaches(this.player.position, event.at, obstacle))) {
           this.events.push({ type: 'thud', at: event.at });
         }
-      } else if (reaches(this.npc.position, event.at, this.player.position, this.player.radius) && this.player.takeHit(event.damage, this.npc.position, event.knockback)) {
+      } else if (reaches(this.npc.position, event.at, cylinder(this.player)) && this.player.takeHit(event.damage, this.npc.position, event.knockback)) {
         this.events.push({ type: 'hit', who: 'player', at: event.at, damage: event.damage });
       }
     }
@@ -295,11 +285,8 @@ export class Game {
   /** The land turns her aside: round trunks and boulders, off slopes too steep to climb, back from cliffs' edges and out of water too deep to wade. */
   private roam(): void {
     const body = this.player.position;
-    for (const { x, z, radius } of this.world.obstacles) {
-      const gap = Math.hypot(body.x - x, body.z - z);
-      const room = radius + this.player.radius;
-      if (gap < room && gap > 0.001) body.set(x + ((body.x - x) * room) / gap, 0, z + ((body.z - z) * room) / gap);
-    }
+    // Twice over: pushed out of one, she may stand in its neighbour.
+    for (let pass = 0; pass < 2; pass += 1) for (const obstacle of this.world.obstacles) pushOut(obstacle, body, this.player.radius);
     const slope = groundSlope(body.x, body.z, this.slope);
     const steepness = slope.lengthSq();
     // Metres this frame's step climbed: taken back along the slope where she can't climb, or can't go deeper.
@@ -465,6 +452,9 @@ export class Game {
         return { state: name };
       },
       place: (x: number, z: number, yaw: number) => this.player.character.place(x, z, yaw),
+      advance: (seconds: number) => {
+        this.elapsed += seconds;
+      },
       setPausedForScreenshot: (paused: boolean) => {
         this.frozen = paused;
       },
@@ -499,6 +489,7 @@ export class Game {
         state: this.npc.state,
       },
       camera: { pitch: this.cameraRig.pitch },
+      night: this.world.sky.night,
       renderer: {
         calls: info.render.calls,
         triangles: info.render.triangles,

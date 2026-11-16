@@ -49,7 +49,9 @@ function routes(): [number, number][][] {
       const [nx, nz] = [x + dx * STEP, z + dz * STEP];
       if (Math.max(Math.abs(nx), Math.abs(nz)) > MAP_SIZE / 2) continue;
       const [length, there] = [Math.hypot(dx, dz) * STEP, groundHeight(nx, nz)];
-      const steep = Math.abs(there - height) / length;
+      // The steeper half of the way: a step in the land between two points counts in full.
+      const middle = groundHeight((x + nx) / 2, (z + nz) / 2);
+      const steep = Math.max(Math.abs(middle - height), Math.abs(there - middle)) / (length / 2);
       if (steep > STEEPEST || there < SEA_LEVEL - FORD) continue;
       // Slopes and water cost dear, and the going is easier here than there, so no trail runs straight.
       const toll = spent + length * (1 + 60 * steep * steep) * (there < SEA_LEVEL ? 4 : 1) * (0.6 + 0.8 * fbm(nx * 0.02 + 3, nz * 0.02));

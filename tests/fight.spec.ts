@@ -693,6 +693,20 @@ test('M opens the map, freeing the mouse and holding the fight; a click on it ke
   expect(errors).toEqual([]);
 });
 
+test('day gives way to night and night to day, ten minutes each', async ({ page }) => {
+  await start(page);
+  const night = async (after: number) => {
+    await page.evaluate((seconds) => window.__THREE_GAME_TEST_HOOKS__?.advance(seconds), after);
+    await page.waitForTimeout(200);
+    return (await read(page)).night;
+  };
+  // It opens in the morning; noon, midnight and the next noon follow ten minutes apart.
+  expect(await night(0)).toBe(0);
+  expect(await night(225)).toBe(0);
+  expect(await night(600)).toBe(1);
+  expect(await night(600)).toBe(0);
+});
+
 test('she wades into the sea only so deep, however long she runs at it', async ({ page }) => {
   const errors = await start(page);
   await capture(page);

@@ -15,6 +15,8 @@ interface ThreeGameDiagnostics {
   npc: { position: Vec3; stride: number | null; health: number; mood: 'calm' | 'enraged'; state: string };
   /** `pitch`: how far the view is tilted off its rest, rad, downward positive. */
   camera: { pitch: number };
+  /** How far into night it is, 0 by day to 1. */
+  night: number;
   renderer: { calls: number; triangles: number; geometries: number; textures: number };
   canvas: { clientWidth: number; clientHeight: number; width: number; height: number; dpr: number };
 }
@@ -26,6 +28,8 @@ interface ThreeGameTestHooks {
   setState(name: string): { state: string } | Promise<{ state: string }>;
   /** Stand her at (x, z), facing `yaw`. */
   place(x: number, z: number, yaw: number): void;
+  /** Let `seconds` of the day pass at once. */
+  advance(seconds: number): void;
   /** Stop simulation/state transitions immediately; keep rendering. */
   setPausedForScreenshot(paused: boolean): void | Promise<void>;
   /** Stabilize ambient/idle visuals without requiring an unpaused simulation tick. */

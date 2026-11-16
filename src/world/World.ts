@@ -3,17 +3,41 @@ import { mergeGeometries, mergeVertices } from 'three/addons/utils/BufferGeometr
 import { ARENA_RADIUS } from '../game/tuning';
 import { createSeededRandom } from '../utils/random';
 import { NOISE_GLSL, fbm, noise2 } from './noise';
+import { Sky } from './Sky';
 import { CELL, CELLS, MAP_SIZE, SEA_LEVEL, WORLD_SIZE, groundHeight, groundSlope, heights } from './terrain';
 import { addOutline, toonGradient } from './toon';
 import { TRAIL_GLSL, strokeTrails, trailAt, trailTexture } from './trails';
 
-/** Late-afternoon sun, shared by the light rig, sky and far layers. */
-export const SUN_DIRECTION = new THREE.Vector3(-0.8, 0.36, 0.45).normalize();
+/** The low sun the far ranges are painted under. */
+const SUN_DIRECTION = new THREE.Vector3(-0.8, 0.36, 0.45).normalize();
 const HORIZON = new THREE.Color('#f3dfb8');
 const SUNLIT = new THREE.Color('#ffe2b8');
 
-/** Something solid to walk round, a tree's trunk or a boulder: a circle on the ground. */
-export type Obstacle = { x: number; z: number; radius: number; trunk: boolean };
+/**
+ * Something solid, a trunk, a boulder or a crag, as it stands on the ground: an ellipse about (x, z), `along` and
+ * `across` its half-lengths, turned by the yaw whose cosine and sine it holds.
+ */
+export type Obstacle = { x: number; z: number; along: number; across: number; cos: number; sin: number };
+const solid = (x: number, z: number, along: number, across = along, yaw = 0): Obstacle => ({ x, z, along, across, cos: Math.cos(yaw), sin: Math.sin(yaw) });
+
+/**
+ * Where (x, z) lies in `obstacle`'s own frame, scaled so that its edge, grown by `margin`, is the unit circle: a point
+ * is inside it where the result is shorter than 1.
+ */
+export function within(obstacle: Obstacle, x: number, z: number, margin: number, target: THREE.Vector2): THREE.Vector2 {
+  const [dx, dz] = [x - obstacle.x, z - obstacle.z];
+  return target.set((dx * obstacle.cos - dz * obstacle.sin) / (obstacle.along + margin), (dx * obstacle.sin + dz * obstacle.cos) / (obstacle.across + margin));
+}
+
+const local = new THREE.Vector2();
+/** Moves `position`, the middle of a body of `radius`, straight out of `obstacle` if it is in it. */
+export function pushOut(obstacle: Obstacle, position: THREE.Vector3, radius: number): void {
+  const depth = within(obstacle, position.x, position.z, radius, local).length();
+  if (depth >= 1 || depth < 1e-4) return;
+  const [x, z] = [(local.x / depth) * (obstacle.along + radius), (local.y / depth) * (obstacle.across + radius)];
+  position.x = obstacle.x + x * obstacle.cos + z * obstacle.sin;
+  position.z = obstacle.z - x * obstacle.sin + z * obstacle.cos;
+}
 /** What the shaders read of the land, the two bodies that part the grass, and the middle of the grass patch. */
 type Uniforms = Record<'uTime' | 'uLand' | 'uHeight' | 'uTrails' | 'uWanderer' | 'uOther' | 'uPatch', { value: unknown }>;
 
@@ -30,6 +54,9 @@ const LAND_UV = /* glsl */ `vec2 landUv(vec2 spot) { return (spot / ${CELL.toFix
 export class World {
   readonly group = new THREE.Group();
   readonly obstacles: Obstacle[] = [];
+  readonly sky = new Sky();
+  /** Materials no light falls on, which take the hour's tint instead. */
+  private readonly unlit: { color: THREE.Color }[];
   private readonly time = { value: 0 };
   private readonly motes: THREE.Points;
   private readonly patch = new THREE.Vector3();
@@ -53,9 +80,10 @@ export class World {
       uOther: { value: other },
       uPatch: { value: this.patch },
     };
-    this.group.add(createSky(), createMountains(), ...createClouds(rng), terrain, createWater(uniforms));
-    this.group.add(createGrass(rng, uniforms), createFlowers(rng, land), ...createRocks(rng, this.obstacles));
-    this.group.add(...createPlants(rng, land, this.obstacles), ...createCrags(rng));
+    const far = [...createMountains().children, ...createClouds(rng), createWater(uniforms), createFlowers(rng, land)] as (THREE.Mesh | THREE.Sprite | THREE.Points)[];
+    this.unlit = far.map((object) => object.material as THREE.MeshBasicMaterial);
+    this.group.add(this.sky.group, ...far, terrain, createGrass(rng, uniforms), ...createRocks(rng, this.obstacles));
+    this.group.add(...createPlants(rng, land, this.obstacles), ...createCrags(rng, this.obstacles));
     this.motes = createMotes(rng);
     this.group.add(this.motes);
   }
@@ -66,6 +94,8 @@ export class World {
     this.motes.rotation.y = elapsed * 0.01;
     this.motes.position.copy(this.wanderer).y += Math.sin(elapsed * 0.3) * 0.3;
     camera.getWorldDirection(this.patch).setY(0).setLength(PATCH / 2 - 2).add(camera.position);
+    this.sky.update(elapsed, this.wanderer);
+    for (const material of this.unlit) material.color.copy(this.sky.tint);
   }
 
   /** Paints the island from above: the land in its own colours, shaded by its slopes and crossed by its trails, in a sea deepening off the shore. */
@@ -91,42 +121,6 @@ export class World {
 /** How thickly grass grows at the terrain vertex nearest (x, z). */
 function coverAt(land: Float32Array, x: number, z: number): number {
   return land[(Math.round((z + WORLD_SIZE / 2) / CELL) * (CELLS + 1) + Math.round((x + WORLD_SIZE / 2) / CELL)) * 4 + 3];
-}
-
-function createSky(): THREE.Mesh {
-  const material = new THREE.ShaderMaterial({
-    side: THREE.BackSide,
-    depthWrite: false,
-    fog: false,
-    uniforms: {
-      uTop: { value: new THREE.Color('#5d8fd0') },
-      uMid: { value: new THREE.Color('#a9c7e6') },
-      uHorizon: { value: HORIZON },
-      uSun: { value: SUN_DIRECTION },
-    },
-    vertexShader: /* glsl */ `
-      varying vec3 vDir;
-      void main() {
-        vDir = normalize(position);
-        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-      }`,
-    fragmentShader: /* glsl */ `
-      uniform vec3 uTop, uMid, uHorizon, uSun;
-      varying vec3 vDir;
-      void main() {
-        float h = max(vDir.y, 0.0);
-        vec3 col = mix(uHorizon, uMid, smoothstep(0.0, 0.18, h));
-        col = mix(col, uTop, smoothstep(0.18, 0.75, h));
-        float sun = max(dot(normalize(vDir), uSun), 0.0);
-        col += vec3(1.0, 0.85, 0.6) * (pow(sun, 6.0) * 0.35 + pow(sun, 60.0) * 0.6);
-        gl_FragColor = vec4(col, 1.0);
-        #include <tonemapping_fragment>
-        #include <colorspace_fragment>
-      }`,
-  });
-  const sky = new THREE.Mesh(new THREE.SphereGeometry(1400, 32, 16), material);
-  sky.frustumCulled = false;
-  return sky;
 }
 
 /** Two painted mountain ranges, lit and hazed in vertex colour. */
@@ -514,7 +508,7 @@ function createRocks(rng: () => number, obstacles: Obstacle[]): THREE.Mesh[] {
     rock.castShadow = rock.receiveShadow = true;
     addOutline(rock, 0.03);
     rocks.push(rock);
-    obstacles.push({ x, z, radius: size, trunk: false });
+    obstacles.push(solid(x, z, size * 1.3, size * 1.1, rock.rotation.y));
   };
   const ring = (r: number, angle: number, size: number) => place(Math.cos(angle) * r, Math.sin(angle) * r, size);
   for (let i = 0; i < 10; i += 1) ring(ARENA_RADIUS + 1.6 + rng() * 2.2, (i / 10) * Math.PI * 2 + rng() * 0.4, 0.55 + rng() * 0.6);
@@ -623,7 +617,8 @@ function createPlants(rng: () => number, land: Float32Array, obstacles: Obstacle
     kinds[kind].spots.push(
       new THREE.Matrix4().compose(new THREE.Vector3(x, groundHeight(x, z) - size * 0.012, z), quaternion.setFromAxisAngle(up, rng() * Math.PI * 2), new THREE.Vector3(size, size, size)),
     );
-    if (kind <= FIR) trees.push({ x, z, radius: size * 0.05, trunk: true });
+    // A broadleaf is as wide as its roots flare; a fir as its trunk, or as its lowest boughs if they hang below head height.
+    if (kind <= FIR) trees.push(solid(x, z, size * (kind < FIR ? 0.1 : size < 9.5 ? 0.3 : 0.05)));
   };
   const spot = (): [number, number] => [(rng() - 0.5) * MAP_SIZE, (rng() - 0.5) * MAP_SIZE];
   // Plants stand where grass can, off the hilltop, the trails and the steeper slopes.
@@ -698,8 +693,11 @@ function cragGeometry(rng: () => number): THREE.BufferGeometry {
   geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
   return geometry;
 }
-/** The cliffs: wherever the land steps up sheer, crags stand shoulder to shoulder along the rise, each as tall as the step there. */
-function createCrags(rng: () => number): THREE.InstancedMesh[] {
+/**
+ * The cliffs: wherever the land steps up too sheer to climb, crags stand shoulder to shoulder along the rise, each as
+ * tall as the step there. Never on ground she could walk, so they close no way through.
+ */
+function createCrags(rng: () => number, obstacles: Obstacle[]): THREE.InstancedMesh[] {
   const kinds = [0, 1, 2, 3].map(() => ({ geometry: cragGeometry(rng), spots: [] as THREE.Matrix4[], tints: [] as THREE.Color[] }));
   const quaternion = new THREE.Quaternion();
   const euler = new THREE.Euler();
@@ -710,13 +708,15 @@ function createCrags(rng: () => number): THREE.InstancedMesh[] {
       // The rises between this corner of the grid and the next east, and the next south.
       for (const [j, east] of [[i + 1, 1], [i + CELLS + 1, 0]]) {
         const [foot, step] = [Math.min(heights[i], heights[j]), Math.abs(heights[i] - heights[j])];
-        if (step < 1.2 || foot + step < SEA_LEVEL || rng() > 0.9) continue;
+        if (step < 2 || foot + step < SEA_LEVEL || rng() > 0.9) continue;
         const [x, z] = [(column + east * 0.5 + (rng() - 0.5) * 0.8) * CELL - WORLD_SIZE / 2, (row + (1 - east) * 0.5 + (rng() - 0.5) * 0.8) * CELL - WORLD_SIZE / 2];
         // Broad along the cliff and shallow into it.
         const width = THREE.MathUtils.clamp(step, 3.5, 8) * (0.6 + rng() * 0.9);
         const kind = kinds[Math.floor(rng() * kinds.length)];
-        quaternion.setFromEuler(euler.set((rng() - 0.5) * 0.2, east * Math.PI * 0.5 + (rng() - 0.5) * 0.8, (rng() - 0.5) * 0.2));
-        kind.spots.push(new THREE.Matrix4().compose(new THREE.Vector3(x, foot - 0.5, z), quaternion, new THREE.Vector3(width, step + 0.9 + rng() ** 3 * 3, 2.2 + rng() * 1.6)));
+        const depth = 2.2 + rng() * 1.6;
+        quaternion.setFromEuler(euler.set((rng() - 0.5) * 0.2, east * Math.PI * 0.5 + (rng() - 0.5) * 0.8, (rng() - 0.5) * 0.2, 'YXZ'));
+        kind.spots.push(new THREE.Matrix4().compose(new THREE.Vector3(x, foot - 0.5, z), quaternion, new THREE.Vector3(width, step + 0.9 + rng() ** 3 * 3, depth)));
+        obstacles.push(solid(x, z, width * 0.72, depth * 0.72, euler.y));
         kind.tints.push(rockColor(x, z, new THREE.Color()).multiplyScalar(0.9 + rng() * 0.2));
       }
     }
@@ -759,7 +759,7 @@ function createWater(uniforms: Uniforms): THREE.Mesh {
       // foam that breathes in and out along the shore.
       float glint = smoothstep(1.5, 1.56, waves) * 0.6 * (1.0 - smoothstep(60.0, 220.0, vFogDepth));
       float foam = 1.0 - smoothstep(0.0, 0.22 + 0.14 * sin(uTime * 1.3 + waves * 3.0), depth);
-      diffuseColor.rgb = mix(mix(uShallows, uDeep, smoothstep(0.0, 5.0, depth)), vec3(1.0), max(glint, foam * 0.85));
+      diffuseColor.rgb = diffuse * mix(mix(uShallows, uDeep, smoothstep(0.0, 5.0, depth)), vec3(1.0), max(glint, foam * 0.85));
       diffuseColor.a = mix(0.55, 0.94, max(smoothstep(0.0, 3.0, depth), foam));`,
     );
   };
