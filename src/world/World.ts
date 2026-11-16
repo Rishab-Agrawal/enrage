@@ -25,6 +25,14 @@ function gridTexture(data: Float32Array, format: THREE.PixelFormat): THREE.DataT
   texture.needsUpdate = true;
   return texture;
 }
+/** GLSL: smooth value noise in [0, 1]. */
+const NOISE = /* glsl */ `
+  float noise(vec2 p) {
+    vec2 i = floor(p), f = fract(p);
+    f = f * f * (3.0 - 2.0 * f);
+    vec4 h = fract(sin(vec4(dot(i, vec2(127.1, 311.7)), dot(i + vec2(1, 0), vec2(127.1, 311.7)), dot(i + vec2(0, 1), vec2(127.1, 311.7)), dot(i + 1.0, vec2(127.1, 311.7)))) * 43758.5453);
+    return mix(mix(h.x, h.y, f.x), mix(h.z, h.w, f.x), f.y);
+  }`;
 /** GLSL: where the grid textures hold the ground at world (x, z). */
 const LAND_UV = /* glsl */ `vec2 landUv(vec2 spot) { return (spot / ${CELL.toFixed(4)} + ${((CELLS + 1) / 2).toFixed(1)}) / ${(CELLS + 1).toFixed(1)}; }`;
 
@@ -80,7 +88,7 @@ export class World {
       const depth = SEA_LEVEL - heights[i];
       if (depth > 0) color.copy(SHALLOWS).lerp(DEEP, THREE.MathUtils.smoothstep(depth, 0, 8));
       // Lit from the north-west, as maps are.
-      else color.fromArray(this.ground, i * 3).multiplyScalar(THREE.MathUtils.clamp(1 + (heights[i] - heights[i + CELLS + 2]) * 0.12, 0.6, 1.4));
+      else color.fromArray(this.ground, i * 4).multiplyScalar(THREE.MathUtils.clamp(1 + (heights[i] - heights[i + CELLS + 2]) * 0.12, 0.6, 1.4));
       image.data.set([...color.convertLinearToSRGB().toArray().map((c) => c * 255), 255], p * 4);
     }
     ctx.putImageData(image, 0, 0);
@@ -250,54 +258,69 @@ const far = new THREE.Color();
 const rock = new THREE.Color();
 const slope = new THREE.Vector2();
 
-/** How wooded the land is at (x, z), 0 to 1: groves with open country between them, and none on the hilltop. */
+/** How wooded the land is at (x, z), 0 to 1: woods that thin out gradually into open country, and none on the hilltop. */
 function woods(x: number, z: number): number {
-  return THREE.MathUtils.smoothstep(fbm(x * 0.007 + 50, z * 0.007 - 30), 0.58, 0.68) * THREE.MathUtils.smoothstep(Math.hypot(x, z), 50, 90);
+  return THREE.MathUtils.smoothstep(fbm(x * 0.007 + 50, z * 0.007 - 30), 0.5, 0.72) ** 2 * THREE.MathUtils.smoothstep(Math.hypot(x, z), 50, 90);
 }
 
 /**
  * The land at (x, z): its grass's colour into `grass`, and the ground's into `ground`, which is the grass's where
  * grass covers it, so the meadow's green is its grass. Returns how thickly grass grows there, 0 to 1: thinly under
- * trees, and not at all on sand, rock or the beds of the waters.
+ * trees, and not at all on sand, rock or the beds of the waters; and how bare the rock is, 0 to 1.
  */
-function groundColor(x: number, z: number, grass: THREE.Color, ground: THREE.Color): number {
+function groundColor(x: number, z: number, grass: THREE.Color, ground: THREE.Color): [cover: number, bare: number] {
   const height = groundHeight(x, z);
   grass.copy(MEADOW).lerp(LUSH, fbm(x * 0.08 + 9, z * 0.08) * 0.8);
   ground.copy(grass);
   const distance = THREE.MathUtils.smoothstep(Math.hypot(x, z), 25, 90);
-  if (distance === 0) return 1;
+  if (distance === 0) return [1, 0];
   // Beyond the hilltop: a patchwork of sage, gold and ochre, lighter on the crests.
   far.copy(SAGE).lerp(GOLDEN, THREE.MathUtils.smoothstep(fbm(x * 0.015, z * 0.015), 0.35, 0.6));
   far.lerp(OCHRE, THREE.MathUtils.smoothstep(fbm(x * 0.03 + 4, z * 0.03), 0.55, 0.75) * 0.6);
   far.multiplyScalar(0.8 + 0.3 * THREE.MathUtils.smoothstep(height, -12, 22));
   const wooded = woods(x, z) * 0.7;
-  // Crags: steep ground is bare, and the heights more readily so, along a ragged edge.
-  const bare = THREE.MathUtils.smoothstep(groundSlope(x, z, slope).length() + height * 0.004 + fbm(x * 0.07, z * 0.07) * 0.45, 0.62, 1.02);
+  // Crags: only steep ground is bare.
+  const bare = THREE.MathUtils.smoothstep(groundSlope(x, z, slope).length() + fbm(x * 0.07, z * 0.07) * 0.2, 0.62, 0.82);
   const sandy = 1 - THREE.MathUtils.smoothstep(height - SEA_LEVEL + fbm(x * 0.05, z * 0.05), 0.9, 2.2);
   grass.lerp(far.lerp(WOODS, wooded), distance);
   // Where the grass gives out, tufts of it stand in dry earth before the rock is bare.
   rock.copy(ROCK).lerp(SLATE, fbm(x * 0.04 + 70, z * 0.04));
   ground.copy(grass).lerp(rock, bare).lerp(EARTH, bare * (1 - bare) * 2.6).lerp(SAND, sandy);
-  return (1 - bare) * (1 - sandy) * (1 - wooded);
+  return [(1 - bare) * (1 - sandy) * (1 - wooded), bare * (1 - sandy)];
 }
 
-/** The terrain, and `land`: each vertex's grass colour and, as alpha, how thickly it grows there. */
+/**
+ * The terrain, coloured per vertex with, as alpha, how bare its rock is; and `land`: each vertex's grass colour and, as
+ * alpha, how thickly it grows there.
+ */
 function createTerrain(): { terrain: THREE.Mesh; land: Float32Array } {
   const geometry = new THREE.PlaneGeometry(WORLD_SIZE, WORLD_SIZE, CELLS, CELLS);
   geometry.rotateX(-Math.PI / 2);
   const position = geometry.getAttribute('position');
-  const colors = new Float32Array(position.count * 3);
+  const colors = new Float32Array(position.count * 4);
   const land = new Float32Array(position.count * 4);
   const [grass, ground] = [new THREE.Color(), new THREE.Color()];
   for (let i = 0; i < position.count; i += 1) {
     position.setY(i, heights[i]);
-    land[i * 4 + 3] = groundColor(position.getX(i), position.getZ(i), grass, ground);
+    [land[i * 4 + 3], colors[i * 4 + 3]] = groundColor(position.getX(i), position.getZ(i), grass, ground);
     grass.toArray(land, i * 4);
-    ground.toArray(colors, i * 3);
+    ground.toArray(colors, i * 4);
   }
-  geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+  geometry.setAttribute('color', new THREE.BufferAttribute(colors, 4));
   geometry.computeVertexNormals();
-  const terrain = new THREE.Mesh(geometry, new THREE.MeshLambertMaterial({ vertexColors: true }));
+  const material = new THREE.MeshLambertMaterial({ vertexColors: true });
+  material.onBeforeCompile = (shader) => {
+    shader.vertexShader = `varying vec3 vRock;\n${shader.vertexShader}`.replace('#include <begin_vertex>', '#include <begin_vertex>\nvRock = position;');
+    shader.fragmentShader = `varying vec3 vRock;\n${NOISE}\n${shader.fragmentShader}`.replace(
+      '#include <color_fragment>',
+      /* glsl */ `#include <color_fragment>
+      // Bare rock lies in beds, each its own tone, parted by dark seams that waver across the face.
+      float bed = vRock.y * 0.45 + noise(vRock.xz * 0.06) * 3.0;
+      float tone = (0.84 + 0.24 * fract(sin(floor(bed) * 91.7) * 43758.5453)) * (0.7 + 0.3 * smoothstep(0.0, 0.1, fract(bed)));
+      diffuseColor.rgb *= mix(1.0, tone, vColor.a);`,
+    );
+  };
+  const terrain = new THREE.Mesh(geometry, material);
   terrain.receiveShadow = true;
   return { terrain, land };
 }
@@ -391,6 +414,9 @@ function createGrass(rng: () => number, uniforms: Uniforms): THREE.InstancedMesh
   return grass;
 }
 
+/** Where the great tree stands, on the lake's western shore. */
+const GREAT_TREE = [62, -48] as const;
+
 /** A soft five-petal head, white so each instance tints it. */
 function petalTexture(): THREE.CanvasTexture {
   const canvas = document.createElement('canvas');
@@ -421,7 +447,7 @@ function petalTexture(): THREE.CanvasTexture {
 
 /** Daisies, buttercups, clover and speedwell in loose drifts: soft dots of colour on the grass tips, as in a painted meadow. */
 function createFlowers(rng: () => number, land: Float32Array): THREE.Points {
-  const count = 120000;
+  const count = 30000;
   const positions = new Float32Array(count * 3);
   const colors = new Float32Array(count * 3);
   const palette = ['#fffaf0', '#fffaf0', '#ffe27a', '#ffc4cf', '#cdd6ff'].map((c) => new THREE.Color(c));
@@ -429,8 +455,10 @@ function createFlowers(rng: () => number, land: Float32Array): THREE.Points {
   while (placed < count) {
     const x = (rng() - 0.5) * MAP_SIZE;
     const z = (rng() - 0.5) * MAP_SIZE;
-    // Drifts: flowers gather in the grass where the noise rises, each drift mostly one kind.
-    if (rng() > THREE.MathUtils.smoothstep(fbm(x * 0.09 + 31, z * 0.09), 0.5, 0.7) * THREE.MathUtils.smoothstep(coverAt(land, x, z), 0.5, 0.8)) continue;
+    // Drifts: flowers gather in the grass where the noise rises, each drift mostly one kind. The hilltop is full of
+    // them; beyond it they keep to a few meadows, and whole stretches have none.
+    const meadow = Math.max(1 - THREE.MathUtils.smoothstep(Math.hypot(x, z), 30, 60), THREE.MathUtils.smoothstep(fbm(x * 0.011 - 8, z * 0.011 + 21), 0.58, 0.66));
+    if (rng() > THREE.MathUtils.smoothstep(fbm(x * 0.09 + 31, z * 0.09), 0.5, 0.7) * meadow * THREE.MathUtils.smoothstep(coverAt(land, x, z), 0.5, 0.8)) continue;
     positions.set([x, groundHeight(x, z) + 0.08 + rng() * 0.07, z], placed * 3);
     palette[Math.floor(fbm(x * 0.05 - 17, z * 0.05) * 2 * palette.length + rng() * 1.5) % palette.length].toArray(colors, placed * 3);
     placed += 1;
@@ -469,7 +497,7 @@ function boulderGeometry(rng: () => number, size: number): THREE.BufferGeometry 
   return geometry;
 }
 
-/** Mossy boulders ringing the fighting circle, a few big ones on its slopes, and more strewn over the island, most on high ground. */
+/** Mossy boulders ringing the fighting circle, a few big ones on its slopes, and outcrops over the island, most on high ground: a great boulder with lesser ones about it. */
 function createRocks(rng: () => number, obstacles: Obstacle[]): THREE.Mesh[] {
   const material = new THREE.MeshToonMaterial({ vertexColors: true, gradientMap: toonGradient });
   const rocks: THREE.Mesh[] = [];
@@ -488,7 +516,14 @@ function createRocks(rng: () => number, obstacles: Obstacle[]): THREE.Mesh[] {
   while (rocks.length < 90) {
     const [x, z] = [(rng() - 0.5) * MAP_SIZE, (rng() - 0.5) * MAP_SIZE];
     const height = groundHeight(x, z);
-    if (Math.hypot(x, z) > 45 && height > SEA_LEVEL && rng() < 0.15 + height * 0.03) place(x, z, 0.7 + rng() * 2);
+    if (Math.hypot(x, z) < 45 || height < SEA_LEVEL + 1 || rng() > 0.1 + height * 0.03) continue;
+    const great = 1.8 + rng() * 1.8;
+    place(x, z, great);
+    for (let lesser = Math.floor(rng() * 5); lesser > 0; lesser -= 1) {
+      const angle = rng() * Math.PI * 2;
+      const size = 0.5 + rng() * 1.1;
+      place(x + Math.cos(angle) * (great + size + rng() * 2), z + Math.sin(angle) * (great + size + rng() * 2), size);
+    }
   }
   return rocks;
 }
@@ -559,24 +594,35 @@ function treeGeometry(rng: () => number, fir: boolean): THREE.BufferGeometry {
   return tree;
 }
 
-/** Groves of broadleaves on the low ground and of firs on the heights, open country with the odd lone tree between them; none on the hilltop. */
+/**
+ * Broadleaves on the low ground and firs on the heights: woods whose trees stand closest and tallest at their heart and
+ * thin out to saplings and stragglers, small copses and lone trees in the open country between, and one great tree
+ * over the lake. None on the hilltop.
+ */
 function createTrees(rng: () => number, land: Float32Array, obstacles: Obstacle[]): THREE.InstancedMesh[] {
   // Two broadleaves and a fir.
   const kinds = [false, false, true].map((fir) => ({ geometry: treeGeometry(rng, fir), spots: [] as THREE.Matrix4[] }));
   const trees: Obstacle[] = [];
   const quaternion = new THREE.Quaternion();
   const up = new THREE.Vector3(0, 1, 0);
-  for (let tries = 0; tries < 40000; tries += 1) {
-    const [x, z] = [(rng() - 0.5) * MAP_SIZE, (rng() - 0.5) * MAP_SIZE];
-    // Trees stand where grass can, clear of each other, thickest in the heart of a grove.
-    if (Math.hypot(x, z) < 45 || coverAt(land, x, z) < 0.2 || rng() > 0.0008 + woods(x, z) ** 2 || trees.some((tree) => Math.hypot(tree.x - x, tree.z - z) < 4)) continue;
-    const height = groundHeight(x, z);
-    const fir = rng() < THREE.MathUtils.smoothstep(height, 6, 16);
-    const size = (fir ? 10 : 8) * (0.75 + rng() * 0.6);
+  const plant = (x: number, z: number, size: number, fir: boolean) => {
     kinds[fir ? 2 : Math.floor(rng() * 2)].spots.push(
-      new THREE.Matrix4().compose(new THREE.Vector3(x, height - 0.1, z), quaternion.setFromAxisAngle(up, rng() * Math.PI * 2), new THREE.Vector3(size, size, size)),
+      new THREE.Matrix4().compose(new THREE.Vector3(x, groundHeight(x, z) - 0.1, z), quaternion.setFromAxisAngle(up, rng() * Math.PI * 2), new THREE.Vector3(size, size, size)),
     );
     trees.push({ x, z, radius: size * 0.05, trunk: true });
+  };
+  plant(...GREAT_TREE, 24, false);
+  for (let tries = 0; tries < 40000; tries += 1) {
+    const [x, z] = [(rng() - 0.5) * MAP_SIZE, (rng() - 0.5) * MAP_SIZE];
+    const wooded = woods(x, z);
+    // A copse: a tight knot of trees where a finer noise peaks.
+    const copse = THREE.MathUtils.smoothstep(fbm(x * 0.03 + 9, z * 0.03), 0.66, 0.74);
+    // Trees stand where grass can, off the steeper slopes, and give each other more room the thinner the wood.
+    const room = THREE.MathUtils.lerp(7, 3.2, Math.max(wooded, copse)) * (0.8 + rng() * 0.4);
+    const chance = (0.0012 + wooded * 0.55 + copse * 0.15) * (1 - THREE.MathUtils.smoothstep(groundSlope(x, z, slope).length(), 0.3, 0.6));
+    if (Math.hypot(x, z) < 45 || coverAt(land, x, z) < 0.2 || rng() > chance || trees.some((tree) => Math.hypot(tree.x - x, tree.z - z) < room)) continue;
+    const fir = rng() < THREE.MathUtils.smoothstep(groundHeight(x, z), 6, 16);
+    plant(x, z, (fir ? 10 : 8) * (0.55 + wooded * 0.4 + rng() * 0.5), fir);
   }
   obstacles.push(...trees);
   const material = new THREE.MeshToonMaterial({ vertexColors: true, gradientMap: toonGradient });
@@ -609,17 +655,12 @@ function createWater(uniforms: Uniforms): THREE.Mesh {
       uniform vec3 uShallows, uDeep;
       varying vec2 vSpot;
       ${LAND_UV}
-      float ripple(vec2 p) {
-        vec2 i = floor(p), f = fract(p);
-        f = f * f * (3.0 - 2.0 * f);
-        vec4 h = fract(sin(vec4(dot(i, vec2(127.1, 311.7)), dot(i + vec2(1, 0), vec2(127.1, 311.7)), dot(i + vec2(0, 1), vec2(127.1, 311.7)), dot(i + 1.0, vec2(127.1, 311.7)))) * 43758.5453);
-        return mix(mix(h.x, h.y, f.x), mix(h.z, h.w, f.x), f.y);
-      }
+      ${NOISE}
       ${shader.fragmentShader}`.replace(
       '#include <color_fragment>',
       /* glsl */ `
       float depth = ${SEA_LEVEL.toFixed(1)} - texture2D(uHeight, landUv(vSpot)).r;
-      float waves = ripple(vSpot * vec2(0.5, 1.9) + uTime * 0.25) + ripple(vSpot * vec2(1.3, 4.1) - uTime * 0.4);
+      float waves = noise(vSpot * vec2(0.5, 1.9) + uTime * 0.25) + noise(vSpot * vec2(1.3, 4.1) - uTime * 0.4);
       // Glints, long and thin, where two swells cross, fading before distance turns them to speckle; and a line of
       // foam that breathes in and out along the shore.
       float glint = smoothstep(1.5, 1.56, waves) * 0.6 * (1.0 - smoothstep(60.0, 220.0, vFogDepth));

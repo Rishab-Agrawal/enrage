@@ -60,7 +60,7 @@ A meadow hilltop, about 24 m across, matching `assets/concepts/key-art.png`. It 
 
 ## World
 
-The hilltop stands in the middle of an island some 700 m across (`src/world/terrain.ts`): a valley round it, open meadow with groves of trees, a ridged massif with firs to the north-west, a lake to the east drained by a river she can wade, a pond to the south, bays and beaches, and the sea all round with the mountain ranges beyond it. All water lies at one level.
+The hilltop stands in the middle of an island some 700 m across (`src/world/terrain.ts`): a valley round it, open meadow with woods that thin out into copses and lone trees, one great tree over the lake, rock outcrops, a ridged massif with firs to the north-west, a lake to the east drained by a river she can wade, a pond to the south, bays and beaches, and the sea all round with the mountain ranges beyond it. All water lies at one level.
 
 - **Roaming:** she walks the ground wherever it lets her. Trunks and boulders turn her aside (a punch on a trunk lands with a thud), as does ground steeper than she can climb and water deeper than she can wade (0.8 m): she has no climb or swim yet, so the sea is the world's edge.
 - **Map:** a thumbnail under Gorran's bar, north up, with his face where he stands and an arrow where she stands, pointing the way she faces. M opens it across the screen, freeing the mouse and holding the game; M again, or a click outside it, closes it. With the mouse free, on the pause card, a click on the thumbnail opens it too.
