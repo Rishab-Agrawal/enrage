@@ -13,7 +13,7 @@
   </head>
   <body>
     <main id="app" data-screen="loading">
-      <canvas id="game-canvas" aria-label="Fight arena"></canvas>
+      <canvas id="game-canvas" aria-label="Game world"></canvas>
       <div id="loading" aria-hidden="true"></div>
       <div id="vignette" aria-hidden="true"></div>
 
@@ -30,6 +30,13 @@
           <div class="bar"><i class="chip"></i><i class="fill"></i></div>
         </section>
       </header>
+
+      <div id="map" role="button" aria-label="Map">
+        <canvas></canvas>
+        <img src="/portraits/gorran-calm.webp" alt="Gorran" />
+        <svg class="wren" viewBox="-6 -6 12 12" aria-label="Wren"><path d="M0-5 4 4 0 2-4 4Z" /></svg>
+        <kbd>M</kbd>
+      </div>
 
       <p id="subtitle" aria-live="polite"></p>
 
@@ -80,6 +87,8 @@
               <dd>strike</dd>
               <dt><kbd>Space</kbd></dt>
               <dd>hold to speak</dd>
+              <dt><kbd>M</kbd></dt>
+              <dd>map</dd>
             </dl>
           </section>
         </div>

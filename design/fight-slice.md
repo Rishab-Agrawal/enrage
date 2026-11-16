@@ -1,6 +1,6 @@
 # Fight slice
 
-The first playable slice: one fight, one NPC, one hilltop arena. No levels, no chat.
+The first playable slice: one fight, one NPC, on a hilltop arena at the heart of an island she is free to roam. No levels, no chat.
 
 ## Brief
 
@@ -56,4 +56,11 @@ A meadow hilltop, about 24 m across, matching `assets/concepts/key-art.png`. It 
 - **Camera:** third person, open-world style: locked behind the player, it turns exactly as she steers and shows what she sees, whether or not the NPC is in frame. A click captures the mouse, whose sideways travel steers her; Esc releases it and pauses the fight, as losing focus does, and the mic lets go. A click resumes. The game opens on a title over a slow, wide shot of the live hilltop, without the HUD; the first click glides the camera down behind her. How to play lives on the pause card.
 - **Movement:** W/S walk her forward or back along her facing and A/D step her sideways; with W she walks a diagonal, no faster than straight, while S overrides them, as no gait walks back on a diagonal. Shift sprints forward only, A/D then steering the run a little, 5% slower; pressed alone, it dashes forward in a burst of her run. Her legs blend the two nearest of her forward, back and sideways gaits, in step: her run while she sprints, else her walk, played at whatever speed she moves. Turning on the spot, her head and chest lead and her hips hold; once she has twisted 45° they catch up in a light step, pivoting on the ball of the inner foot while the outer knee lifts and swings round; the inner foot follows in a smaller step.
 - **Stamina:** a full bar holds 5 s of sprint, and a dash costs 0.75 s. It refills as fast as sprinting spends it, whenever she isn't sprinting, and she can run on whatever has refilled. Emptied, the bar waits 1 s, its track pulsing, then refills; a Shift held through it doesn't count, so she walks, he catches her, and only a fresh press sprints again. A thin bar under her health shows it while it isn't full.
-- **Bounds:** a 12 m circle. The boulders mark its edge.
+- **Bounds:** a 15 m circle, its edge marked by the boulders, holds Gorran only: enraged, he follows her to its edge and no further. Once she has been outside it 5 s she has left the fight: he calms down, whole again, and her lines that turned him count for nothing in the next.
+
+## World
+
+The hilltop stands in the middle of an island some 700 m across (`src/world/terrain.ts`): a valley round it, rolling meadow and woods, a ridged massif with firs to the north-west, a lake to the east drained by a river she can wade, a pond to the south, bays and beaches, and the sea all round with the mountain ranges beyond it. All water lies at one level.
+
+- **Roaming:** she walks the ground wherever it lets her. Trunks and boulders turn her aside, as does ground steeper than she can climb and water deeper than she can wade (0.8 m): she has no climb or swim yet, so the sea is the world's edge.
+- **Map:** a thumbnail under Gorran's bar, north up, with his face where he stands and an arrow where she stands, pointing the way she faces. M opens it across the screen, freeing the mouse and holding the game; M again, or a click outside it, closes it. With the mouse free, on the pause card, a click on the thumbnail opens it too.

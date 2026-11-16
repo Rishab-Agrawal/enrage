@@ -58,3 +58,4 @@ npm run eval    # run the real judge over evals/cases.json
 | Shift      | Sprint; tapped alone, dash           |
 | Space      | Hold to talk (15 s, then 5 s rest)   |
 | R          | Rematch                              |
+| M          | Map; M or a click outside closes it  |

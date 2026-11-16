@@ -1,8 +1,9 @@
 import type { Mood } from '../game/events';
+import { MAP_SIZE } from '../world/World';
 import type { VoiceState } from './Voice';
 
 export type Outcome = 'victory' | 'defeat' | null;
-export type Screen = 'title' | 'fight' | 'paused';
+export type Screen = 'title' | 'fight' | 'paused' | 'map';
 
 type HudState = {
   player: number; // 0..1
@@ -17,6 +18,9 @@ type HudState = {
   regenerating: boolean;
   outcome: Outcome;
   npcHealthLeft: number;
+  /** Where the two stand, m, and the yaw she faces. */
+  wren: { x: number; z: number; yaw: number };
+  gorran: { x: number; z: number };
 };
 
 const GOALS: Record<Mood, string> = {
@@ -25,6 +29,12 @@ const GOALS: Record<Mood, string> = {
 };
 
 const $ = <T extends HTMLElement>(selector: string) => document.querySelector(selector) as T;
+
+/** Puts a map marker where (x, z) lies on the map, north up. */
+function mark(marker: HTMLElement, { x, z }: { x: number; z: number }): void {
+  marker.style.left = `${(x / MAP_SIZE + 0.5) * 100}%`;
+  marker.style.top = `${(z / MAP_SIZE + 0.5) * 100}%`;
+}
 
 /** DOM HUD. Reads one state snapshot per frame and writes only what changed. */
 export class Hud {
@@ -44,11 +54,16 @@ export class Hud {
   private readonly result = $('#result');
   private readonly resultTitle = $('#result h1');
   private readonly resultText = $('#result p');
+  /** The island is painted onto this once; the markers move over it. */
+  readonly map = $<HTMLCanvasElement>('#map canvas');
+  private readonly mapGorran = $<HTMLImageElement>('#map img');
+  private readonly mapWren = $('#map .wren');
   private chips = { player: 1, npc: 1 };
   private last: Partial<HudState> = {};
 
-  constructor(onRematch: () => void) {
+  constructor(onRematch: () => void, onMap: () => void) {
     $('#result button').addEventListener('click', onRematch);
+    $('#map').addEventListener('click', onMap);
   }
 
   update(state: HudState, delta: number): void {
@@ -67,7 +82,7 @@ export class Hud {
     if (state.mood !== this.last.mood) {
       this.npcPortrait.className = state.mood;
       this.npcPortrait.alt = state.mood === 'calm' ? 'Calm' : 'Enraged';
-      this.npcPortrait.src = `/portraits/gorran-${state.mood}.webp`;
+      this.npcPortrait.src = this.mapGorran.src = `/portraits/gorran-${state.mood}.webp`;
       this.goal.innerHTML = GOALS[state.mood];
       if (this.last.mood) {
         this.npcPortrait.animate([{ transform: 'scale(1.25)' }, { transform: 'scale(1)' }], { duration: 450, easing: 'cubic-bezier(.22,1,.36,1)' });
@@ -88,6 +103,10 @@ export class Hud {
     if (state.screen !== this.last.screen) this.app.dataset.screen = state.screen;
     if (state.regenerating !== this.last.regenerating) this.playerSection.classList.toggle('regen', state.regenerating);
     this.app.classList.toggle('hurt', state.player < 0.3 && !state.outcome);
+    mark(this.mapGorran, state.gorran);
+    mark(this.mapWren, state.wren);
+    // The arrow points up the map, north, at yaw π.
+    this.mapWren.style.rotate = `${Math.PI - state.wren.yaw}rad`;
 
     if (state.outcome !== this.last.outcome) {
       this.result.hidden = !state.outcome;

@@ -1,10 +1,13 @@
 import * as THREE from 'three';
+import { groundHeight } from '../world/terrain';
 
 const DISTANCE = 5;
 const HEIGHT = 2.3;
 const LOOK_AHEAD = 3;
 const LOOK_HEIGHT = 1.2;
 const MAX_SHAKE = 0.35;
+/** The camera keeps this far above the ground, m: a rise behind her lifts it. */
+const CLEARANCE = 0.5;
 /** Seconds the camera takes to glide from the title shot down behind her. */
 const GLIDE = 1.8;
 /** The title shot opens on the sky, as the loading screen showed it, holds while that fades, then tilts down over TILT s. */
@@ -45,7 +48,9 @@ export class CameraRig {
   update(delta: number, player: THREE.Vector3, yaw: number, snap = false): void {
     const f = this.forward.set(Math.sin(yaw), 0, Math.cos(yaw));
     this.focus.lerp(player, snap ? 1 : 1 - Math.exp(-8 * delta));
-    this.camera.position.copy(this.focus).addScaledVector(f, -DISTANCE).setY(this.focus.y + HEIGHT);
+    const { position } = this.camera;
+    position.copy(this.focus).addScaledVector(f, -DISTANCE);
+    position.y = Math.max(this.focus.y + HEIGHT, groundHeight(position.x, position.z) + CLEARANCE);
     this.camera.lookAt(this.look.copy(this.focus).addScaledVector(f, LOOK_AHEAD).setY(this.focus.y + LOOK_HEIGHT));
     this.glide = snap ? 1 : Math.min(1, this.glide + delta / GLIDE);
     if (this.glide < 1) {

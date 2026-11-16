@@ -1,7 +1,9 @@
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { ARENA_RADIUS } from '../game/tuning';
 import { createSeededRandom } from '../utils/random';
 import { fbm, noise2 } from './noise';
+import { CELL, CELLS, SEA_LEVEL, WORLD_SIZE, groundHeight, groundSlope, heights } from './terrain';
 import { addOutline, toonGradient } from './toon';
 
 /** Late-afternoon sun, shared by the light rig, sky and far layers. */
@@ -9,26 +11,49 @@ export const SUN_DIRECTION = new THREE.Vector3(-0.8, 0.36, 0.45).normalize();
 const HORIZON = new THREE.Color('#f3dfb8');
 const SUNLIT = new THREE.Color('#ffe2b8');
 
-/** Ground height: a flat hilltop dipping into a valley, with rolling hills rising beyond it. */
-export function groundHeight(x: number, z: number): number {
-  const r = Math.hypot(x, z);
-  const dip = THREE.MathUtils.smoothstep(r, 16, 70) * 9;
-  const hills = (fbm(x * 0.008 + 3, z * 0.008 - 7) - 0.3) * 55 * THREE.MathUtils.smoothstep(r, 45, 220);
-  return (fbm(x * 0.15, z * 0.15) - 0.5) * 0.25 - dip + hills;
+/** Side of the square the map shows, m: the island and its shallows. */
+export const MAP_SIZE = 840;
+/** Something solid to walk round, a trunk or a boulder: a circle on the ground. */
+export type Obstacle = { x: number; z: number; radius: number };
+/** What the shaders read of the land, and the two bodies that part the grass: it grows round the wanderer. */
+type Uniforms = Record<'uTime' | 'uLand' | 'uHeight' | 'uWanderer' | 'uOther', { value: unknown }>;
+
+/** The terrain grid as a texture, a texel to a vertex. */
+function gridTexture(data: Float32Array, format: THREE.PixelFormat): THREE.DataTexture {
+  const texture = new THREE.DataTexture(data, CELLS + 1, CELLS + 1, format, THREE.FloatType);
+  texture.minFilter = texture.magFilter = THREE.LinearFilter;
+  texture.needsUpdate = true;
+  return texture;
 }
+/** GLSL: where the grid textures hold the ground at world (x, z). */
+const LAND_UV = /* glsl */ `vec2 landUv(vec2 spot) { return (spot / ${CELL.toFixed(4)} + ${((CELLS + 1) / 2).toFixed(1)}) / ${(CELLS + 1).toFixed(1)}; }`;
 
-/** The fighters' grass push-out: the arena reads the two positions every frame. */
-export type GrassBenders = { a: THREE.Vector3; b: THREE.Vector3 };
-
-export class Arena {
+export class World {
   readonly group = new THREE.Group();
+  readonly obstacles: Obstacle[] = [];
   private readonly time = { value: 0 };
   private readonly motes: THREE.Points;
+  /** Each terrain vertex's colour and, as alpha, how thickly grass grows there. */
+  private readonly land: Float32Array;
 
-  constructor(benders: GrassBenders) {
+  /** The grass and the pollen keep to `wanderer`. */
+  constructor(
+    private readonly wanderer: THREE.Vector3,
+    other: THREE.Vector3,
+  ) {
     const rng = createSeededRandom(7);
-    this.group.add(createSky(), createMountains(), ...createClouds(rng), createTerrain());
-    this.group.add(createGrass(rng, this.time, benders), createFlowers(rng), ...createRocks(rng));
+    const terrain = createTerrain();
+    this.land = terrain.geometry.getAttribute('color').array as Float32Array;
+    const uniforms: Uniforms = {
+      uTime: this.time,
+      uLand: { value: gridTexture(this.land, THREE.RGBAFormat) },
+      uHeight: { value: gridTexture(heights, THREE.RedFormat) },
+      uWanderer: { value: wanderer },
+      uOther: { value: other },
+    };
+    this.group.add(createSky(), createMountains(), ...createClouds(rng), terrain, createWater(uniforms));
+    this.group.add(createGrass(rng, uniforms), createFlowers(rng, this.land), ...createRocks(rng, this.obstacles));
+    this.group.add(...createTrees(rng, this.land, this.obstacles));
     this.motes = createMotes(rng);
     this.group.add(this.motes);
   }
@@ -36,8 +61,31 @@ export class Arena {
   update(elapsed: number): void {
     this.time.value = elapsed;
     this.motes.rotation.y = elapsed * 0.01;
-    this.motes.position.y = Math.sin(elapsed * 0.3) * 0.3;
+    this.motes.position.copy(this.wanderer).y += Math.sin(elapsed * 0.3) * 0.3;
   }
+
+  /** Paints the island from above: the land in its own colours, shaded by its slopes, in a sea deepening off the shore. */
+  paintMap(canvas: HTMLCanvasElement): void {
+    const size = (canvas.width = canvas.height = MAP_SIZE / CELL);
+    const ctx = canvas.getContext('2d') as CanvasRenderingContext2D;
+    const image = ctx.createImageData(size, size);
+    const color = new THREE.Color();
+    const first = (CELLS - size) / 2;
+    for (let p = 0; p < size * size; p += 1) {
+      const i = (first + Math.floor(p / size)) * (CELLS + 1) + first + (p % size);
+      const depth = SEA_LEVEL - heights[i];
+      if (depth > 0) color.copy(SHALLOWS).lerp(DEEP, THREE.MathUtils.smoothstep(depth, 0, 8));
+      // Lit from the north-west, as maps are.
+      else color.fromArray(this.land, i * 4).multiplyScalar(THREE.MathUtils.clamp(1 + (heights[i] - heights[i + CELLS + 2]) * 0.12, 0.6, 1.4));
+      image.data.set([...color.convertLinearToSRGB().toArray().map((c) => c * 255), 255], p * 4);
+    }
+    ctx.putImageData(image, 0, 0);
+  }
+}
+
+/** How thickly grass grows at the terrain vertex nearest (x, z). */
+function coverAt(land: Float32Array, x: number, z: number): number {
+  return land[(Math.round((z + WORLD_SIZE / 2) / CELL) * (CELLS + 1) + Math.round((x + WORLD_SIZE / 2) / CELL)) * 4 + 3];
 }
 
 function createSky(): THREE.Mesh {
@@ -187,40 +235,66 @@ const LUSH = new THREE.Color('#467a2e');
 const SAGE = new THREE.Color('#8fa64f');
 const GOLDEN = new THREE.Color('#dcbc62');
 const OCHRE = new THREE.Color('#bf9447');
+const WOODS = new THREE.Color('#3f6b2c');
+const SAND = new THREE.Color('#f7e7bd').multiplyScalar(1.25);
+const ROCK = new THREE.Color('#c4bcaa');
+const SLATE = new THREE.Color('#8f8f9c');
+const SHALLOWS = new THREE.Color('#7fd3c4');
+const DEEP = new THREE.Color('#2c6c9c');
 const far = new THREE.Color();
+const rock = new THREE.Color();
+const slope = new THREE.Vector2();
 
-/** The land's colour at (x, z): the grass takes it too, so the meadow's green is its grass. */
-function groundColor(x: number, z: number, target: THREE.Color): THREE.Color {
+/** How wooded the land is at (x, z), 0 to 1: the woods keep off the hilltop. */
+function woods(x: number, z: number): number {
+  return THREE.MathUtils.smoothstep(fbm(x * 0.009 + 50, z * 0.009 - 30), 0.5, 0.58) * THREE.MathUtils.smoothstep(Math.hypot(x, z), 50, 90);
+}
+
+/**
+ * The land's colour at (x, z), into `target`: the grass takes it too, so the meadow's green is its grass. Returns how
+ * thickly grass grows there, 0 to 1: thinly under trees, and not at all on sand, rock or the beds of the waters.
+ */
+function groundColor(x: number, z: number, target: THREE.Color): number {
+  const height = groundHeight(x, z);
   target.copy(MEADOW).lerp(LUSH, fbm(x * 0.08 + 9, z * 0.08) * 0.8);
   const distance = THREE.MathUtils.smoothstep(Math.hypot(x, z), 25, 90);
-  if (distance === 0) return target;
-  // Far hills: a patchwork of sage, gold and ochre, lighter on the crests.
+  if (distance === 0) return 1;
+  // Beyond the hilltop: a patchwork of sage, gold and ochre, lighter on the crests.
   far.copy(SAGE).lerp(GOLDEN, THREE.MathUtils.smoothstep(fbm(x * 0.015, z * 0.015), 0.35, 0.6));
   far.lerp(OCHRE, THREE.MathUtils.smoothstep(fbm(x * 0.03 + 4, z * 0.03), 0.55, 0.75) * 0.6);
-  far.multiplyScalar(0.8 + 0.3 * THREE.MathUtils.smoothstep(groundHeight(x, z), -12, 22));
-  return target.lerp(far, distance);
+  far.multiplyScalar(0.8 + 0.3 * THREE.MathUtils.smoothstep(height, -12, 22));
+  const wooded = woods(x, z) * 0.7;
+  // Crags: steep ground is bare, and the heights more readily so.
+  const bare = THREE.MathUtils.smoothstep(groundSlope(x, z, slope).length() + height * 0.004 + fbm(x * 0.1, z * 0.1) * 0.2, 0.55, 0.8);
+  const sandy = 1 - THREE.MathUtils.smoothstep(height - SEA_LEVEL + fbm(x * 0.05, z * 0.05), 0.9, 2.2);
+  far.lerp(WOODS, wooded);
+  target.lerp(far, distance).lerp(rock.copy(ROCK).lerp(SLATE, fbm(x * 0.04 + 70, z * 0.04)), bare).lerp(SAND, sandy);
+  // Grass grows well or not at all: a few stray blades on bare ground look like stubble.
+  return THREE.MathUtils.smoothstep((1 - bare) * (1 - sandy), 0.35, 0.7) * (1 - wooded);
 }
 
 function createTerrain(): THREE.Mesh {
-  const geometry = new THREE.PlaneGeometry(700, 700, 220, 220);
+  const geometry = new THREE.PlaneGeometry(WORLD_SIZE, WORLD_SIZE, CELLS, CELLS);
   geometry.rotateX(-Math.PI / 2);
   const position = geometry.getAttribute('position');
-  const colors = new Float32Array(position.count * 3);
+  const colors = new Float32Array(position.count * 4);
   const color = new THREE.Color();
   for (let i = 0; i < position.count; i += 1) {
-    const x = position.getX(i);
-    const z = position.getZ(i);
-    position.setY(i, groundHeight(x, z));
-    groundColor(x, z, color).toArray(colors, i * 3);
+    position.setY(i, heights[i]);
+    colors[i * 4 + 3] = groundColor(position.getX(i), position.getZ(i), color);
+    color.toArray(colors, i * 4);
   }
-  geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+  geometry.setAttribute('color', new THREE.BufferAttribute(colors, 4));
   geometry.computeVertexNormals();
   const terrain = new THREE.Mesh(geometry, new THREE.MeshLambertMaterial({ vertexColors: true }));
   terrain.receiveShadow = true;
   return terrain;
 }
 
-function createGrass(rng: () => number, time: { value: number }, benders: GrassBenders): THREE.InstancedMesh {
+/** Side of the grass patch, m: it tiles the land, and each blade stands in the tile that puts it nearest the wanderer. */
+const PATCH = 52;
+
+function createGrass(rng: () => number, uniforms: Uniforms): THREE.InstancedMesh {
   // One blade: a thin strip narrowing to a blunt tip, shaded at the root and sunlit at the tip. Its normals
   // point up, so it lights exactly like the ground beneath and the blades blend into one carpet.
   const blade = new THREE.BufferGeometry();
@@ -231,34 +305,47 @@ function createGrass(rng: () => number, time: { value: number }, benders: GrassB
 
   const material = new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide });
   material.onBeforeCompile = (shader) => {
-    Object.assign(shader.uniforms, { uTime: time, uBenderA: { value: benders.a }, uBenderB: { value: benders.b } });
+    Object.assign(shader.uniforms, uniforms);
     shader.vertexShader = /* glsl */ `
       uniform float uTime;
-      uniform vec3 uBenderA, uBenderB;
+      uniform vec3 uWanderer, uOther;
+      uniform sampler2D uLand, uHeight;
+      ${LAND_UV}
       // Feet part the grass: tips lean away from a fighter standing in it.
       vec3 bend(vec3 world, vec3 bender, float push) {
         vec3 away = world - bender; away.y = 0.0;
         float d = length(away);
         return d > 0.001 ? away / d * push * max(0.0, 1.0 - d / 0.55) : vec3(0.0);
       }
-      ${shader.vertexShader}`.replace(
-      '#include <project_vertex>',
-      /* glsl */ `
-      vec4 world = modelMatrix * instanceMatrix * vec4(transformed, 1.0);
+      ${shader.vertexShader}`
+      .replace(
+        '#include <project_vertex>',
+        /* glsl */ `
+      vec2 root = instanceMatrix[3].xz;
+      vec2 spot = uWanderer.xz + mod(root - uWanderer.xz + ${(PATCH / 2).toFixed(1)}, ${PATCH.toFixed(1)}) - ${(PATCH / 2).toFixed(1)};
+      vec4 land = texture2D(uLand, landUv(spot));
+      // Blades thin out toward the patch's edge, where the tiles meet, and where the land grows less grass.
+      float cover = land.a * (1.0 - smoothstep(0.55, 1.0, distance(spot, uWanderer.xz) / ${(PATCH / 2).toFixed(1)}));
+      float grows = step(fract(sin(dot(root, vec2(12.9898, 78.233))) * 43758.5453), cover);
+      vec4 world = instanceMatrix * vec4(transformed * grows, 1.0);
+      world.xz += spot - root;
+      world.y += texture2D(uHeight, landUv(spot)).r;
+      vColor.rgb *= land.rgb;
       float tip = position.y * position.y * length(instanceMatrix[1].xyz);
       float gust = sin(uTime * 1.7 + world.x * 0.35 + world.z * 0.22) + 0.5 * sin(uTime * 3.1 + world.z * 0.9);
       world.xz += vec2(0.35, 0.2) * gust * tip;
-      world.xyz += bend(world.xyz, uBenderA, tip * 1.3) + bend(world.xyz, uBenderB, tip * 1.3);
+      world.xyz += bend(world.xyz, uWanderer, tip * 1.3) + bend(world.xyz, uOther, tip * 1.3);
       // A passing gust lifts the tips into the light.
       vColor *= 1.0 + 0.1 * max(gust, 0.0) * position.y;
       vec4 mvPosition = viewMatrix * world;
       gl_Position = projectionMatrix * mvPosition;`,
-    );
+      )
+      .replace('#include <worldpos_vertex>', 'vec4 worldPosition = world;');
     // Both faces keep the upward normal: a back-facing blade is lit like a front-facing one.
     shader.fragmentShader = `#undef DOUBLE_SIDED\n${shader.fragmentShader}`;
   };
 
-  const count = 900000;
+  const count = 1100000;
   const grass = new THREE.InstancedMesh(blade, material, count);
   const matrix = new THREE.Matrix4();
   const quaternion = new THREE.Quaternion();
@@ -266,22 +353,15 @@ function createGrass(rng: () => number, time: { value: number }, benders: GrassB
   const scale = new THREE.Vector3();
   const spot = new THREE.Vector3();
   const tint = new THREE.Color();
-  let placed = 0;
-  while (placed < count) {
-    // A dense carpet across the playable meadow, thinning out where the camera never reaches.
-    const r = Math.sqrt(rng()) * 30;
-    if (rng() > 1 - THREE.MathUtils.smoothstep(r, 16, 30)) continue;
-    const angle = rng() * Math.PI * 2;
-    spot.set(Math.cos(angle) * r, 0, Math.sin(angle) * r);
-    spot.y = groundHeight(spot.x, spot.z);
+  for (let placed = 0; placed < count; placed += 1) {
+    spot.set((rng() - 0.5) * PATCH, 0, (rng() - 0.5) * PATCH);
     // A few centimetres, a little longer in soft patches.
     const height = 0.06 + fbm(spot.x * 0.25, spot.z * 0.25) * 0.07 + rng() * 0.03;
     euler.set((rng() - 0.5) * 0.7, rng() * Math.PI * 2, (rng() - 0.5) * 0.7);
     quaternion.setFromEuler(euler);
     scale.set(0.7 + rng() * 0.6, height, 1);
     grass.setMatrixAt(placed, matrix.compose(spot, quaternion, scale));
-    grass.setColorAt(placed, groundColor(spot.x, spot.z, tint).multiplyScalar(0.88 + rng() * 0.24));
-    placed += 1;
+    grass.setColorAt(placed, tint.setScalar(0.88 + rng() * 0.24));
   }
   grass.frustumCulled = false;
   grass.receiveShadow = true;
@@ -317,19 +397,17 @@ function petalTexture(): THREE.CanvasTexture {
 }
 
 /** Daisies, buttercups, clover and speedwell in loose drifts: soft dots of colour on the grass tips, as in a painted meadow. */
-function createFlowers(rng: () => number): THREE.Points {
-  const count = 3500;
+function createFlowers(rng: () => number, land: Float32Array): THREE.Points {
+  const count = 120000;
   const positions = new Float32Array(count * 3);
   const colors = new Float32Array(count * 3);
   const palette = ['#fffaf0', '#fffaf0', '#ffe27a', '#ffc4cf', '#cdd6ff'].map((c) => new THREE.Color(c));
   let placed = 0;
   while (placed < count) {
-    const r = 5 + Math.sqrt(rng()) * 30;
-    const angle = rng() * Math.PI * 2;
-    const x = Math.cos(angle) * r;
-    const z = Math.sin(angle) * r;
-    // Drifts: flowers gather where the noise rises, each drift mostly one kind.
-    if (rng() > THREE.MathUtils.smoothstep(fbm(x * 0.09 + 31, z * 0.09), 0.5, 0.7)) continue;
+    const x = (rng() - 0.5) * MAP_SIZE;
+    const z = (rng() - 0.5) * MAP_SIZE;
+    // Drifts: flowers gather in the grass where the noise rises, each drift mostly one kind.
+    if (rng() > THREE.MathUtils.smoothstep(fbm(x * 0.09 + 31, z * 0.09), 0.5, 0.7) * coverAt(land, x, z)) continue;
     positions.set([x, groundHeight(x, z) + 0.08 + rng() * 0.07, z], placed * 3);
     palette[Math.floor(fbm(x * 0.05 - 17, z * 0.05) * 2 * palette.length + rng() * 1.5) % palette.length].toArray(colors, placed * 3);
     placed += 1;
@@ -368,23 +446,128 @@ function boulderGeometry(rng: () => number, size: number): THREE.BufferGeometry 
   return geometry;
 }
 
-/** Mossy boulders ringing the fighting circle, plus a few big ones on the slopes. */
-function createRocks(rng: () => number): THREE.Mesh[] {
+/** Mossy boulders ringing the fighting circle, a few big ones on its slopes, and more strewn over the island, most on high ground. */
+function createRocks(rng: () => number, obstacles: Obstacle[]): THREE.Mesh[] {
   const material = new THREE.MeshToonMaterial({ vertexColors: true, gradientMap: toonGradient });
   const rocks: THREE.Mesh[] = [];
-  const place = (r: number, angle: number, size: number) => {
+  const place = (x: number, z: number, size: number) => {
     const rock = new THREE.Mesh(boulderGeometry(rng, size), material);
-    const x = Math.cos(angle) * r;
-    const z = Math.sin(angle) * r;
     rock.position.set(x, groundHeight(x, z) - size * 0.1, z);
     rock.rotation.y = rng() * Math.PI * 2;
     rock.castShadow = rock.receiveShadow = true;
     addOutline(rock, 0.03);
     rocks.push(rock);
+    obstacles.push({ x, z, radius: size });
   };
-  for (let i = 0; i < 10; i += 1) place(ARENA_RADIUS + 1.6 + rng() * 2.2, (i / 10) * Math.PI * 2 + rng() * 0.4, 0.55 + rng() * 0.6);
-  for (let i = 0; i < 7; i += 1) place(20 + rng() * 14, rng() * Math.PI * 2, 1.2 + rng() * 1.4);
+  const ring = (r: number, angle: number, size: number) => place(Math.cos(angle) * r, Math.sin(angle) * r, size);
+  for (let i = 0; i < 10; i += 1) ring(ARENA_RADIUS + 1.6 + rng() * 2.2, (i / 10) * Math.PI * 2 + rng() * 0.4, 0.55 + rng() * 0.6);
+  for (let i = 0; i < 7; i += 1) ring(20 + rng() * 14, rng() * Math.PI * 2, 1.2 + rng() * 1.4);
+  while (rocks.length < 90) {
+    const [x, z] = [(rng() - 0.5) * MAP_SIZE, (rng() - 0.5) * MAP_SIZE];
+    const height = groundHeight(x, z);
+    if (Math.hypot(x, z) > 45 && height > SEA_LEVEL && rng() < 0.15 + height * 0.03) place(x, z, 0.7 + rng() * 2);
+  }
   return rocks;
+}
+
+/** A tree, 1 m tall before its instance scales it: a tapering trunk under leafy clumps, or under a fir's tiers. */
+function treeGeometry(rng: () => number, fir: boolean): THREE.BufferGeometry {
+  const [color, lit] = [new THREE.Color(), new THREE.Color()];
+  // Leaves are lit from above and shaded beneath.
+  const paint = (geometry: THREE.BufferGeometry, low: string, high: string) => {
+    const normal = geometry.getAttribute('normal');
+    const colors = new Float32Array(normal.count * 3);
+    for (let i = 0; i < normal.count; i += 1) color.set(low).lerp(lit.set(high), normal.getY(i) * 0.5 + 0.5).toArray(colors, i * 3);
+    return geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+  };
+  const trunk = paint(new THREE.CylinderGeometry(0.03, 0.055, 0.5, 6).translate(0, 0.25, 0).toNonIndexed(), '#6b4a33', '#6b4a33');
+  const crown: THREE.BufferGeometry[] = [];
+  if (fir) {
+    for (let tier = 0; tier < 4; tier += 1) {
+      crown.push(paint(new THREE.ConeGeometry(0.3 - tier * 0.06, 0.34, 8).translate(0, 0.34 + tier * 0.19, 0).toNonIndexed(), '#24452f', '#4f7d48'));
+    }
+  } else {
+    for (let clump = 0; clump < 5; clump += 1) {
+      // One clump on top, the rest round it.
+      const [out, angle, radius] = [clump && 0.2 + rng() * 0.08, clump * 1.6 + rng(), clump ? 0.2 + rng() * 0.07 : 0.3];
+      const leaves = new THREE.IcosahedronGeometry(radius, 1).scale(1, 0.8, 1);
+      crown.push(paint(leaves.translate(Math.cos(angle) * out, (clump ? 0.55 : 0.72) + rng() * 0.08, Math.sin(angle) * out), '#3c6a2a', '#9cbb4f'));
+    }
+  }
+  return mergeGeometries([trunk, ...crown]);
+}
+
+/** Broadleaf woods on the low ground, firs on the heights, and lone trees between; none on the hilltop. */
+function createTrees(rng: () => number, land: Float32Array, obstacles: Obstacle[]): THREE.InstancedMesh[] {
+  // Two broadleaves and a fir.
+  const kinds = [false, false, true].map((fir) => ({ geometry: treeGeometry(rng, fir), spots: [] as THREE.Matrix4[] }));
+  const trees: Obstacle[] = [];
+  const quaternion = new THREE.Quaternion();
+  const up = new THREE.Vector3(0, 1, 0);
+  for (let tries = 0; tries < 14000; tries += 1) {
+    const [x, z] = [(rng() - 0.5) * MAP_SIZE, (rng() - 0.5) * MAP_SIZE];
+    const wooded = woods(x, z);
+    // Trees stand where grass can, clear of each other.
+    if (Math.hypot(x, z) < 45 || coverAt(land, x, z) < 0.25 || rng() > 0.02 + wooded || trees.some((tree) => Math.hypot(tree.x - x, tree.z - z) < 4.5)) continue;
+    const height = groundHeight(x, z);
+    const fir = rng() < THREE.MathUtils.smoothstep(height, 6, 16);
+    const size = (fir ? 9 : 7) * (0.75 + rng() * 0.6);
+    kinds[fir ? 2 : Math.floor(rng() * 2)].spots.push(new THREE.Matrix4().compose(new THREE.Vector3(x, height - 0.1, z), quaternion.setFromAxisAngle(up, rng() * Math.PI * 2), new THREE.Vector3(size, size, size)));
+    trees.push({ x, z, radius: size * 0.05 });
+  }
+  obstacles.push(...trees);
+  const material = new THREE.MeshToonMaterial({ vertexColors: true, gradientMap: toonGradient });
+  const tint = new THREE.Color();
+  return kinds.map(({ geometry, spots }) => {
+    const mesh = new THREE.InstancedMesh(geometry, material, spots.length);
+    spots.forEach((spot, i) => {
+      mesh.setMatrixAt(i, spot);
+      mesh.setColorAt(i, tint.setScalar(0.85 + rng() * 0.3));
+    });
+    mesh.castShadow = mesh.receiveShadow = true;
+    addOutline(mesh, 0.004);
+    return mesh;
+  });
+}
+
+/** The sea, the lake and the river: one sheet, clear over the shallows and deepening to blue, with foam lapping its shores. */
+function createWater(uniforms: Uniforms): THREE.Mesh {
+  const material = new THREE.MeshBasicMaterial({ transparent: true });
+  material.onBeforeCompile = (shader) => {
+    Object.assign(shader.uniforms, uniforms, { uShallows: { value: SHALLOWS }, uDeep: { value: DEEP } });
+    shader.vertexShader = `varying vec2 vSpot;\n${shader.vertexShader}`.replace(
+      '#include <begin_vertex>',
+      /* glsl */ `#include <begin_vertex>
+      vSpot = (modelMatrix * vec4(position, 1.0)).xz;`,
+    );
+    shader.fragmentShader = /* glsl */ `
+      uniform float uTime;
+      uniform sampler2D uHeight;
+      uniform vec3 uShallows, uDeep;
+      varying vec2 vSpot;
+      ${LAND_UV}
+      float ripple(vec2 p) {
+        vec2 i = floor(p), f = fract(p);
+        f = f * f * (3.0 - 2.0 * f);
+        vec4 h = fract(sin(vec4(dot(i, vec2(127.1, 311.7)), dot(i + vec2(1, 0), vec2(127.1, 311.7)), dot(i + vec2(0, 1), vec2(127.1, 311.7)), dot(i + 1.0, vec2(127.1, 311.7)))) * 43758.5453);
+        return mix(mix(h.x, h.y, f.x), mix(h.z, h.w, f.x), f.y);
+      }
+      ${shader.fragmentShader}`.replace(
+      '#include <color_fragment>',
+      /* glsl */ `
+      float depth = ${SEA_LEVEL.toFixed(1)} - texture2D(uHeight, landUv(vSpot)).r;
+      float waves = ripple(vSpot * vec2(0.5, 1.9) + uTime * 0.25) + ripple(vSpot * vec2(1.3, 4.1) - uTime * 0.4);
+      // Glints, long and thin, where two swells cross, fading before distance turns them to speckle; and a line of
+      // foam that breathes in and out along the shore.
+      float glint = smoothstep(1.5, 1.56, waves) * 0.6 * (1.0 - smoothstep(60.0, 220.0, vFogDepth));
+      float foam = 1.0 - smoothstep(0.0, 0.22 + 0.14 * sin(uTime * 1.3 + waves * 3.0), depth);
+      diffuseColor.rgb = mix(mix(uShallows, uDeep, smoothstep(0.0, 5.0, depth)), vec3(1.0), max(glint, foam * 0.85));
+      diffuseColor.a = mix(0.55, 0.94, max(smoothstep(0.0, 3.0, depth), foam));`,
+    );
+  };
+  const water = new THREE.Mesh(new THREE.CircleGeometry(1400, 64).rotateX(-Math.PI / 2), material);
+  water.position.y = SEA_LEVEL;
+  return water;
 }
 
 function moteTexture(): THREE.CanvasTexture {

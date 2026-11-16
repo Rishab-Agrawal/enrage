@@ -2,6 +2,7 @@ import { expect, test, type Page } from '@playwright/test';
 import type { FightEvent } from '../src/game/events';
 import { LINES } from '../src/game/lines';
 import { tuning } from '../src/game/tuning';
+import { SEA_LEVEL } from '../src/world/terrain';
 
 // Real-input playtests: keyboard, mouse and the debug panel's mood control, as a player would use them.
 // Gorran's attack choice is seeded, so runs are deterministic up to frame timing.
@@ -631,4 +632,51 @@ test('sprinting off as he swings outruns his blows', async ({ page }) => {
     return landed;
   });
   expect(landed.every((s) => s.startsWith('0/') && s !== '0/0'), landed.join(', ')).toBe(true);
+});
+
+test('once she has been out of the arena 5 s, Gorran calms down, whole again; a shorter while changes nothing', async ({ page }) => {
+  const errors = await start(page);
+  await capture(page);
+  await page.evaluate(() => window.__THREE_GAME_TEST_HOOKS__?.setState('resting'));
+  const hurt = (await read(page)).npc.health;
+  expect(hurt).toBeLessThan(tuning.npcMaxHealth);
+  await setMood(page, 'enraged');
+  await page.evaluate(() => window.__THREE_GAME_TEST_HOOKS__?.place(0, 30, 0));
+  await page.waitForTimeout(2500);
+  expect((await read(page)).npc).toMatchObject({ mood: 'enraged', health: hurt });
+  await expect.poll(async () => (await read(page)).npc, { timeout: 6000 }).toMatchObject({ mood: 'calm', health: tuning.npcMaxHealth });
+  expect(errors).toEqual([]);
+});
+
+test('M opens the map, freeing the mouse and holding the fight; a click on it keeps it open, and one outside it closes it', async ({ page }) => {
+  const errors = await start(page);
+  await capture(page);
+  await page.keyboard.press('KeyM');
+  await expect(page.locator('#app')).toHaveAttribute('data-screen', 'map');
+  await expect.poll(() => page.evaluate(() => document.pointerLockElement)).toBeNull();
+  // She stands 6 m south of the map's centre, facing north.
+  const wren = await page.locator('#map .wren').evaluate((marker: HTMLElement) => [marker.style.left, parseFloat(marker.style.top), parseFloat(marker.style.rotate)]);
+  expect(wren[0]).toBe('50%');
+  expect(wren[1]).toBeGreaterThan(50);
+  expect(wren[2]).toBeCloseTo(0, 2);
+  const { elapsed } = await read(page);
+  await page.locator('#map').click();
+  expect((await read(page)).elapsed).toBe(elapsed);
+  await expect(page.locator('#app')).toHaveAttribute('data-screen', 'map');
+  await page.mouse.click(40, 400);
+  await expect(page.locator('#app')).toHaveAttribute('data-screen', 'fight');
+  expect(errors).toEqual([]);
+});
+
+test('she wades into the sea only so deep, however long she runs at it', async ({ page }) => {
+  const errors = await start(page);
+  await capture(page);
+  await page.evaluate(() => window.__THREE_GAME_TEST_HOOKS__?.place(60, 250, 0));
+  for (const key of ['KeyW', 'ShiftLeft']) await page.keyboard.down(key);
+  await page.waitForTimeout(4000);
+  const { position } = (await read(page)).player;
+  expect(position.z).toBeGreaterThan(252);
+  expect(position.y).toBeGreaterThan(SEA_LEVEL - 1);
+  expect(position.y).toBeLessThan(SEA_LEVEL - 0.6);
+  expect(errors).toEqual([]);
 });

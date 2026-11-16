@@ -13,7 +13,8 @@ import { Speech } from '../systems/Speech';
 import { Vfx } from '../systems/Vfx';
 import { Voice } from '../systems/Voice';
 import { createSeededRandom } from '../utils/random';
-import { Arena, SUN_DIRECTION } from '../world/Arena';
+import { SEA_LEVEL, groundHeight, groundSlope } from '../world/terrain';
+import { SUN_DIRECTION, World } from '../world/World';
 import type { FightEvent, Mood } from './events';
 import { LINES } from './lines';
 import { ARENA_RADIUS, tuning } from './tuning';
@@ -23,14 +24,21 @@ const STEP = 1 / 60;
 const LINE_TIME = 2.5;
 /** Radius of a fist, m. */
 const FIST = 0.1;
+/** Out of the arena this long, s, she has left the fight. */
+const LEAVE_TIME = 5;
+/** The steepest ground she climbs, m risen per m, and the deepest water she wades, m. */
+const MAX_SLOPE = 0.8;
+const WADE_DEPTH = 0.8;
 const arm = new THREE.Line3();
 const nearest = new THREE.Vector3();
+const centre = new THREE.Vector3();
 
 /** Whether the arm from `from` to the fist `at` meets `body`'s upright cylinder, seen from above. */
 function reaches(from: THREE.Vector3, at: THREE.Vector3, body: { position: THREE.Vector3; radius: number }): boolean {
   arm.start.copy(from).setY(0);
   arm.end.copy(at).setY(0);
-  return arm.closestPointToPoint(body.position, true, nearest).distanceTo(body.position) <= body.radius + FIST;
+  centre.copy(body.position).setY(0);
+  return arm.closestPointToPoint(centre, true, nearest).distanceTo(centre) <= body.radius + FIST;
 }
 const PLAYER_RIM = new THREE.Color('#ffd9a0').multiplyScalar(0.3);
 const RAGE_RIM = new THREE.Color('#ff3a14').multiplyScalar(0.75);
@@ -42,13 +50,17 @@ export class Game {
   private readonly input: Input;
   private readonly player: Player;
   private readonly npc: Npc;
-  private readonly arena: Arena;
+  private readonly world: World;
+  private readonly sun = new THREE.DirectionalLight('#ffd49a', 2.9);
   private readonly cameraRig = new CameraRig(this.camera);
   private readonly vfx = new Vfx();
   private readonly audio = new Audio();
   private readonly voice = new Voice();
   private readonly speech = new Speech((text) => this.hear(text));
-  private readonly hud = new Hud(() => this.rematch());
+  private readonly hud = new Hud(
+    () => this.rematch(),
+    () => this.show('map'),
+  );
   /** Development only, like the test hooks and diagnostics: the deployed game has none of them. */
   private readonly debug?: DebugPanel;
   private readonly loop = new Loop(
@@ -73,6 +85,11 @@ export class Game {
   /** Held still for screenshots, without the pause card. */
   private frozen = false;
   private readonly offset = new THREE.Vector3();
+  /** Seconds she has been out of the arena. */
+  private away = 0;
+  /** Where she stood before this frame moved her. */
+  private readonly from = new THREE.Vector3();
+  private readonly slope = new THREE.Vector2();
 
   constructor(
     private readonly canvas: HTMLCanvasElement,
@@ -83,7 +100,8 @@ export class Game {
     this.input = new Input(canvas, () => this.speech.open());
     this.player = new Player(models.player);
     this.npc = new Npc(models.npc, () => this.rng());
-    this.arena = new Arena({ a: this.player.position, b: this.npc.position });
+    this.world = new World(this.player.position, this.npc.position);
+    this.world.paintMap(this.hud.map);
     if (import.meta.env.DEV) {
       this.debug = new DebugPanel(
         () => this.npc.mood,
@@ -118,15 +136,15 @@ export class Game {
 
   private buildScene(): void {
     this.scene.fog = new THREE.Fog('#ead9b8', 70, 650);
-    const sun = new THREE.DirectionalLight('#ffd49a', 2.9);
-    sun.position.copy(SUN_DIRECTION).multiplyScalar(40);
+    const sun = this.sun;
     sun.castShadow = true;
-    sun.shadow.mapSize.set(2048, 2048);
-    Object.assign(sun.shadow.camera, { left: -18, right: 18, top: 18, bottom: -18, near: 1, far: 90 });
-    sun.shadow.bias = -0.0004;
+    // Wide enough that the trees whose long shadows reach her are in it.
+    sun.shadow.mapSize.set(4096, 4096);
+    Object.assign(sun.shadow.camera, { left: -32, right: 32, top: 32, bottom: -32, near: 1, far: 160 });
+    sun.shadow.bias = -0.0002;
     sun.shadow.normalBias = 0.03;
-    this.scene.add(sun, new THREE.HemisphereLight('#c8d8f0', '#7d7a3e', 1.2));
-    this.scene.add(this.arena.group, this.player.character.root, this.npc.character.root, this.vfx.group);
+    this.scene.add(sun, sun.target, new THREE.HemisphereLight('#c8d8f0', '#7d7a3e', 1.2));
+    this.scene.add(this.world.group, this.player.character.root, this.npc.character.root, this.vfx.group);
     this.player.character.rim.value.copy(PLAYER_RIM);
   }
 
@@ -140,6 +158,7 @@ export class Game {
     this.line = '';
     this.worked = [];
     this.fight = crypto.randomUUID();
+    this.away = 0;
     this.input.clear();
     this.debug?.sync();
     this.cameraRig.update(0, this.player.position, this.player.yaw, true);
@@ -157,7 +176,15 @@ export class Game {
       }
       this.show('fight');
     }
-    const running = this.screen !== 'paused' && !this.frozen;
+    // M opens the map, which frees the mouse, and closes it again; so does a click outside it, capturing the mouse.
+    if (this.input.consume('map') && this.screen !== 'title') {
+      if (this.screen === 'map') void this.input.capture();
+      else {
+        this.show('map');
+        document.exitPointerLock();
+      }
+    }
+    const running = (this.screen === 'fight' || this.screen === 'title') && !this.frozen;
     if (running) this.step(delta);
     this.speech.hold(this.voice.state === 'listening');
     this.hud.update(
@@ -174,6 +201,8 @@ export class Game {
         regenerating: this.npc.mood === 'calm' && this.player.health < tuning.playerMaxHealth && this.player.state !== 'down',
         outcome: this.outcomeTimer > 1.4 ? this.outcome : null,
         npcHealthLeft: Math.ceil(this.npc.health),
+        wren: { x: this.player.position.x, z: this.player.position.z, yaw: this.player.yaw },
+        gorran: { x: this.npc.position.x, z: this.npc.position.z },
       },
       running ? delta : 0,
     );
@@ -201,6 +230,7 @@ export class Game {
     const live = !this.outcome;
     // Controls wait for the camera to glide in behind her: the hand that clicked to start is still settling on the mouse.
     this.input.still = this.cameraRig.gliding;
+    this.from.copy(this.player.position);
     this.player.update(fightDelta, live && playing ? this.input : null, this.npc.position, this.npc.mood === 'calm', this.events);
     if (live) this.npc.update(fightDelta, this.player.position, this.events);
     this.resolve();
@@ -210,18 +240,25 @@ export class Game {
     this.npc.character.update(fightDelta);
     this.react();
     this.judge(delta);
+    this.away = Math.hypot(this.player.position.x, this.player.position.z) > ARENA_RADIUS ? this.away + delta : 0;
+    if (live && this.away >= LEAVE_TIME && this.away - delta < LEAVE_TIME) this.disengage();
+    this.sun.target.position.copy(this.player.position);
+    this.sun.position.copy(this.player.position).addScaledVector(SUN_DIRECTION, 70);
 
     const rage = this.npc.mood === 'enraged' && this.npc.state !== 'down';
     this.npc.character.rim.value.lerp(rage ? RAGE_RIM : PLAYER_RIM, 1 - Math.exp(-5 * delta));
     this.vfx.update(delta, this.npc.position, rage ? 'enraged' : 'calm');
     // He stands down once she's beaten, but the music stays with the loss until the rematch.
     this.audio.music(rage || this.outcome === 'defeat' ? 'enraged' : 'calm');
-    this.arena.update(this.elapsed);
+    this.world.update(this.elapsed);
     if (playing) this.cameraRig.update(delta, this.player.position, this.player.yaw);
     else this.cameraRig.title(this.elapsed, this.offset.addVectors(this.player.position, this.npc.position).multiplyScalar(0.5));
   }
 
-  /** Combat rules: a blow lands only where the fist meets the other's body, and only an enraged NPC is hurt; bodies don't overlap. */
+  /**
+   * Combat rules: a blow lands only where the fist meets the other's body, and only an enraged NPC is hurt; bodies don't
+   * overlap. Both stand on the ground: he keeps to the arena, and she roams wherever the land lets her.
+   */
   private resolve(): void {
     for (const event of this.events) {
       if (event.type === 'shove') this.player.shove(this.npc.position);
@@ -240,9 +277,28 @@ export class Game {
     const distance = toNpc.length();
     const minimum = this.player.radius + this.npc.radius;
     if (distance < minimum && distance > 0.001) this.player.position.addScaledVector(toNpc, (distance - minimum) / distance);
-    for (const body of [this.player.position, this.npc.position]) {
-      const r = Math.hypot(body.x, body.z);
-      if (r > ARENA_RADIUS) body.multiplyScalar(ARENA_RADIUS / r);
+    const r = Math.hypot(this.npc.position.x, this.npc.position.z);
+    if (r > ARENA_RADIUS) this.npc.position.multiplyScalar(ARENA_RADIUS / r);
+    this.roam();
+    for (const body of [this.player.position, this.npc.position]) body.y = groundHeight(body.x, body.z);
+  }
+
+  /** The land turns her aside: round trunks and boulders, off slopes too steep to climb and out of water too deep to wade. */
+  private roam(): void {
+    const body = this.player.position;
+    for (const { x, z, radius } of this.world.obstacles) {
+      const gap = Math.hypot(body.x - x, body.z - z);
+      const room = radius + this.player.radius;
+      if (gap < room && gap > 0.001) body.set(x + ((body.x - x) * room) / gap, 0, z + ((body.z - z) * room) / gap);
+    }
+    const slope = groundSlope(body.x, body.z, this.slope);
+    const steepness = slope.lengthSq();
+    // Metres this frame's step climbed: taken back along the slope where she can't climb, or can't go deeper.
+    const climb = (body.x - this.from.x) * slope.x + (body.z - this.from.z) * slope.y;
+    const deep = groundHeight(body.x, body.z) < SEA_LEVEL - WADE_DEPTH;
+    if (climb > 0 ? steepness > MAX_SLOPE ** 2 : deep) {
+      body.x -= (slope.x * climb) / steepness;
+      body.z -= (slope.y * climb) / steepness;
     }
   }
 
@@ -306,6 +362,14 @@ export class Game {
       this.say(LINES.won);
     }
     this.debug?.sync();
+  }
+
+  /** She has left him be: he calms down, whole again, and nothing said in the fight she left counts in the next. */
+  private disengage(): void {
+    this.npc.health = tuning.npcMaxHealth;
+    this.setMood('calm');
+    this.worked = [];
+    this.fight = crypto.randomUUID();
   }
 
   /** Her turn at the mic, as heard: his mood turns if the judge says her words do, else he answers as he is. */
@@ -384,6 +448,7 @@ export class Game {
         settle(STEP);
         return { state: name };
       },
+      place: (x: number, z: number, yaw: number) => this.player.character.place(x, z, yaw),
       setPausedForScreenshot: (paused: boolean) => {
         this.frozen = paused;
       },

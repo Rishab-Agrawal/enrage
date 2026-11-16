@@ -1,12 +1,14 @@
 import * as THREE from 'three';
 
+type Intent = 'strike' | 'dodge' | 'rematch' | 'speak' | 'pause' | 'map';
+
 /**
  * Keyboard + mouse as game intents. Presses are latched until consumed so none are lost between frames.
  * A click captures the mouse (pointer lock) for looking; Esc releases it, natively. Losing it, or focus, asks for a pause.
  */
 export class Input {
   private readonly keys = new Set<string>();
-  private readonly pressed = new Set<'strike' | 'dodge' | 'rematch' | 'speak' | 'pause'>();
+  private readonly pressed = new Set<Intent>();
   private look = 0;
   /** While set, moves, strikes, dodges and mouse travel are dropped, not saved for later; the mic and Esc still work. */
   still = false;
@@ -19,6 +21,7 @@ export class Input {
     if (event.code === 'KeyR') this.pressed.add('rematch');
     if (event.code === 'Space') this.pressed.add('speak');
     if (event.code === 'Escape') this.pressed.add('pause');
+    if (event.code === 'KeyM') this.pressed.add('map');
   };
   private readonly onKeyUp = (event: KeyboardEvent) => this.keys.delete(event.code);
   // Focus moving to another window or into a widget takes the keyups with it (lil-gui's swallow them): let held keys go.
@@ -34,7 +37,7 @@ export class Input {
     // The click that captures the mouse is not a strike. A refused lock (e.g. just after Esc) waits for the next click.
     // Raw movement: Chrome's default lock recentres the cursor, and fast travel then spikes or stalls at the window's
     // edge. Where raw input is unsupported, the plain lock. Firefox returns no promise.
-    if (!this.captured) return void this.lock();
+    if (!this.captured) return void this.capture();
     if (event.button === 0 && !this.still) this.pressed.add('strike');
   };
   private readonly onContextMenu = (event: MouseEvent) => event.preventDefault();
@@ -57,7 +60,8 @@ export class Input {
     surface.addEventListener('mousemove', this.onMouseMove);
   }
 
-  private async lock(): Promise<void> {
+  /** Captures the mouse: only from a click or a key press, as browsers require. */
+  async capture(): Promise<void> {
     await this.beforeCapture().catch(() => {});
     try {
       await this.surface.requestPointerLock({ unadjustedMovement: true });
@@ -92,7 +96,7 @@ export class Input {
     return this.keys.has('ShiftLeft') || this.keys.has('ShiftRight');
   }
 
-  consume(intent: 'strike' | 'dodge' | 'rematch' | 'speak' | 'pause'): boolean {
+  consume(intent: Intent): boolean {
     return this.pressed.delete(intent);
   }
 

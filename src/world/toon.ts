@@ -39,6 +39,9 @@ export function addOutline(mesh: THREE.Mesh, thickness: number): void {
     const skinnedHull = new THREE.SkinnedMesh(mesh.geometry, outlineMaterial(thickness));
     skinnedHull.bind(skinned.skeleton, skinned.bindMatrix);
     hull = skinnedHull;
+  } else if (mesh instanceof THREE.InstancedMesh) {
+    hull = new THREE.InstancedMesh(mesh.geometry, outlineMaterial(thickness), mesh.count);
+    (hull as THREE.InstancedMesh).instanceMatrix = mesh.instanceMatrix;
   } else {
     hull = new THREE.Mesh(mesh.geometry, outlineMaterial(thickness));
   }

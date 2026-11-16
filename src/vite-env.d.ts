@@ -22,6 +22,8 @@ interface ThreeGameTestHooks {
   seed(value: number): void | Promise<void>;
   /** Acknowledge after setup/assets are ready; throw for unknown states. */
   setState(name: string): { state: string } | Promise<{ state: string }>;
+  /** Stand her at (x, z), facing `yaw`. */
+  place(x: number, z: number, yaw: number): void;
   /** Stop simulation/state transitions immediately; keep rendering. */
   setPausedForScreenshot(paused: boolean): void | Promise<void>;
   /** Stabilize ambient/idle visuals without requiring an unpaused simulation tick. */
