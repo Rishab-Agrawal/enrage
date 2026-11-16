@@ -17,7 +17,7 @@ import { SEA_LEVEL, groundHeight, groundSlope } from '../world/terrain';
 import { SUN_DIRECTION, World } from '../world/World';
 import type { FightEvent, Mood } from './events';
 import { LINES } from './lines';
-import { ARENA_RADIUS, tuning } from './tuning';
+import { ARENA_RADIUS, inArena, tuning } from './tuning';
 
 const STEP = 1 / 60;
 /** How long a line of Gorran's stays up, s. */
@@ -33,12 +33,12 @@ const arm = new THREE.Line3();
 const nearest = new THREE.Vector3();
 const centre = new THREE.Vector3();
 
-/** Whether the arm from `from` to the fist `at` meets `body`'s upright cylinder, seen from above. */
-function reaches(from: THREE.Vector3, at: THREE.Vector3, body: { position: THREE.Vector3; radius: number }): boolean {
+/** Whether the arm from `from` to the fist `at` meets the upright cylinder of `radius` at (x, z), seen from above. */
+function reaches(from: THREE.Vector3, at: THREE.Vector3, { x, z }: { x: number; z: number }, radius: number): boolean {
   arm.start.copy(from).setY(0);
   arm.end.copy(at).setY(0);
-  centre.copy(body.position).setY(0);
-  return arm.closestPointToPoint(centre, true, nearest).distanceTo(centre) <= body.radius + FIST;
+  centre.set(x, 0, z);
+  return arm.closestPointToPoint(centre, true, nearest).distanceTo(centre) <= radius + FIST;
 }
 const PLAYER_RIM = new THREE.Color('#ffd9a0').multiplyScalar(0.3);
 const RAGE_RIM = new THREE.Color('#ff3a14').multiplyScalar(0.75);
@@ -201,6 +201,7 @@ export class Game {
         regenerating: this.npc.mood === 'calm' && this.player.health < tuning.playerMaxHealth && this.player.state !== 'down',
         outcome: this.outcomeTimer > 1.4 ? this.outcome : null,
         npcHealthLeft: Math.ceil(this.npc.health),
+        away: this.away > 0,
         wren: { x: this.player.position.x, z: this.player.position.z, yaw: this.player.yaw },
         gorran: { x: this.npc.position.x, z: this.npc.position.z },
       },
@@ -220,7 +221,9 @@ export class Game {
     this.elapsed += delta;
     if (this.input.consume('rematch') && this.outcome) this.rematch();
     const playing = this.screen === 'fight';
-    if (playing) this.voice.update(delta, this.input.consume('speak'), this.input.speaking);
+    // He only hears her in the arena: out of it, the mic lets go.
+    const heard = inArena(this.player.position);
+    if (playing) this.voice.update(delta, this.input.consume('speak') && heard, this.input.speaking && heard);
     this.lineLeft -= delta;
     if (this.lineLeft <= 0) this.line = '';
 
@@ -240,7 +243,7 @@ export class Game {
     this.npc.character.update(fightDelta);
     this.react();
     this.judge(delta);
-    this.away = Math.hypot(this.player.position.x, this.player.position.z) > ARENA_RADIUS ? this.away + delta : 0;
+    this.away = heard ? 0 : this.away + delta;
     if (live && this.away >= LEAVE_TIME && this.away - delta < LEAVE_TIME) this.disengage();
     this.sun.target.position.copy(this.player.position);
     this.sun.position.copy(this.player.position).addScaledVector(SUN_DIRECTION, 70);
@@ -250,9 +253,9 @@ export class Game {
     this.vfx.update(delta, this.npc.position, rage ? 'enraged' : 'calm');
     // He stands down once she's beaten, but the music stays with the loss until the rematch.
     this.audio.music(rage || this.outcome === 'defeat' ? 'enraged' : 'calm');
-    this.world.update(this.elapsed);
     if (playing) this.cameraRig.update(delta, this.player.position, this.player.yaw);
     else this.cameraRig.title(this.elapsed, this.offset.addVectors(this.player.position, this.npc.position).multiplyScalar(0.5));
+    this.world.update(this.elapsed, this.camera);
   }
 
   /**
@@ -264,11 +267,13 @@ export class Game {
       if (event.type === 'shove') this.player.shove(this.npc.position);
       if (event.type !== 'contact') continue;
       if (event.who === 'player') {
-        if (this.npc.mood === 'enraged' && this.npc.state !== 'down' && reaches(this.player.position, event.at, this.npc)) {
+        if (this.npc.mood === 'enraged' && this.npc.state !== 'down' && reaches(this.player.position, event.at, this.npc.position, this.npc.radius)) {
           this.npc.takeHit(event.damage);
           this.events.push({ type: 'hit', who: 'npc', at: event.at, damage: event.damage });
+        } else if (this.world.obstacles.some((tree) => tree.trunk && reaches(this.player.position, event.at, tree, tree.radius))) {
+          this.events.push({ type: 'thud', at: event.at });
         }
-      } else if (reaches(this.npc.position, event.at, this.player) && this.player.takeHit(event.damage, this.npc.position, event.knockback)) {
+      } else if (reaches(this.npc.position, event.at, this.player.position, this.player.radius) && this.player.takeHit(event.damage, this.npc.position, event.knockback)) {
         this.events.push({ type: 'hit', who: 'player', at: event.at, damage: event.damage });
       }
     }
@@ -320,6 +325,10 @@ export class Game {
           this.hitstop = heavy ? 0.09 : 0.06;
           break;
         }
+        case 'thud':
+          this.vfx.hit(event.at, false);
+          this.audio.hit(false);
+          break;
         case 'dodge':
           this.vfx.puff(event.at, 4);
           break;
@@ -493,7 +502,7 @@ export class Game {
         clientHeight: this.canvas.clientHeight,
         width: this.canvas.width,
         height: this.canvas.height,
-        dpr: Math.min(window.devicePixelRatio || 1, 2),
+        dpr: this.renderer.getPixelRatio(),
       },
     };
   }

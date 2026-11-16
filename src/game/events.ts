@@ -8,6 +8,8 @@ export type FightEvent =
   /** A blow at full stretch, `at` the striking fist; it lands only if the fist reaches the other's body. `heavy`: the fighter's bigger blow. */
   | { type: 'contact'; who: Fighter; heavy: boolean; damage: number; knockback: number; at: THREE.Vector3 }
   | { type: 'hit'; who: Fighter; at: THREE.Vector3; damage: number }
+  /** Her fist meets a tree's trunk. */
+  | { type: 'thud'; at: THREE.Vector3 }
   | { type: 'dodge'; at: THREE.Vector3 }
   | { type: 'shove' }
   | { type: 'mood'; mood: Mood };

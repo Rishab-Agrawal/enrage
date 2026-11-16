@@ -11,11 +11,14 @@ export function createRenderer(canvas: HTMLCanvasElement): THREE.WebGLRenderer {
   return renderer;
 }
 
-export function resizeRenderer(renderer: THREE.WebGLRenderer, camera: THREE.PerspectiveCamera, maxDpr = 2): void {
+/** Canvas pixels per CSS pixel, at most: the frame is bound by how many pixels the grass fills, and MSAA already smooths its edges. */
+const MAX_PIXEL_RATIO = 1;
+
+export function resizeRenderer(renderer: THREE.WebGLRenderer, camera: THREE.PerspectiveCamera): void {
   const canvas = renderer.domElement;
   const width = Math.max(1, canvas.clientWidth);
   const height = Math.max(1, canvas.clientHeight);
-  const dpr = Math.min(window.devicePixelRatio || 1, maxDpr);
+  const dpr = Math.min(window.devicePixelRatio || 1, MAX_PIXEL_RATIO);
   if (canvas.width === Math.floor(width * dpr) && canvas.height === Math.floor(height * dpr)) return;
   renderer.setPixelRatio(dpr);
   renderer.setSize(width, height, false);

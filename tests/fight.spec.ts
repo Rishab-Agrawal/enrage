@@ -181,10 +181,18 @@ test('a full bar holds 5 s of sprint and refills as fast, after a 1 s pause once
       player.update(1 / 60, input, player.position.clone().setZ(-99), false, []);
       player.character.update(1 / 60);
       log.push({ t, speed: player.position.distanceTo(before) * 60, stamina: player.stamina, winded: player.winded, state: player.state });
+      if (player.position.length() > 13) player.position.setLength(13); // inside the arena's edge
     }
+    // Out of the arena, 6 s of sprint spend a third as much.
+    player.reset();
+    player.character.place(0, 100, 0);
+    input.consume = () => false;
+    for (t = 0; t < 6; t += 1 / 60) player.update(1 / 60, input, player.position.clone().setZ(-99), false, []);
+    log.push({ t: 99, speed: 0, stamina: player.stamina, winded: false, state: 'roaming' });
     return log;
   });
   const at = (t: number) => log.find((s) => s.t >= t)!;
+  expect(at(99).stamina).toBeCloseTo(tuning.playerStamina - 6 / tuning.roamStamina, 1);
   expect(at(4.5).speed).toBeCloseTo(tuning.playerSprintSpeed, 0);
   // Emptied at 5 s, it waits 1 s, winded, though Shift is held, and she cannot dash.
   expect(at(5.5).stamina).toBe(0);
@@ -634,7 +642,7 @@ test('sprinting off as he swings outruns his blows', async ({ page }) => {
   expect(landed.every((s) => s.startsWith('0/') && s !== '0/0'), landed.join(', ')).toBe(true);
 });
 
-test('once she has been out of the arena 5 s, Gorran calms down, whole again; a shorter while changes nothing', async ({ page }) => {
+test('out of the arena he cannot hear her, and once she has been out 5 s he calms down, whole again; a shorter while changes nothing', async ({ page }) => {
   const errors = await start(page);
   await capture(page);
   await page.evaluate(() => window.__THREE_GAME_TEST_HOOKS__?.setState('resting'));
@@ -642,7 +650,12 @@ test('once she has been out of the arena 5 s, Gorran calms down, whole again; a 
   expect(hurt).toBeLessThan(tuning.npcMaxHealth);
   await setMood(page, 'enraged');
   await page.evaluate(() => window.__THREE_GAME_TEST_HOOKS__?.place(0, 30, 0));
+  // He can't hear her out there: the mic is put away and Space opens nothing.
+  await expect(page.locator('#voice')).toBeHidden();
+  await page.keyboard.down('Space');
   await page.waitForTimeout(2500);
+  await expect(page.locator('#voice')).not.toHaveClass('listening');
+  await page.keyboard.up('Space');
   expect((await read(page)).npc).toMatchObject({ mood: 'enraged', health: hurt });
   await expect.poll(async () => (await read(page)).npc, { timeout: 6000 }).toMatchObject({ mood: 'calm', health: tuning.npcMaxHealth });
   expect(errors).toEqual([]);

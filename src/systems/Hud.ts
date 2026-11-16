@@ -18,6 +18,8 @@ type HudState = {
   regenerating: boolean;
   outcome: Outcome;
   npcHealthLeft: number;
+  /** She is out of the arena, where he can't hear her. */
+  away: boolean;
   /** Where the two stand, m, and the yaw she faces. */
   wren: { x: number; z: number; yaw: number };
   gorran: { x: number; z: number };
@@ -110,12 +112,12 @@ export class Hud {
 
     if (state.outcome !== this.last.outcome) {
       this.result.hidden = !state.outcome;
-      this.voice.hidden = !!state.outcome;
       this.result.className = state.outcome ?? '';
       this.resultTitle.textContent = state.outcome === 'victory' ? 'Victory' : 'Defeat';
       this.resultText.textContent =
         state.outcome === 'victory' ? 'Gorran is down. He never healed.' : `Gorran still had ${state.npcHealthLeft} health. Rest more between rounds.`;
     }
+    this.voice.hidden = !!state.outcome || state.away;
     this.last = { ...state };
   }
 }

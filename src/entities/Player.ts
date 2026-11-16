@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import type { GLTF } from 'three/addons/loaders/GLTFLoader.js';
 import type { Input } from '../core/Input';
 import type { FightEvent } from '../game/events';
-import { tuning } from '../game/tuning';
+import { inArena, tuning } from '../game/tuning';
 import { Character } from './Character';
 import { angleTo, yawTo } from './steering';
 
@@ -205,7 +205,7 @@ export class Player {
   }
 
   private spend(seconds: number): void {
-    this.stamina = Math.max(0, this.stamina - seconds);
+    this.stamina = Math.max(0, this.stamina - seconds / (inArena(this.position) ? 1 : tuning.roamStamina));
     if (this.stamina === 0) this.spent = true;
   }
 

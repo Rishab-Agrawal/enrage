@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { mergeGeometries, mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 import { ARENA_RADIUS } from '../game/tuning';
 import { createSeededRandom } from '../utils/random';
 import { fbm, noise2 } from './noise';
@@ -13,10 +13,10 @@ const SUNLIT = new THREE.Color('#ffe2b8');
 
 /** Side of the square the map shows, m: the island and its shallows. */
 export const MAP_SIZE = 840;
-/** Something solid to walk round, a trunk or a boulder: a circle on the ground. */
-export type Obstacle = { x: number; z: number; radius: number };
-/** What the shaders read of the land, and the two bodies that part the grass: it grows round the wanderer. */
-type Uniforms = Record<'uTime' | 'uLand' | 'uHeight' | 'uWanderer' | 'uOther', { value: unknown }>;
+/** Something solid to walk round, a tree's trunk or a boulder: a circle on the ground. */
+export type Obstacle = { x: number; z: number; radius: number; trunk: boolean };
+/** What the shaders read of the land, the two bodies that part the grass, and the middle of the grass patch. */
+type Uniforms = Record<'uTime' | 'uLand' | 'uHeight' | 'uWanderer' | 'uOther' | 'uPatch', { value: unknown }>;
 
 /** The terrain grid as a texture, a texel to a vertex. */
 function gridTexture(data: Float32Array, format: THREE.PixelFormat): THREE.DataTexture {
@@ -33,35 +33,39 @@ export class World {
   readonly obstacles: Obstacle[] = [];
   private readonly time = { value: 0 };
   private readonly motes: THREE.Points;
-  /** Each terrain vertex's colour and, as alpha, how thickly grass grows there. */
-  private readonly land: Float32Array;
+  private readonly patch = new THREE.Vector3();
+  /** Each terrain vertex's colour, as the map paints it. */
+  private readonly ground: Float32Array;
 
-  /** The grass and the pollen keep to `wanderer`. */
+  /** The pollen keeps to `wanderer`, who parts the grass, as `other` does. */
   constructor(
     private readonly wanderer: THREE.Vector3,
     other: THREE.Vector3,
   ) {
     const rng = createSeededRandom(7);
-    const terrain = createTerrain();
-    this.land = terrain.geometry.getAttribute('color').array as Float32Array;
+    const { terrain, land } = createTerrain();
+    this.ground = terrain.geometry.getAttribute('color').array as Float32Array;
     const uniforms: Uniforms = {
       uTime: this.time,
-      uLand: { value: gridTexture(this.land, THREE.RGBAFormat) },
+      uLand: { value: gridTexture(land, THREE.RGBAFormat) },
       uHeight: { value: gridTexture(heights, THREE.RedFormat) },
       uWanderer: { value: wanderer },
       uOther: { value: other },
+      uPatch: { value: this.patch },
     };
     this.group.add(createSky(), createMountains(), ...createClouds(rng), terrain, createWater(uniforms));
-    this.group.add(createGrass(rng, uniforms), createFlowers(rng, this.land), ...createRocks(rng, this.obstacles));
-    this.group.add(...createTrees(rng, this.land, this.obstacles));
+    this.group.add(createGrass(rng, uniforms), createFlowers(rng, land), ...createRocks(rng, this.obstacles));
+    this.group.add(...createTrees(rng, land, this.obstacles));
     this.motes = createMotes(rng);
     this.group.add(this.motes);
   }
 
-  update(elapsed: number): void {
+  /** The grass grows in front of `camera`: the patch reaches from just behind it to as far as blades show. */
+  update(elapsed: number, camera: THREE.Camera): void {
     this.time.value = elapsed;
     this.motes.rotation.y = elapsed * 0.01;
     this.motes.position.copy(this.wanderer).y += Math.sin(elapsed * 0.3) * 0.3;
+    camera.getWorldDirection(this.patch).setY(0).setLength(PATCH / 2 - 2).add(camera.position);
   }
 
   /** Paints the island from above: the land in its own colours, shaded by its slopes, in a sea deepening off the shore. */
@@ -76,7 +80,7 @@ export class World {
       const depth = SEA_LEVEL - heights[i];
       if (depth > 0) color.copy(SHALLOWS).lerp(DEEP, THREE.MathUtils.smoothstep(depth, 0, 8));
       // Lit from the north-west, as maps are.
-      else color.fromArray(this.land, i * 4).multiplyScalar(THREE.MathUtils.clamp(1 + (heights[i] - heights[i + CELLS + 2]) * 0.12, 0.6, 1.4));
+      else color.fromArray(this.ground, i * 3).multiplyScalar(THREE.MathUtils.clamp(1 + (heights[i] - heights[i + CELLS + 2]) * 0.12, 0.6, 1.4));
       image.data.set([...color.convertLinearToSRGB().toArray().map((c) => c * 255), 255], p * 4);
     }
     ctx.putImageData(image, 0, 0);
@@ -241,22 +245,25 @@ const ROCK = new THREE.Color('#c4bcaa');
 const SLATE = new THREE.Color('#8f8f9c');
 const SHALLOWS = new THREE.Color('#7fd3c4');
 const DEEP = new THREE.Color('#2c6c9c');
+const EARTH = new THREE.Color('#8c7a4e');
 const far = new THREE.Color();
 const rock = new THREE.Color();
 const slope = new THREE.Vector2();
 
-/** How wooded the land is at (x, z), 0 to 1: the woods keep off the hilltop. */
+/** How wooded the land is at (x, z), 0 to 1: groves with open country between them, and none on the hilltop. */
 function woods(x: number, z: number): number {
-  return THREE.MathUtils.smoothstep(fbm(x * 0.009 + 50, z * 0.009 - 30), 0.5, 0.58) * THREE.MathUtils.smoothstep(Math.hypot(x, z), 50, 90);
+  return THREE.MathUtils.smoothstep(fbm(x * 0.007 + 50, z * 0.007 - 30), 0.58, 0.68) * THREE.MathUtils.smoothstep(Math.hypot(x, z), 50, 90);
 }
 
 /**
- * The land's colour at (x, z), into `target`: the grass takes it too, so the meadow's green is its grass. Returns how
- * thickly grass grows there, 0 to 1: thinly under trees, and not at all on sand, rock or the beds of the waters.
+ * The land at (x, z): its grass's colour into `grass`, and the ground's into `ground`, which is the grass's where
+ * grass covers it, so the meadow's green is its grass. Returns how thickly grass grows there, 0 to 1: thinly under
+ * trees, and not at all on sand, rock or the beds of the waters.
  */
-function groundColor(x: number, z: number, target: THREE.Color): number {
+function groundColor(x: number, z: number, grass: THREE.Color, ground: THREE.Color): number {
   const height = groundHeight(x, z);
-  target.copy(MEADOW).lerp(LUSH, fbm(x * 0.08 + 9, z * 0.08) * 0.8);
+  grass.copy(MEADOW).lerp(LUSH, fbm(x * 0.08 + 9, z * 0.08) * 0.8);
+  ground.copy(grass);
   const distance = THREE.MathUtils.smoothstep(Math.hypot(x, z), 25, 90);
   if (distance === 0) return 1;
   // Beyond the hilltop: a patchwork of sage, gold and ochre, lighter on the crests.
@@ -264,35 +271,44 @@ function groundColor(x: number, z: number, target: THREE.Color): number {
   far.lerp(OCHRE, THREE.MathUtils.smoothstep(fbm(x * 0.03 + 4, z * 0.03), 0.55, 0.75) * 0.6);
   far.multiplyScalar(0.8 + 0.3 * THREE.MathUtils.smoothstep(height, -12, 22));
   const wooded = woods(x, z) * 0.7;
-  // Crags: steep ground is bare, and the heights more readily so.
-  const bare = THREE.MathUtils.smoothstep(groundSlope(x, z, slope).length() + height * 0.004 + fbm(x * 0.1, z * 0.1) * 0.2, 0.55, 0.8);
+  // Crags: steep ground is bare, and the heights more readily so, along a ragged edge.
+  const bare = THREE.MathUtils.smoothstep(groundSlope(x, z, slope).length() + height * 0.004 + fbm(x * 0.07, z * 0.07) * 0.45, 0.62, 1.02);
   const sandy = 1 - THREE.MathUtils.smoothstep(height - SEA_LEVEL + fbm(x * 0.05, z * 0.05), 0.9, 2.2);
-  far.lerp(WOODS, wooded);
-  target.lerp(far, distance).lerp(rock.copy(ROCK).lerp(SLATE, fbm(x * 0.04 + 70, z * 0.04)), bare).lerp(SAND, sandy);
-  // Grass grows well or not at all: a few stray blades on bare ground look like stubble.
-  return THREE.MathUtils.smoothstep((1 - bare) * (1 - sandy), 0.35, 0.7) * (1 - wooded);
+  grass.lerp(far.lerp(WOODS, wooded), distance);
+  // Where the grass gives out, tufts of it stand in dry earth before the rock is bare.
+  rock.copy(ROCK).lerp(SLATE, fbm(x * 0.04 + 70, z * 0.04));
+  ground.copy(grass).lerp(rock, bare).lerp(EARTH, bare * (1 - bare) * 2.6).lerp(SAND, sandy);
+  return (1 - bare) * (1 - sandy) * (1 - wooded);
 }
 
-function createTerrain(): THREE.Mesh {
+/** The terrain, and `land`: each vertex's grass colour and, as alpha, how thickly it grows there. */
+function createTerrain(): { terrain: THREE.Mesh; land: Float32Array } {
   const geometry = new THREE.PlaneGeometry(WORLD_SIZE, WORLD_SIZE, CELLS, CELLS);
   geometry.rotateX(-Math.PI / 2);
   const position = geometry.getAttribute('position');
-  const colors = new Float32Array(position.count * 4);
-  const color = new THREE.Color();
+  const colors = new Float32Array(position.count * 3);
+  const land = new Float32Array(position.count * 4);
+  const [grass, ground] = [new THREE.Color(), new THREE.Color()];
   for (let i = 0; i < position.count; i += 1) {
     position.setY(i, heights[i]);
-    colors[i * 4 + 3] = groundColor(position.getX(i), position.getZ(i), color);
-    color.toArray(colors, i * 4);
+    land[i * 4 + 3] = groundColor(position.getX(i), position.getZ(i), grass, ground);
+    grass.toArray(land, i * 4);
+    ground.toArray(colors, i * 3);
   }
-  geometry.setAttribute('color', new THREE.BufferAttribute(colors, 4));
+  geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
   geometry.computeVertexNormals();
   const terrain = new THREE.Mesh(geometry, new THREE.MeshLambertMaterial({ vertexColors: true }));
   terrain.receiveShadow = true;
-  return terrain;
+  return { terrain, land };
 }
 
-/** Side of the grass patch, m: it tiles the land, and each blade stands in the tile that puts it nearest the wanderer. */
-const PATCH = 52;
+/**
+ * Side of the grass patch, m. It tiles the land, and each blade stands in the tile that puts it nearest the patch's
+ * middle, ahead of the camera: blades are only drawn where they can be seen.
+ */
+const PATCH = 34;
+/** Blades thin out from the first of these distances from the camera, m, to none at the second. */
+const GRASS_REACH = [20, 30];
 
 function createGrass(rng: () => number, uniforms: Uniforms): THREE.InstancedMesh {
   // One blade: a thin strip narrowing to a blunt tip, shaded at the root and sunlit at the tip. Its normals
@@ -308,9 +324,10 @@ function createGrass(rng: () => number, uniforms: Uniforms): THREE.InstancedMesh
     Object.assign(shader.uniforms, uniforms);
     shader.vertexShader = /* glsl */ `
       uniform float uTime;
-      uniform vec3 uWanderer, uOther;
+      uniform vec3 uWanderer, uOther, uPatch;
       uniform sampler2D uLand, uHeight;
       ${LAND_UV}
+      float hash(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
       // Feet part the grass: tips lean away from a fighter standing in it.
       vec3 bend(vec3 world, vec3 bender, float push) {
         vec3 away = world - bender; away.y = 0.0;
@@ -322,12 +339,18 @@ function createGrass(rng: () => number, uniforms: Uniforms): THREE.InstancedMesh
         '#include <project_vertex>',
         /* glsl */ `
       vec2 root = instanceMatrix[3].xz;
-      vec2 spot = uWanderer.xz + mod(root - uWanderer.xz + ${(PATCH / 2).toFixed(1)}, ${PATCH.toFixed(1)}) - ${(PATCH / 2).toFixed(1)};
+      vec2 spot = uPatch.xz + mod(root - uPatch.xz + ${(PATCH / 2).toFixed(1)}, ${PATCH.toFixed(1)}) - ${(PATCH / 2).toFixed(1)};
       vec4 land = texture2D(uLand, landUv(spot));
-      // Blades thin out toward the patch's edge, where the tiles meet, and where the land grows less grass.
-      float cover = land.a * (1.0 - smoothstep(0.55, 1.0, distance(spot, uWanderer.xz) / ${(PATCH / 2).toFixed(1)}));
-      float grows = step(fract(sin(dot(root, vec2(12.9898, 78.233))) * 43758.5453), cover);
-      vec4 world = instanceMatrix * vec4(transformed * grows, 1.0);
+      // Far blades are fewer and broader, covering as much; they thin to none with distance, and at the patch's
+      // edge, where the tiles meet.
+      float away = distance(spot, cameraPosition.xz);
+      vec2 edge = abs(spot - uPatch.xz) / ${(PATCH / 2).toFixed(1)};
+      float sparse = mix(1.0, 0.2, smoothstep(4.0, 16.0, away));
+      float shown = sparse * (1.0 - smoothstep(${GRASS_REACH[0].toFixed(1)}, ${GRASS_REACH[1].toFixed(1)}, away)) * (1.0 - smoothstep(0.85, 1.0, max(edge.x, edge.y)));
+      // Where the land grows less grass, it stands in tufts, never as stray blades.
+      float tuft = (hash(floor(spot * 1.3)) + hash(floor(spot * 3.1 + 5.0))) * 0.4 + hash(root + 7.0) * 0.2;
+      float grows = step(hash(root), shown) * step(tuft, smoothstep(0.1, 0.75, land.a));
+      vec4 world = instanceMatrix * vec4(transformed * vec3(grows * inversesqrt(sparse), grows, grows), 1.0);
       world.xz += spot - root;
       world.y += texture2D(uHeight, landUv(spot)).r;
       vColor.rgb *= land.rgb;
@@ -345,7 +368,7 @@ function createGrass(rng: () => number, uniforms: Uniforms): THREE.InstancedMesh
     shader.fragmentShader = `#undef DOUBLE_SIDED\n${shader.fragmentShader}`;
   };
 
-  const count = 1100000;
+  const count = 380000;
   const grass = new THREE.InstancedMesh(blade, material, count);
   const matrix = new THREE.Matrix4();
   const quaternion = new THREE.Quaternion();
@@ -359,7 +382,7 @@ function createGrass(rng: () => number, uniforms: Uniforms): THREE.InstancedMesh
     const height = 0.06 + fbm(spot.x * 0.25, spot.z * 0.25) * 0.07 + rng() * 0.03;
     euler.set((rng() - 0.5) * 0.7, rng() * Math.PI * 2, (rng() - 0.5) * 0.7);
     quaternion.setFromEuler(euler);
-    scale.set(0.7 + rng() * 0.6, height, 1);
+    scale.set(0.85 + rng() * 0.7, height, 1);
     grass.setMatrixAt(placed, matrix.compose(spot, quaternion, scale));
     grass.setColorAt(placed, tint.setScalar(0.88 + rng() * 0.24));
   }
@@ -407,7 +430,7 @@ function createFlowers(rng: () => number, land: Float32Array): THREE.Points {
     const x = (rng() - 0.5) * MAP_SIZE;
     const z = (rng() - 0.5) * MAP_SIZE;
     // Drifts: flowers gather in the grass where the noise rises, each drift mostly one kind.
-    if (rng() > THREE.MathUtils.smoothstep(fbm(x * 0.09 + 31, z * 0.09), 0.5, 0.7) * coverAt(land, x, z)) continue;
+    if (rng() > THREE.MathUtils.smoothstep(fbm(x * 0.09 + 31, z * 0.09), 0.5, 0.7) * THREE.MathUtils.smoothstep(coverAt(land, x, z), 0.5, 0.8)) continue;
     positions.set([x, groundHeight(x, z) + 0.08 + rng() * 0.07, z], placed * 3);
     palette[Math.floor(fbm(x * 0.05 - 17, z * 0.05) * 2 * palette.length + rng() * 1.5) % palette.length].toArray(colors, placed * 3);
     placed += 1;
@@ -457,7 +480,7 @@ function createRocks(rng: () => number, obstacles: Obstacle[]): THREE.Mesh[] {
     rock.castShadow = rock.receiveShadow = true;
     addOutline(rock, 0.03);
     rocks.push(rock);
-    obstacles.push({ x, z, radius: size });
+    obstacles.push({ x, z, radius: size, trunk: false });
   };
   const ring = (r: number, angle: number, size: number) => place(Math.cos(angle) * r, Math.sin(angle) * r, size);
   for (let i = 0; i < 10; i += 1) ring(ARENA_RADIUS + 1.6 + rng() * 2.2, (i / 10) * Math.PI * 2 + rng() * 0.4, 0.55 + rng() * 0.6);
@@ -470,50 +493,90 @@ function createRocks(rng: () => number, obstacles: Obstacle[]): THREE.Mesh[] {
   return rocks;
 }
 
-/** A tree, 1 m tall before its instance scales it: a tapering trunk under leafy clumps, or under a fir's tiers. */
+/**
+ * A tree, 1 m tall before its instance scales it: a trunk flaring at the root and forking into boughs, under billows of
+ * leaves, or a fir's ragged tiers.
+ */
 function treeGeometry(rng: () => number, fir: boolean): THREE.BufferGeometry {
-  const [color, lit] = [new THREE.Color(), new THREE.Color()];
-  // Leaves are lit from above and shaded beneath.
-  const paint = (geometry: THREE.BufferGeometry, low: string, high: string) => {
-    const normal = geometry.getAttribute('normal');
-    const colors = new Float32Array(normal.count * 3);
-    for (let i = 0; i < normal.count; i += 1) color.set(low).lerp(lit.set(high), normal.getY(i) * 0.5 + 0.5).toArray(colors, i * 3);
-    return geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+  const [color, lit, v] = [new THREE.Color(), new THREE.Color(), new THREE.Vector3()];
+  // Each part is lit from above and shaded beneath, dappled, and takes `shape` to its vertices.
+  const part = (geometry: THREE.BufferGeometry, low: string, high: string, shape: (v: THREE.Vector3) => void = () => {}) => {
+    geometry.deleteAttribute('uv');
+    const [position, normal] = [geometry.getAttribute('position'), geometry.getAttribute('normal')];
+    const colors = new Float32Array(position.count * 3);
+    for (let i = 0; i < position.count; i += 1) {
+      shape(v.fromBufferAttribute(position, i));
+      position.setXYZ(i, v.x, v.y, v.z);
+      const dapple = fbm(v.x * 9 + 5, v.z * 9 + v.y * 7, 2) - 0.5;
+      color.set(low).lerp(lit.set(high), THREE.MathUtils.clamp(normal.getY(i) * 0.5 + 0.5 + dapple * 0.7, 0, 1)).toArray(colors, i * 3);
+    }
+    geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    return geometry.index ? geometry.toNonIndexed() : geometry;
   };
-  const trunk = paint(new THREE.CylinderGeometry(0.03, 0.055, 0.5, 6).translate(0, 0.25, 0).toNonIndexed(), '#6b4a33', '#6b4a33');
-  const crown: THREE.BufferGeometry[] = [];
+  const bough = (height: number, lean: number, turn: number) =>
+    part(new THREE.CylinderGeometry(0.012, 0.022, 0.26, 5).translate(0, 0.13, 0).rotateZ(lean).rotateY(turn).translate(0, height, 0), '#4f3524', '#7a5639');
+  const parts: THREE.BufferGeometry[] = [];
   if (fir) {
-    for (let tier = 0; tier < 4; tier += 1) {
-      crown.push(paint(new THREE.ConeGeometry(0.3 - tier * 0.06, 0.34, 8).translate(0, 0.34 + tier * 0.19, 0).toNonIndexed(), '#24452f', '#4f7d48'));
+    parts.push(part(new THREE.CylinderGeometry(0.018, 0.045, 0.6, 7).translate(0, 0.3, 0), '#4a3323', '#6f4e36'));
+    for (let tier = 0; tier < 6; tier += 1) {
+      const [radius, base] = [0.3 - tier * 0.043, 0.2 + tier * 0.135];
+      // A skirt of drooping, uneven boughs: every other point of the rim hangs out and down.
+      const skirt = new THREE.ConeGeometry(radius, 0.3, 14).translate(0, base + 0.15, 0);
+      parts.push(
+        part(skirt, '#1f3d2a', '#55834a', (p) => {
+          if (p.y > base + 0.01) return;
+          const out = Math.round((Math.atan2(p.z, p.x) / Math.PI) * 7) % 2 ? 1.18 : 0.78;
+          p.set(p.x * out, p.y - (out - 0.9) * 0.12, p.z * out);
+        }),
+      );
     }
   } else {
-    for (let clump = 0; clump < 5; clump += 1) {
-      // One clump on top, the rest round it.
-      const [out, angle, radius] = [clump && 0.2 + rng() * 0.08, clump * 1.6 + rng(), clump ? 0.2 + rng() * 0.07 : 0.3];
-      const leaves = new THREE.IcosahedronGeometry(radius, 1).scale(1, 0.8, 1);
-      crown.push(paint(leaves.translate(Math.cos(angle) * out, (clump ? 0.55 : 0.72) + rng() * 0.08, Math.sin(angle) * out), '#3c6a2a', '#9cbb4f'));
+    parts.push(
+      part(new THREE.CylinderGeometry(0.03, 0.05, 0.5, 8, 4).translate(0, 0.25, 0), '#4f3524', '#7a5639', (p) => {
+        // Roots flare, and the trunk leans a little as it climbs.
+        const flare = 1 + 0.9 * (1 - THREE.MathUtils.smoothstep(p.y, 0, 0.14));
+        p.set(p.x * flare + p.y * p.y * 0.12, p.y, p.z * flare);
+      }),
+    );
+    for (let i = 0; i < 3; i += 1) parts.push(bough(0.4 + i * 0.03, 0.7 + rng() * 0.3, i * 2.1 + rng()));
+    for (let billow = 0; billow < 11; billow += 1) {
+      // One big billow on top, smaller ones crowding round and under it.
+      const [out, angle, radius] = [billow && 0.14 + rng() * 0.14, billow * 2.4 + rng() * 0.5, billow ? 0.1 + rng() * 0.09 : 0.25];
+      const centre = new THREE.Vector3(Math.cos(angle) * out, (billow ? 0.5 : 0.74) + rng() * 0.2, Math.sin(angle) * out);
+      const seed = rng() * 50;
+      parts.push(
+        part(new THREE.IcosahedronGeometry(radius, billow ? 2 : 3), '#32602a', '#a6c455', (p) => {
+          // Softly lumpy, flatter beneath than above.
+          p.multiplyScalar(0.88 + fbm(p.x * 6 + seed, p.z * 6 + p.y * 5, 2) * 0.26);
+          p.y *= p.y < 0 ? 0.6 : 0.9;
+          p.add(centre);
+        }),
+      );
     }
   }
-  return mergeGeometries([trunk, ...crown]);
+  const tree = mergeVertices(mergeGeometries(parts));
+  tree.computeVertexNormals();
+  return tree;
 }
 
-/** Broadleaf woods on the low ground, firs on the heights, and lone trees between; none on the hilltop. */
+/** Groves of broadleaves on the low ground and of firs on the heights, open country with the odd lone tree between them; none on the hilltop. */
 function createTrees(rng: () => number, land: Float32Array, obstacles: Obstacle[]): THREE.InstancedMesh[] {
   // Two broadleaves and a fir.
   const kinds = [false, false, true].map((fir) => ({ geometry: treeGeometry(rng, fir), spots: [] as THREE.Matrix4[] }));
   const trees: Obstacle[] = [];
   const quaternion = new THREE.Quaternion();
   const up = new THREE.Vector3(0, 1, 0);
-  for (let tries = 0; tries < 14000; tries += 1) {
+  for (let tries = 0; tries < 40000; tries += 1) {
     const [x, z] = [(rng() - 0.5) * MAP_SIZE, (rng() - 0.5) * MAP_SIZE];
-    const wooded = woods(x, z);
-    // Trees stand where grass can, clear of each other.
-    if (Math.hypot(x, z) < 45 || coverAt(land, x, z) < 0.25 || rng() > 0.02 + wooded || trees.some((tree) => Math.hypot(tree.x - x, tree.z - z) < 4.5)) continue;
+    // Trees stand where grass can, clear of each other, thickest in the heart of a grove.
+    if (Math.hypot(x, z) < 45 || coverAt(land, x, z) < 0.2 || rng() > 0.0008 + woods(x, z) ** 2 || trees.some((tree) => Math.hypot(tree.x - x, tree.z - z) < 4)) continue;
     const height = groundHeight(x, z);
     const fir = rng() < THREE.MathUtils.smoothstep(height, 6, 16);
-    const size = (fir ? 9 : 7) * (0.75 + rng() * 0.6);
-    kinds[fir ? 2 : Math.floor(rng() * 2)].spots.push(new THREE.Matrix4().compose(new THREE.Vector3(x, height - 0.1, z), quaternion.setFromAxisAngle(up, rng() * Math.PI * 2), new THREE.Vector3(size, size, size)));
-    trees.push({ x, z, radius: size * 0.05 });
+    const size = (fir ? 10 : 8) * (0.75 + rng() * 0.6);
+    kinds[fir ? 2 : Math.floor(rng() * 2)].spots.push(
+      new THREE.Matrix4().compose(new THREE.Vector3(x, height - 0.1, z), quaternion.setFromAxisAngle(up, rng() * Math.PI * 2), new THREE.Vector3(size, size, size)),
+    );
+    trees.push({ x, z, radius: size * 0.05, trunk: true });
   }
   obstacles.push(...trees);
   const material = new THREE.MeshToonMaterial({ vertexColors: true, gradientMap: toonGradient });
