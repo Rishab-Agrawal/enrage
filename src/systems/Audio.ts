@@ -22,7 +22,6 @@ const BIRDS = takes('bird', 4);
 
 /** Web Audio: recorded music, ambience, voices and effects. */
 export class Audio {
-  // Browsers hold a context made before the first click, tap or key press suspended; that press resumes it, a tap as it lifts.
   private readonly context = new AudioContext();
   private readonly master = this.context.createGain();
   private readonly tracks = new Map<Mood, GainNode>();
@@ -33,13 +32,16 @@ export class Audio {
 
   constructor() {
     const ctx = this.context;
+    // Browsers hold a context suspended until a click, tap or key press, and phones suspend or interrupt it again
+    // (a call, the screen locking, the app in the background): every press, and coming back to the page, resumes it.
     const resume = () => {
-      void ctx.resume();
-      window.removeEventListener('pointerup', resume);
-      window.removeEventListener('keydown', resume);
+      if (ctx.state !== 'running') void ctx.resume();
     };
-    window.addEventListener('pointerup', resume);
-    window.addEventListener('keydown', resume);
+    for (const type of ['pointerup', 'touchend', 'keydown']) window.addEventListener(type, resume);
+    document.addEventListener('visibilitychange', resume);
+    // iPhones mute web audio on the silent switch unless it plays as a session; play-and-record also takes the mic, through the speaker.
+    const session = (navigator as { audioSession?: { type: string } }).audioSession;
+    if (session) session.type = 'play-and-record';
 
     this.master.gain.value = 0.8;
     this.master.connect(ctx.destination);

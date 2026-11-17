@@ -11,14 +11,17 @@ export function createRenderer(canvas: HTMLCanvasElement): THREE.WebGLRenderer {
   return renderer;
 }
 
-/** Canvas pixels per CSS pixel, at most: the frame is bound by how many pixels the grass fills, and MSAA already smooths its edges. */
-const MAX_PIXEL_RATIO = 1;
+/**
+ * Canvas pixels per frame, at most, a 1080p screen's: the frame is bound by how many pixels the grass fills, and MSAA already
+ * smooths its edges. A phone's small, dense screen gets its sharpness within that; a big one never drops below a pixel per CSS pixel.
+ */
+const PIXEL_BUDGET = 1920 * 1080;
 
 export function resizeRenderer(renderer: THREE.WebGLRenderer, camera: THREE.PerspectiveCamera): void {
   const canvas = renderer.domElement;
   const width = Math.max(1, canvas.clientWidth);
   const height = Math.max(1, canvas.clientHeight);
-  const dpr = Math.min(window.devicePixelRatio || 1, MAX_PIXEL_RATIO);
+  const dpr = Math.min(window.devicePixelRatio || 1, Math.max(1, Math.sqrt(PIXEL_BUDGET / (width * height))));
   if (canvas.width === Math.floor(width * dpr) && canvas.height === Math.floor(height * dpr)) return;
   renderer.setPixelRatio(dpr);
   renderer.setSize(width, height, false);
