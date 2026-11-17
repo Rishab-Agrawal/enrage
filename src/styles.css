@@ -7,6 +7,8 @@
   --npc: linear-gradient(270deg, #d8402a, #ffb257);
   --calm: #8fe6d5;
   --rage: #ff5a36;
+  /* The sky the title shot opens on. */
+  --sky: linear-gradient(#4a83c8 45%, #6393cf);
   color: var(--paper);
   font-family: 'Zen Maru Gothic', 'Segoe UI', sans-serif;
   font-synthesis: none;
@@ -551,7 +553,7 @@ kbd {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  background: linear-gradient(#4a83c8 45%, #6393cf);
+  background: var(--sky);
   transition: opacity 0.6s, visibility 0.6s;
 }
 
@@ -693,24 +695,24 @@ kbd {
   max-width: 22em;
   margin-top: 36px;
   text-align: center;
-  text-shadow: none;
 }
 
 .turn svg {
   width: 84px;
   fill: none;
-  stroke: var(--gold);
+  stroke: var(--rage);
   stroke-width: 3.5;
+  filter: drop-shadow(0 2px 0 var(--ink));
 }
 
 .turn circle {
-  fill: var(--gold);
+  fill: var(--rage);
   stroke: none;
 }
 
 .turn h2 {
   margin: 0;
-  color: var(--gold);
+  color: var(--rage);
   font-size: 1.5rem;
   font-weight: 700;
   text-wrap: balance;
@@ -719,14 +721,14 @@ kbd {
 .turn aside {
   margin-top: 12px;
   padding: 14px 18px;
-  border: 2px dashed var(--gold);
+  border: 2px dashed var(--rage);
   border-radius: 12px;
   text-align: left;
 }
 
 .turn h3 {
   margin: 0 0 4px;
-  color: var(--gold);
+  color: var(--rage);
   font-size: 1.1rem;
   font-weight: 900;
 }
@@ -759,7 +761,6 @@ kbd {
   width: 60px;
   height: 60px;
   padding: 14px;
-  border: 2px solid var(--gold);
   border-radius: 50%;
   background: var(--frame);
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
@@ -863,12 +864,16 @@ kbd {
   #app[data-screen='fight'] #voice svg {
     pointer-events: auto;
   }
+
+  #voice circle:not(.timer) {
+    stroke: none;
+  }
 }
 
 @media (hover: none) and (pointer: coarse) and (orientation: portrait) {
   #app[data-screen] #title {
     z-index: 1;
-    background: linear-gradient(#2b3550, #1b1f30);
+    background: linear-gradient(rgba(25, 20, 40, 0.3), transparent 45%), var(--sky);
     opacity: 1;
     visibility: visible;
     pointer-events: auto;

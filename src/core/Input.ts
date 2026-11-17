@@ -4,14 +4,14 @@ type Intent = 'strike' | 'dodge' | 'rematch' | 'speak' | 'pause' | 'map';
 
 /** Phones and tablets, played on the on-screen pad instead of a keyboard and mouse. */
 const TOUCH = matchMedia('(hover: none) and (pointer: coarse)').matches;
-/** The stick's dead middle, as a share of its reach; and how far a push must lean toward an axis to hold it: eight ways, like WASD. */
-const DEAD = 0.25;
-const LEAN = Math.sin(Math.PI / 8);
+/** How far the stick must be pushed, as a share of its reach, up or down to walk, and sideways to start turning. */
+const DEAD = 0.3;
 
 /**
  * Keyboard + mouse, or touch, as game intents. Presses are latched until consumed so none are lost between frames.
  * A click captures the mouse (pointer lock) for looking; Esc releases it, natively. Losing it, or focus, asks for a pause.
- * On touch, a tap on the game captures it instead, a drag there looks, and the pad's buttons hold keys.
+ * On touch, a tap on the game captures it instead, a drag there looks, the pad's buttons hold keys, and the stick walks
+ * her forward or back and turns her: a thumb can steer her without a second finger dragging.
  */
 export class Input {
   private readonly keys = new Set<string>();
@@ -27,8 +27,9 @@ export class Input {
   private steering = -1;
   private looking = -1;
   private readonly last = new THREE.Vector2();
-  /** The stick's push: x and y each -1, 0 or 1, like the keys. */
-  private readonly push = new THREE.Vector2();
+  /** The stick's push up or down, -1, 0 or 1 like the keys, and sideways, -1..1, rightward positive. */
+  private walk = 0;
+  private turn = 0;
   /** While set, moves, strikes, dodges and mouse travel are dropped, not saved for later; the mic and Esc still work. */
   still = false;
 
@@ -84,10 +85,12 @@ export class Input {
     this.fingers.delete(event.pointerId);
     if (event.pointerId === this.steering) {
       this.steering = -1;
-      this.push.set(0, 0);
+      this.walk = this.turn = 0;
       this.knob.style.translate = '';
     }
-    // A tap on the game captures it: on lifting, as a touch only lets a page go fullscreen then.
+    // The browser's bars take a big share of a phone held sideways: any tap goes fullscreen, as only a lifting touch may.
+    // The mic's permission prompt can drop it, so each tap tries again. iPhones can't go fullscreen.
+    if (!document.fullscreenElement && event.type === 'pointerup') void document.documentElement.requestFullscreen?.().catch(() => {});
     if (event.pointerId === this.looking) this.looking = -1;
     else if (event.target === this.surface && !this.captured && event.type === 'pointerup') void this.capture();
   };
@@ -121,8 +124,6 @@ export class Input {
 
   /** Captures the mouse, or on touch the screen: only from a click, tap or key press, as browsers require. */
   async capture(): Promise<void> {
-    // On a phone the browser's bars take a big share of the screen held sideways. iPhones can't go fullscreen.
-    if (TOUCH) void document.documentElement.requestFullscreen?.().catch(() => {});
     await this.beforeCapture().catch(() => {});
     if (TOUCH) return void (this.engaged = true);
     // Raw movement: Chrome's default lock recentres the cursor, and fast travel then spikes or stalls at the window's
@@ -140,11 +141,11 @@ export class Input {
     else document.exitPointerLock();
   }
 
-  /** WASD/arrows, or the stick, as x (right) and y (forward), each -1, 0 or 1. */
+  /** WASD/arrows, or the stick, as x (right) and y (forward), each -1, 0 or 1: the stick only walks forward or back. */
   movement(target: THREE.Vector2): THREE.Vector2 {
     if (this.still) return target.set(0, 0);
     const held = (a: string, b: string) => (this.keys.has(a) || this.keys.has(b) ? 1 : 0);
-    return target.set(held('KeyD', 'ArrowRight') - held('KeyA', 'ArrowLeft'), held('KeyW', 'ArrowUp') - held('KeyS', 'ArrowDown')).add(this.push);
+    return target.set(held('KeyD', 'ArrowRight') - held('KeyA', 'ArrowLeft'), held('KeyW', 'ArrowUp') - held('KeyS', 'ArrowDown') + this.walk);
   }
 
   /** Horizontal mouse travel since the last call, px, rightward positive. */
@@ -159,6 +160,11 @@ export class Input {
     const tilt = this.tilt;
     this.tilt = 0;
     return tilt;
+  }
+
+  /** How hard the stick turns her, -1..1, rightward positive. */
+  get turning(): number {
+    return this.still ? 0 : this.turn;
   }
 
   get captured(): boolean {
@@ -207,10 +213,10 @@ export class Input {
   private steer({ clientX, clientY }: PointerEvent): void {
     const box = this.knob.parentElement!.getBoundingClientRect();
     const reach = box.width / 2;
-    const push = this.push.set(clientX - box.left - reach, clientY - box.top - reach).clampLength(0, reach);
+    const push = new THREE.Vector2(clientX - box.left - reach, clientY - box.top - reach).clampLength(0, reach);
     this.knob.style.translate = `${push.x}px ${push.y}px`;
-    const length = push.length();
-    if (length < DEAD * reach) push.set(0, 0);
-    else push.set(Math.abs(push.x) > LEAN * length ? Math.sign(push.x) : 0, Math.abs(push.y) > LEAN * length ? -Math.sign(push.y) : 0);
+    push.divideScalar(reach);
+    this.walk = Math.abs(push.y) > DEAD ? -Math.sign(push.y) : 0;
+    this.turn = Math.sign(push.x) * Math.max(0, (Math.abs(push.x) - DEAD) / (1 - DEAD));
   }
 }

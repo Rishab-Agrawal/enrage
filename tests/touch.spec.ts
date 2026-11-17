@@ -7,7 +7,7 @@ test.use({ ...devices['Pixel 7'], viewport: { width: 839, height: 412 } });
 const read = (page: Page) => page.evaluate(() => window.__THREE_GAME_DIAGNOSTICS__!);
 const turn = (a: number, b: number) => Math.atan2(Math.sin(b - a), Math.cos(b - a));
 
-test('held sideways, a tap starts the fight; the stick walks her, a drag turns her, the fist strikes, and pause pauses', async ({ page }) => {
+test('held sideways, a tap starts the fight; the stick walks and turns her, a drag turns her, the fist strikes, and pause pauses', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(e.message));
   await page.goto('/');
@@ -39,12 +39,22 @@ test('held sideways, a tap starts the fight; the stick walks her, a drag turns h
   expect(Math.hypot(dx, dz)).toBeGreaterThan(1);
   expect(Math.abs(turn(before.player.yaw, Math.atan2(dx, dz)))).toBeLessThan(0.1);
 
-  // A drag rightward over the game turns her clockwise from above, as the mouse does.
+  // Pushed right, it turns her clockwise from above, on the spot: her feet pivot, but she doesn't walk.
+  await touch('touchStart', x, y);
+  await touch('touchMove', x + 60, y);
+  await page.waitForTimeout(500);
+  expect((await read(page)).player.speed).toBeLessThan(0.01);
+  await touch('touchEnd');
+  await page.waitForTimeout(200);
+  const turned = await read(page);
+  expect(turn(walked.player.yaw, turned.player.yaw)).toBeLessThan(-0.5);
+
+  // A drag rightward over the game turns her clockwise too, as the mouse does.
   await touch('touchStart', 420, 200);
   await touch('touchMove', 520, 200);
   await touch('touchEnd');
   await page.waitForTimeout(200);
-  expect(turn(walked.player.yaw, (await read(page)).player.yaw)).toBeCloseTo(-100 * tuning.mouseTurn, 2);
+  expect(turn(turned.player.yaw, (await read(page)).player.yaw)).toBeCloseTo(-100 * tuning.mouseTurn, 2);
 
   await page.touchscreen.tap(...(await centre('#pad .strike')));
   await expect.poll(async () => (await read(page)).player.state).toBe('strike');

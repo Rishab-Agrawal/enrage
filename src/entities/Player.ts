@@ -147,9 +147,9 @@ export class Player {
         this.position.addScaledVector(this.toNpc.normalize(), Math.min(gap, 3 * delta));
       }
     } else {
-      // The mouse turns her; W/S walk her along her facing and A/D step her sideways, on a diagonal no faster than
+      // The mouse, or the touch stick pushed sideways, turns her; W/S walk her along her facing and A/D step her sideways, on a diagonal no faster than
       // straight. Shift runs her forward only, so A/D then only steer her run a little, and slow it to STEERED_RUN.
-      this.character.aim -= look * tuning.mouseTurn;
+      this.character.aim -= look * tuning.mouseTurn + (input?.turning ?? 0) * tuning.stickTurn * delta;
       this.character.running = sprint;
       if (sprint) this.spend(delta);
       const speed = this.move.y < 0 ? tuning.playerBackSpeed : this.character.running ? tuning.playerSprintSpeed : tuning.playerWalkSpeed;
