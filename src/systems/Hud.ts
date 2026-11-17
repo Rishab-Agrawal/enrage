@@ -20,6 +20,8 @@ type HudState = {
   npcHealthLeft: number;
   /** She is out of the arena, where he can't hear her. */
   away: boolean;
+  /** His bar shows: she is in the arena, or he is enraged. */
+  rival: boolean;
   /** Where the two stand, m, and the yaw she faces. */
   wren: { x: number; z: number; yaw: number };
   gorran: { x: number; z: number };
@@ -49,6 +51,7 @@ export class Hud {
   private readonly npcFill = $('.npc .fill');
   private readonly npcChip = $('.npc .chip');
   private readonly npcPortrait = $<HTMLImageElement>('.npc img');
+  private readonly npcSection = $('.fighter.npc');
   private readonly subtitle = $('#subtitle');
   private readonly voice = $('#voice');
   private readonly goal = $('#voice p');
@@ -105,6 +108,7 @@ export class Hud {
     this.voiceTimer.style.strokeDashoffset = String(state.voiceLeft - 1);
     if (state.screen !== this.last.screen) this.app.dataset.screen = state.screen;
     if (state.regenerating !== this.last.regenerating) this.playerSection.classList.toggle('regen', state.regenerating);
+    if (state.rival !== this.last.rival) this.npcSection.classList.toggle('shown', state.rival);
     this.app.classList.toggle('hurt', state.player < 0.3 && !state.outcome);
     mark(this.mapGorran, state.gorran);
     mark(this.mapWren, state.wren);

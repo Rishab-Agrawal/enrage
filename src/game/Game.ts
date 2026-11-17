@@ -211,6 +211,7 @@ export class Game {
         outcome: this.outcomeTimer > 1.4 ? this.outcome : null,
         npcHealthLeft: Math.ceil(this.npc.health),
         away: this.away > 0,
+        rival: inArena(this.player.position) || this.npc.mood === 'enraged',
         wren: { x: this.player.position.x, z: this.player.position.z, yaw: this.player.yaw },
         gorran: { x: this.npc.position.x, z: this.npc.position.z },
       },

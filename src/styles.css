@@ -52,20 +52,18 @@ body,
   box-shadow: inset 0 0 90px rgba(200, 30, 20, 0.45);
 }
 
-/* Health bars: mirrored fighting-game pair under the top edge. */
+/* Health bars: hers at the bottom, always; his at the top, while she is in the arena or he is enraged. */
 #hud {
   position: absolute;
-  top: 22px;
-  left: 50%;
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 48px;
-  width: min(940px, calc(100vw - 48px));
-  transform: translateX(-50%);
+  inset: 0;
   pointer-events: none;
 }
 
 .fighter {
+  position: absolute;
+  left: 50%;
+  width: min(460px, calc(100vw - 48px));
+  translate: -50%;
   display: grid;
   grid-template-columns: auto 1fr;
   align-content: start;
@@ -73,8 +71,19 @@ body,
   column-gap: 12px;
 }
 
+.player {
+  bottom: 20px;
+}
+
 .npc {
+  top: 22px;
   grid-template-columns: 1fr auto;
+  opacity: 0;
+  transition: opacity 0.4s;
+}
+
+.npc.shown {
+  opacity: 1;
 }
 
 .fighter img {
@@ -207,7 +216,7 @@ body,
 /* The map: a thumbnail in the corner that opens over the middle of the screen. Its markers sit on the island by percentage. */
 #map {
   position: absolute;
-  top: 112px;
+  top: 22px;
   right: 24px;
   width: 132px;
   aspect-ratio: 1;
@@ -267,7 +276,7 @@ body,
 
 #subtitle {
   position: absolute;
-  top: 160px;
+  top: 110px;
   inset-inline: 16px;
   margin: 0;
   font-weight: 700;
@@ -289,7 +298,7 @@ body,
   top: 28%;
   inset-inline: 16px;
   margin: 0;
-  color: var(--gold);
+  color: var(--rage);
   font-size: clamp(1.6rem, 4vw, 2.4rem);
   font-weight: 900;
   letter-spacing: 0.12em;
@@ -311,11 +320,11 @@ body,
   }
 }
 
-/* The mood's goal over the push-to-talk mic. */
+/* The mood's goal over the push-to-talk mic, beside her health: over it, they would cover her. */
 #voice {
   position: absolute;
-  bottom: 20px;
-  inset-inline: 0;
+  bottom: 16px;
+  left: calc(50% + 254px);
   display: grid;
   justify-items: center;
   gap: 8px;
@@ -407,7 +416,7 @@ b.enraged {
 
 #controls {
   position: absolute;
-  bottom: 18px;
+  top: 22px;
   left: 22px;
   display: flex;
   gap: 18px;
@@ -495,7 +504,7 @@ kbd {
   }
 }
 
-/* How to play | Controls, split by a gold hairline. */
+/* How to play | Controls, side by side. */
 .help {
   display: grid;
   text-wrap: pretty;
@@ -507,10 +516,6 @@ kbd {
 
 .help section {
   padding: 0 40px;
-}
-
-.help section + section {
-  border-left: 1px solid rgba(233, 199, 123, 0.45);
 }
 
 .help h2 {
@@ -848,11 +853,15 @@ kbd {
     display: none;
   }
 
-  /* The HUD shrinks to fit between pause and the map; the mic joins the pad. */
-  #hud {
+  /* His bar fits between pause and the map, hers between the pad's buttons and the stick; the mic joins the pad. */
+  .npc {
     top: 10px;
-    gap: 20px;
-    width: calc(100vw - 232px);
+    width: min(460px, calc(100vw - 232px));
+  }
+
+  .player {
+    bottom: 16px;
+    width: min(460px, calc(100vw - 352px));
   }
 
   .fighter {
@@ -882,6 +891,11 @@ kbd {
   #subtitle {
     top: 74px;
     font-size: 1.1rem;
+  }
+
+  #voice {
+    bottom: 80px;
+    inset-inline: 0;
   }
 
   #voice svg {
