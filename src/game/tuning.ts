@@ -13,7 +13,7 @@ export const tuning = {
   /** Rad per pixel of mouse travel. */
   mouseTurn: 0.003,
   /** Rad/s the touch stick turns her at, pushed fully sideways. */
-  stickTurn: 2.5,
+  stickTurn: 0.6,
   strikeDamage: 15,
   npcMaxHealth: 400,
   npcRunSpeed: 5.5,

@@ -712,7 +712,6 @@ kbd {
 
 .turn h2 {
   margin: 0;
-  color: var(--rage);
   font-size: 1.5rem;
   font-weight: 700;
   text-wrap: balance;
@@ -728,7 +727,6 @@ kbd {
 
 .turn h3 {
   margin: 0 0 4px;
-  color: var(--rage);
   font-size: 1.1rem;
   font-weight: 900;
 }

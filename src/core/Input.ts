@@ -3,7 +3,8 @@ import * as THREE from 'three';
 type Intent = 'strike' | 'dodge' | 'rematch' | 'speak' | 'pause' | 'map';
 
 /** Phones and tablets, played on the on-screen pad instead of a keyboard and mouse. */
-const TOUCH = matchMedia('(hover: none) and (pointer: coarse)').matches;
+export const TOUCH = matchMedia('(hover: none) and (pointer: coarse)').matches;
+const UPRIGHT = matchMedia('(orientation: portrait)');
 /** How far the stick must be pushed, as a share of its reach, up or down to walk, and sideways to start turning. */
 const DEAD = 0.3;
 
@@ -90,7 +91,7 @@ export class Input {
     }
     // The browser's bars take a big share of a phone held sideways: any tap goes fullscreen, as only a lifting touch may.
     // The mic's permission prompt can drop it, so each tap tries again. iPhones can't go fullscreen.
-    if (!document.fullscreenElement && event.type === 'pointerup') void document.documentElement.requestFullscreen?.().catch(() => {});
+    if (!document.fullscreenElement && event.type === 'pointerup' && !UPRIGHT.matches) void document.documentElement.requestFullscreen?.().catch(() => {});
     if (event.pointerId === this.looking) this.looking = -1;
     else if (event.target === this.surface && !this.captured && event.type === 'pointerup') void this.capture();
   };
@@ -113,7 +114,7 @@ export class Input {
       window.addEventListener('pointercancel', this.onTouchUp, options);
       // A long press would open a menu, and the game is played sideways: turned upright, it pauses.
       window.addEventListener('contextmenu', (event) => event.preventDefault(), options);
-      matchMedia('(orientation: portrait)').addEventListener('change', (event) => event.matches && this.pause(), options);
+      UPRIGHT.addEventListener('change', (event) => event.matches && this.pause(), options);
     } else {
       document.addEventListener('pointerlockchange', this.onLockChange, options);
       surface.addEventListener('pointerdown', this.onPointerDown, options);

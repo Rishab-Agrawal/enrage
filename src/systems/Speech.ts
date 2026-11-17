@@ -1,3 +1,5 @@
+import { TOUCH } from '../core/Input';
+
 const DEEPGRAM = 'wss://api.deepgram.com/v1/listen?model=nova-3&smart_format=true&keyterm=Gorran&keyterm=Wren';
 /** How often the recorder hands audio to the socket, ms. */
 const CHUNK = 100;
@@ -14,9 +16,12 @@ export class Speech {
 
   constructor(private readonly onHeard: (text: string) => void) {}
 
-  /** The mic, asked for once and then kept open: a fresh one each turn would clip her first words while it warms up. */
+  /**
+   * The mic, asked for once and then kept open: a fresh one each turn would clip her first words while it warms up.
+   * On phones, echo cancellation would put Android in call mode, playing the game quietly at call volume, and duck it on iPhones.
+   */
   open(): Promise<MediaStream> {
-    return (this.mic ??= navigator.mediaDevices.getUserMedia({ audio: true }));
+    return (this.mic ??= navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: !TOUCH } }));
   }
 
   /** Follow the push-to-talk state: a turn starts when it goes true and ends when it goes false, in one `onHeard` ('' if nothing was heard). */

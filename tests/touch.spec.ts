@@ -47,7 +47,7 @@ test('held sideways, a tap starts the fight; the stick walks and turns her, a dr
   await touch('touchEnd');
   await page.waitForTimeout(200);
   const turned = await read(page);
-  expect(turn(walked.player.yaw, turned.player.yaw)).toBeLessThan(-0.5);
+  expect(turn(walked.player.yaw, turned.player.yaw)).toBeLessThan(-0.2 * tuning.stickTurn);
 
   // A drag rightward over the game turns her clockwise too, as the mouse does.
   await touch('touchStart', 420, 200);
