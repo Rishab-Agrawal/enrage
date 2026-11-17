@@ -24,6 +24,11 @@ body,
   margin: 0;
   overflow: hidden;
   background: #2b3550;
+  /* Touch plays the game: no scrolling, zooming, selecting or long-press menus. */
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
 }
 
 #game-canvas {
@@ -280,11 +285,10 @@ body,
 #voice {
   position: absolute;
   bottom: 20px;
-  left: 50%;
+  inset-inline: 0;
   display: grid;
   justify-items: center;
   gap: 8px;
-  transform: translateX(-50%);
   font-weight: 700;
   white-space: nowrap;
   text-shadow: 0 2px 0 var(--ink), 0 0 10px rgba(0, 0, 0, 0.5);
@@ -551,7 +555,7 @@ kbd {
   transition: opacity 0.6s, visibility 0.6s;
 }
 
-#app:not([data-screen='loading'], [data-screen='desktop']) #loading {
+#app:not([data-screen='loading']) #loading {
   opacity: 0;
   visibility: hidden;
 }
@@ -637,7 +641,7 @@ kbd {
   }
 }
 
-#title p {
+#title > p {
   margin: 18px 0 0;
   font-size: 1.2rem;
   font-weight: 900;
@@ -675,17 +679,206 @@ kbd {
   transition: transform 0.2s;
 }
 
-#title .desktop {
-  margin-top: 22px;
-  font-size: 1.05rem;
-  font-weight: 500;
-  letter-spacing: 0.04em;
+#app:not([data-screen='loading']) #title .progress,
+#app[data-screen='loading'] #title > p {
+  display: none;
+}
+
+/* Upright, a phone shows only how to turn it sideways. */
+#title .turn {
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  max-width: 22em;
+  margin-top: 36px;
+  text-align: center;
   text-shadow: none;
 }
 
-#app:not([data-screen='loading']) #title .progress,
-#app:not([data-screen='desktop']) #title .desktop,
-#app[data-screen='desktop'] #title small,
-#app:is([data-screen='loading'], [data-screen='desktop']) #title p {
-  display: none;
+.turn svg {
+  width: 84px;
+  fill: none;
+  stroke: var(--gold);
+  stroke-width: 3.5;
+}
+
+.turn circle {
+  fill: var(--gold);
+  stroke: none;
+}
+
+.turn h2 {
+  margin: 0;
+  color: var(--gold);
+  font-size: 1.5rem;
+  font-weight: 700;
+  text-wrap: balance;
+}
+
+.turn aside {
+  margin-top: 12px;
+  padding: 14px 18px;
+  border: 2px dashed var(--gold);
+  border-radius: 12px;
+  text-align: left;
+}
+
+.turn h3 {
+  margin: 0 0 4px;
+  color: var(--gold);
+  font-size: 1.1rem;
+  font-weight: 900;
+}
+
+.turn p {
+  margin: 0;
+  line-height: 1.45;
+}
+
+/* Hints for the keyboard and mouse, or for touch: each device sees its own. */
+@media not all and (hover: none) and (pointer: coarse) {
+  #app .touch {
+    display: none;
+  }
+}
+
+/* Touch pad: thumb-sized buttons at the bottom left, the stick at the bottom right, pause at the top left. */
+#pad {
+  transition: opacity 0.8s 0.6s;
+}
+
+#app:not([data-screen='fight']) #pad {
+  opacity: 0;
+  visibility: hidden;
+}
+
+#pad svg {
+  position: absolute;
+  bottom: 16px;
+  width: 60px;
+  height: 60px;
+  padding: 14px;
+  border: 2px solid var(--gold);
+  border-radius: 50%;
+  background: var(--frame);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
+  fill: none;
+  stroke: var(--paper);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+#pad svg:active {
+  background: rgba(233, 199, 123, 0.35);
+}
+
+#pad .pause {
+  top: 10px;
+  left: 12px;
+  width: 44px;
+  height: 44px;
+  padding: 10px;
+}
+
+#pad .sprint {
+  left: 16px;
+}
+
+#pad .strike {
+  left: 92px;
+}
+
+#stick {
+  position: absolute;
+  right: 28px;
+  bottom: 18px;
+  width: 132px;
+  height: 132px;
+  border: 2px solid rgba(255, 248, 234, 0.55);
+  border-radius: 50%;
+  background: rgba(28, 30, 48, 0.3);
+}
+
+#stick i {
+  position: absolute;
+  inset: 0;
+  width: 52px;
+  height: 52px;
+  margin: auto;
+  border: 2px solid var(--gold);
+  border-radius: 50%;
+  background: rgba(255, 248, 234, 0.75);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
+}
+
+@media (hover: none) and (pointer: coarse) {
+  #app .mouse {
+    display: none;
+  }
+
+  /* The HUD shrinks to fit between pause and the map; the mic joins the pad. */
+  #hud {
+    top: 10px;
+    gap: 20px;
+    width: calc(100vw - 232px);
+  }
+
+  .fighter {
+    column-gap: 8px;
+  }
+
+  .fighter img {
+    width: 44px;
+    height: 44px;
+  }
+
+  .fighter h2 {
+    margin-bottom: 4px;
+    font-size: 0.85rem;
+  }
+
+  .bar {
+    height: 14px;
+  }
+
+  #map {
+    top: 10px;
+    right: 12px;
+    width: 92px;
+  }
+
+  #subtitle {
+    top: 74px;
+    font-size: 1.1rem;
+  }
+
+  #voice svg {
+    position: fixed;
+    left: 54px;
+    bottom: 82px;
+  }
+
+  #app[data-screen='fight'] #voice svg {
+    pointer-events: auto;
+  }
+}
+
+@media (hover: none) and (pointer: coarse) and (orientation: portrait) {
+  #app[data-screen] #title {
+    z-index: 1;
+    background: linear-gradient(#2b3550, #1b1f30);
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+  }
+
+  #app #title > :is(.progress, p, small) {
+    display: none;
+  }
+
+  #title .turn {
+    display: flex;
+  }
 }

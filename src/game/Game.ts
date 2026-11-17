@@ -63,7 +63,7 @@ export class Game {
   private readonly speech = new Speech((text) => this.hear(text));
   private readonly hud = new Hud(
     () => this.rematch(),
-    () => this.show('map'),
+    () => this.openMap(),
     () => this.travel(),
   );
   /** Development only, like the test hooks and diagnostics: the deployed game has none of them. */
@@ -102,7 +102,7 @@ export class Game {
     models: { player: GLTF; npc: GLTF },
   ) {
     this.renderer = createRenderer(canvas);
-    // The mic's permission prompt comes with the click that starts the fight, and it has warmed up by her first turn.
+    // The mic's permission prompt comes with the click or tap that starts the fight, and it has warmed up by her first turn.
     this.input = new Input(canvas, () => this.speech.open());
     this.player = new Player(models.player);
     this.npc = new Npc(models.npc, () => this.rng());
@@ -168,7 +168,7 @@ export class Game {
   private update(delta: number): void {
     this.frame += 1;
     resizeRenderer(this.renderer, this.camera);
-    // Losing the mouse (Esc, alt-tab) pauses the fight; capturing it starts or resumes it.
+    // Losing the mouse (Esc, alt-tab), or on touch the screen, pauses the fight; capturing it starts or resumes it.
     if (this.input.consume('pause') && this.screen === 'fight' && !this.outcome) this.show('paused');
     else if (this.screen !== 'fight' && this.input.captured) {
       if (this.screen === 'title') {
@@ -177,13 +177,10 @@ export class Game {
       }
       this.show('fight');
     }
-    // M opens the map, which frees the mouse, and closes it again; so does a click outside it, capturing the mouse.
+    // M opens the map and closes it again; so does a click outside it, capturing the mouse.
     if (this.input.consume('map') && this.screen !== 'title') {
       if (this.screen === 'map') void this.input.capture();
-      else {
-        this.show('map');
-        document.exitPointerLock();
-      }
+      else this.openMap();
     }
     const running = (this.screen === 'fight' || this.screen === 'title') && !this.frozen;
     if (running) this.step(delta);
@@ -216,6 +213,14 @@ export class Game {
     // A pause lets go of the mic, and presses made off the fight don't carry into it.
     this.voice.update(0, false, false);
     this.input.clear();
+  }
+
+  /** The map holds the fight, and frees the mouse, or on touch the screen, to use it. */
+  private openMap(): void {
+    // A click inside the open map, as on Gorran to travel, is not another opening: it would let go of the capture he asked for.
+    if (this.screen === 'map') return;
+    this.show('map');
+    this.input.release();
   }
 
   /** A click on Gorran in the open map takes her back to where she first faced him, and closes the map. */

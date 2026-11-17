@@ -36,46 +36,66 @@
         <canvas></canvas>
         <img src="/portraits/gorran-calm.webp" alt="Gorran" title="Travel to Gorran" />
         <svg class="wren" viewBox="-6 -6 12 12" aria-label="Wren"><path d="M0-5 4 4 0 2-4 4Z" /></svg>
-        <kbd>M</kbd>
+        <kbd class="mouse">M</kbd>
       </div>
 
       <p id="subtitle" aria-live="polite"></p>
 
       <div id="voice">
         <p></p>
-        <svg viewBox="-18 -18 60 60" aria-hidden="true">
+        <svg viewBox="-18 -18 60 60" data-code="Space" role="button" aria-label="Hold to speak">
           <circle cx="12" cy="12" r="29" />
           <circle class="timer" cx="12" cy="12" r="29" pathLength="1" transform="rotate(-90 12 12)" />
           <path d="M12 19v3" /><path d="M19 10v2a7 7 0 0 1-14 0v-2" /><rect x="9" y="2" width="6" height="13" rx="3" />
         </svg>
-        <span>Hold <kbd>Space</kbd> to speak</span>
+        <span class="mouse">Hold <kbd>Space</kbd> to speak</span>
       </div>
 
-      <footer id="controls" aria-label="Controls">
+      <footer id="controls" class="mouse" aria-label="Controls">
         <span><kbd>Esc</kbd> pause / help</span>
       </footer>
+
+      <!-- Touch: each button holds the key its data-code names; the fist's "Strike" is no key's. -->
+      <nav id="pad" class="touch" aria-label="Touch controls">
+        <svg class="pause" viewBox="0 0 24 24" data-code="Escape" role="button" aria-label="Pause"><path d="M9 6v12M15 6v12" /></svg>
+        <svg class="sprint" viewBox="0 0 24 24" data-code="ShiftLeft" role="button" aria-label="Sprint">
+          <path d="M1 10h3M0.5 13h3M1.5 16h2" />
+          <path transform="translate(4.5 1.5) scale(0.82)" d="M4 6h5.426a1 1 0 0 1 .863 .496l1.064 1.823a3 3 0 0 0 1.896 1.407l4.677 1.114a4 4 0 0 1 3.074 3.89v2.27a1 1 0 0 1 -1 1h-16a1 1 0 0 1 -1 -1v-10a1 1 0 0 1 1 -1zM14 13l1 -2M8 18v-1a4 4 0 0 0 -4 -4h-1M10 12l1.5 -3" />
+        </svg>
+        <svg class="strike" viewBox="0 0 24 24" data-code="Strike" role="button" aria-label="Strike">
+          <path d="M12.035 17.012a3 3 0 0 0-3-3l-.311-.002a.72.72 0 0 1-.505-1.229l1.195-1.195A2 2 0 0 1 10.828 11H12a2 2 0 0 0 0-4H9.243a3 3 0 0 0-2.122.879l-2.707 2.707A4.83 4.83 0 0 0 3 14a8 8 0 0 0 8 8h2a8 8 0 0 0 8-8V7a2 2 0 1 0-4 0v2a2 2 0 1 0 4 0M13.888 9.662A2 2 0 0 0 17 8V5A2 2 0 1 0 13 5M9 5A2 2 0 1 0 5 5V10M9 7V4A2 2 0 1 1 13 4V7.268" />
+        </svg>
+        <div id="stick" role="button" aria-label="Move"><i></i></div>
+      </nav>
 
       <aside id="debug"></aside>
 
       <div id="title">
         <h1>en<b class="enraged">rage</b></h1>
         <div class="progress"><i></i></div>
-        <p>Click to start</p>
-        <span class="desktop">Only playable on desktop</span>
+        <p><span class="mouse">Click</span><span class="touch">Tap</span> to start</p>
+        <div class="turn">
+          <svg viewBox="0 0 72 48" aria-hidden="true"><rect x="2" y="2" width="68" height="44" rx="9" /><circle cx="60" cy="24" r="3.5" /></svg>
+          <h2>Turn your phone sideways (Landscape)</h2>
+          <aside>
+            <h3>Screen not turning?</h3>
+            <p>Turn on Auto-rotate: swipe down from the top of the screen and tap Auto-rotate (or the rotate icon), then turn your phone.</p>
+          </aside>
+        </div>
         <small>By playing, you agree to the <a href="/terms.html" target="_blank">terms</a>.</small>
       </div>
 
       <div id="pause">
         <h1>Paused</h1>
-        <p>Click to resume</p>
+        <p><span class="mouse">Click</span><span class="touch">Tap</span> to resume</p>
         <div class="help">
           <section>
             <h2>How to play</h2>
-            <p>Hold <kbd>Space</kbd> to speak, and <b class="enraged">enrage</b> Gorran to fight.</p>
-            <p>To rest and heal, hold <kbd>Space</kbd> again and <b class="calm">pacify</b> him.</p>
+            <p>Hold <kbd class="mouse">Space</kbd><span class="touch">the mic</span> to speak, and <b class="enraged">enrage</b> Gorran to fight.</p>
+            <p>To rest and heal, hold <kbd class="mouse">Space</kbd><span class="touch">the mic</span> again and <b class="calm">pacify</b> him.</p>
             <small>This game uses a system-one AI model to judge the conversation.</small>
           </section>
-          <section>
+          <section class="mouse">
             <h2>Controls</h2>
             <dl>
               <dt><kbd>Mouse</kbd></dt>
@@ -98,7 +118,7 @@
       <div id="result" hidden>
         <h1></h1>
         <p></p>
-        <button type="button">Rematch <kbd>R</kbd></button>
+        <button type="button">Rematch <kbd class="mouse">R</kbd></button>
       </div>
 
     </main>

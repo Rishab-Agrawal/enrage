@@ -22,7 +22,7 @@ const BIRDS = takes('bird', 4);
 
 /** Web Audio: recorded music, ambience, voices and effects. */
 export class Audio {
-  // Browsers hold a context made before the first click or key press suspended; that press resumes it.
+  // Browsers hold a context made before the first click, tap or key press suspended; that press resumes it, a tap as it lifts.
   private readonly context = new AudioContext();
   private readonly master = this.context.createGain();
   private readonly tracks = new Map<Mood, GainNode>();
@@ -35,10 +35,10 @@ export class Audio {
     const ctx = this.context;
     const resume = () => {
       void ctx.resume();
-      window.removeEventListener('pointerdown', resume);
+      window.removeEventListener('pointerup', resume);
       window.removeEventListener('keydown', resume);
     };
-    window.addEventListener('pointerdown', resume);
+    window.addEventListener('pointerup', resume);
     window.addEventListener('keydown', resume);
 
     this.master.gain.value = 0.8;
