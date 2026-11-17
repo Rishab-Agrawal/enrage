@@ -19,7 +19,7 @@ const GLIDE = 1.8;
 /** The title shot opens on the sky, as the loading screen showed it, holds while that fades, then tilts down over TILT s. */
 const HOLD = 0.4;
 const TILT = 1.6;
-/** How far above the hilltop the opening shot looks, m. */
+/** How far above her the opening shot looks, m. */
 const SKY = 14;
 
 /**
@@ -50,11 +50,11 @@ export class CameraRig {
     this.trauma = Math.min(1, this.trauma + amount);
   }
 
-  /** A wide, low shot of the hilltop, swaying slowly round `center`, after tilting down from the sky; the follow view glides out of it. */
+  /** A wide, low shot swaying slowly round `center`, after tilting down from the sky; the follow view glides out of it. */
   title(time: number, center: THREE.Vector3): void {
     const angle = 0.6 + Math.sin(time * 0.05) * 0.35;
-    this.camera.position.set(center.x + Math.sin(angle) * 12, 1.5, center.z + Math.cos(angle) * 12);
-    this.camera.lookAt(center.x, 2.6 + SKY * (1 - THREE.MathUtils.smootherstep(time, HOLD, HOLD + TILT)), center.z);
+    this.camera.position.set(center.x + Math.sin(angle) * 12, center.y + 1.5, center.z + Math.cos(angle) * 12);
+    this.camera.lookAt(center.x, center.y + 2.6 + SKY * (1 - THREE.MathUtils.smootherstep(time, HOLD, HOLD + TILT)), center.z);
     this.from.position.copy(this.camera.position);
     this.from.rotation.copy(this.camera.quaternion);
     this.glide = 0;

@@ -3,7 +3,7 @@ import { MAP_SIZE } from '../world/terrain';
 import type { VoiceState } from './Voice';
 
 export type Outcome = 'victory' | 'defeat' | null;
-export type Screen = 'title' | 'fight' | 'paused' | 'map';
+export type Screen = 'title' | 'fight' | 'brief' | 'paused' | 'map';
 
 type HudState = {
   player: number; // 0..1

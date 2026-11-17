@@ -31,6 +31,8 @@ const LEAVE_TIME = 5;
 const MAX_SLOPE = 0.8;
 const CLIFF = 1.1;
 const WADE_DEPTH = 0.8;
+/** Where she first stands, m, and the yaw she faces: on the lake's shore, a walk from the arena. */
+const SPAWN = [74, -71.5, 0.38] as const;
 const [shoulder, fist] = [new THREE.Vector2(), new THREE.Vector2()];
 
 /** Whether the arm from `from` to the fist `at` meets `body`, seen from above. */
@@ -87,6 +89,8 @@ export class Game {
   private fight = '';
   private frame = 0;
   private screen: Screen = 'title';
+  /** She has been told, on first stepping into the arena, what to do there. */
+  private briefed = false;
   /** Held still for screenshots, without the pause card. */
   private frozen = false;
   private readonly offset = new THREE.Vector3();
@@ -102,8 +106,8 @@ export class Game {
     models: { player: GLTF; npc: GLTF },
   ) {
     this.renderer = createRenderer(canvas);
-    // The mic's permission prompt comes with the click or tap that starts the fight, and it has warmed up by her first turn.
-    this.input = new Input(canvas, () => this.speech.open());
+    // The mic's permission prompt comes with the click or tap past the brief, and it has warmed up by her first turn.
+    this.input = new Input(canvas, async () => this.screen === 'brief' && this.speech.open());
     this.player = new Player(models.player);
     this.npc = new Npc(models.npc, () => this.rng());
     this.world = new World(this.player.position, this.npc.position);
@@ -121,6 +125,7 @@ export class Game {
     }
     this.buildScene();
     this.rematch();
+    this.player.character.place(...SPAWN);
     if (import.meta.env.DEV) this.installTestHooks();
   }
 
@@ -177,6 +182,12 @@ export class Game {
       }
       this.show('fight');
     }
+    // Her first step into the arena holds the fight on a card telling her what to do there.
+    if (this.screen === 'fight' && !this.briefed && inArena(this.player.position)) {
+      this.briefed = true;
+      this.show('brief');
+      this.input.release();
+    }
     // M opens the map and closes it again; so does a click outside it, capturing the mouse.
     if (this.input.consume('map') && this.screen !== 'title') {
       if (this.screen === 'map') void this.input.capture();
@@ -223,7 +234,7 @@ export class Game {
     this.input.release();
   }
 
-  /** A click on Gorran in the open map takes her back to where she first faced him, and closes the map. */
+  /** A click on Gorran in the open map takes her to where a fight starts, facing him, and closes the map. */
   private travel(): void {
     if (this.screen !== 'map') return;
     this.player.toStart();
@@ -275,7 +286,7 @@ export class Game {
       this.cameraRig.tilt(this.input.consumeTilt() * tuning.mouseTurn);
       this.cameraRig.update(delta, this.player.position, this.player.yaw);
     }
-    else this.cameraRig.title(this.elapsed, this.offset.addVectors(this.player.position, this.npc.position).multiplyScalar(0.5));
+    else this.cameraRig.title(this.elapsed, this.player.position);
     this.world.update(this.elapsed, this.camera);
   }
 
@@ -483,6 +494,10 @@ export class Game {
         return { state: name };
       },
       place: (x: number, z: number, yaw: number) => this.player.character.place(x, z, yaw),
+      arrive: () => {
+        this.player.toStart();
+        this.briefed = true;
+      },
       advance: (seconds: number) => {
         this.elapsed += seconds;
       },

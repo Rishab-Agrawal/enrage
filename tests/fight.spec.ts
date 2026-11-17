@@ -26,7 +26,10 @@ async function start(page: Page): Promise<string[]> {
   });
   await page.goto('/');
   await page.waitForFunction(() => (window.__THREE_GAME_DIAGNOSTICS__?.frame ?? 0) > 10);
-  await page.evaluate(() => window.__THREE_GAME_TEST_HOOKS__?.seed(42));
+  await page.evaluate(() => {
+    window.__THREE_GAME_TEST_HOOKS__?.seed(42);
+    window.__THREE_GAME_TEST_HOOKS__?.arrive();
+  });
   // Park the mouse on the canvas before the first click captures it, so clicks never move it and never turn her.
   const box = (await page.locator('#game-canvas').boundingBox())!;
   mice.set(page, { x: box.width / 2, y: box.height / 2 });
@@ -328,6 +331,38 @@ test('losing the mouse pauses the fight and lets go of the mic; capturing it aga
   await expect(page.locator('#pause')).toBeHidden();
   expect((await read(page)).elapsed).toBeGreaterThan(elapsed);
   expect(errors).toEqual([]);
+});
+
+test('she starts away from the arena, and the mic is asked for only by the click past the brief her first step into it holds the fight on', async ({ page }) => {
+  await page.addInitScript(() => {
+    navigator.mediaDevices.getUserMedia = async () => {
+      document.documentElement.dataset.asked = String(Number(document.documentElement.dataset.asked ?? 0) + 1);
+      return new AudioContext().createMediaStreamDestination().stream;
+    };
+  });
+  await page.goto('/');
+  await page.waitForFunction(() => (window.__THREE_GAME_DIAGNOSTICS__?.frame ?? 0) > 10);
+  const asked = () => page.evaluate(() => Number(document.documentElement.dataset.asked ?? 0));
+  const locked = () => page.evaluate(() => document.pointerLockElement?.id);
+  await page.mouse.click(640, 360);
+  await expect.poll(locked).toBe('game-canvas');
+  const { x, z } = (await read(page)).player.position;
+  expect(Math.hypot(x, z)).toBeGreaterThan(ARENA_RADIUS);
+  expect(await asked()).toBe(0);
+
+  await page.evaluate(() => window.__THREE_GAME_TEST_HOOKS__?.place(0, 10, Math.PI));
+  await expect(page.locator('#brief')).toBeVisible();
+  await expect.poll(locked).toBeUndefined();
+  await page.mouse.click(640, 360);
+  await expect(page.locator('#app')).toHaveAttribute('data-screen', 'fight');
+  expect(await asked()).toBe(1);
+
+  // Paused and resumed, she isn't asked again, nor briefed.
+  await page.evaluate(() => document.exitPointerLock());
+  await expect(page.locator('#pause')).toBeVisible();
+  await page.mouse.click(640, 360);
+  await expect(page.locator('#app')).toHaveAttribute('data-screen', 'fight');
+  expect(await asked()).toBe(1);
 });
 
 test('Gorran speaks up as his mood turns', async ({ page }) => {

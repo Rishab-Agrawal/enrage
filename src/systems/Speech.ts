@@ -17,11 +17,15 @@ export class Speech {
   constructor(private readonly onHeard: (text: string) => void) {}
 
   /**
-   * The mic, asked for once and then kept open: a fresh one each turn would clip her first words while it warms up.
-   * On phones, echo cancellation would put Android in call mode, playing the game quietly at call volume, and duck it on iPhones.
+   * The mic, kept open once granted: a fresh one each turn would clip her first words while it warms up. Refused, it is
+   * asked for again on her next turn. On phones, echo cancellation would put Android in call mode, playing the game
+   * quietly at call volume, and duck it on iPhones.
    */
   open(): Promise<MediaStream> {
-    return (this.mic ??= navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: !TOUCH } }));
+    return (this.mic ??= navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: !TOUCH } }).catch((error: unknown) => {
+      this.mic = undefined;
+      throw error;
+    }));
   }
 
   /** Follow the push-to-talk state: a turn starts when it goes true and ends when it goes false, in one `onHeard` ('' if nothing was heard). */

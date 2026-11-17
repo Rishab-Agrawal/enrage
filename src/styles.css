@@ -404,7 +404,8 @@ kbd {
 }
 
 #result,
-#pause {
+#pause,
+#brief {
   position: absolute;
   inset: 0;
   display: grid;
@@ -421,7 +422,7 @@ kbd {
 }
 
 #result h1,
-#pause h1 {
+:is(#pause, #brief) h1 {
   margin: 0;
   font-size: clamp(3rem, 8vw, 5.5rem);
   font-weight: 900;
@@ -437,7 +438,7 @@ kbd {
 }
 
 #result p,
-#pause > p {
+:is(#pause, #brief) > p {
   margin: 0 0 16px;
   font-size: 1.1rem;
   font-weight: 700;
@@ -445,16 +446,18 @@ kbd {
 }
 
 /* Clicks fall through to the canvas, whose capture resumes the fight. */
-#pause {
+#pause,
+#brief {
   background: radial-gradient(ellipse at center, rgba(25, 20, 40, 0.75), rgba(25, 20, 40, 0.45) 75%);
   pointer-events: none;
 }
 
-#app:not([data-screen='paused']) #pause {
+#app:not([data-screen='paused']) #pause,
+#app:not([data-screen='brief']) #brief {
   display: none;
 }
 
-#pause > p {
+:is(#pause, #brief) > p {
   animation: breathe 2.4s ease-in-out infinite;
 }
 
@@ -590,12 +593,12 @@ kbd {
   transition: opacity 0.8s 0.6s;
 }
 
-#app:not([data-screen='fight'], [data-screen='paused'], [data-screen='map']) :is(#hud, #controls, #voice, #map) {
+#app:is([data-screen='loading'], [data-screen='title']) :is(#hud, #controls, #voice, #map) {
   opacity: 0;
   pointer-events: none;
 }
 
-#app:is([data-screen='paused'], [data-screen='map']) :is(#voice, #subtitle) {
+#app:is([data-screen='brief'], [data-screen='paused'], [data-screen='map']) :is(#voice, #subtitle) {
   visibility: hidden;
 }
 
@@ -612,7 +615,7 @@ kbd {
   transition: opacity 0.6s, visibility 0.6s;
 }
 
-#app:is([data-screen='fight'], [data-screen='paused'], [data-screen='map']) #title {
+#app:not([data-screen='loading'], [data-screen='title']) #title {
   opacity: 0;
   visibility: hidden;
 }

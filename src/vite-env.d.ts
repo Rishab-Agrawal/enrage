@@ -28,6 +28,8 @@ interface ThreeGameTestHooks {
   setState(name: string): { state: string } | Promise<{ state: string }>;
   /** Stand her at (x, z), facing `yaw`. */
   place(x: number, z: number, yaw: number): void;
+  /** Stand her where a fight starts, already briefed. */
+  arrive(): void;
   /** Let `seconds` of the day pass at once. */
   advance(seconds: number): void;
   /** Stop simulation/state transitions immediately; keep rendering. */
