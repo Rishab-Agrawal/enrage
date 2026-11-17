@@ -18,6 +18,7 @@ Code and design, from architecture down to single lines, as a very experienced s
 - When something goes stale, remove it in the same change.
 - Commit and push to main directly; don't create other branches.
 - Lasting knowledge that the code, git and skills don't already hold goes in this file, never in Claude's auto-memory. Only what's necessary, as crisp as possible.
+- Ensure you do not ask me to do anything which you can do yourself. Only stop if there is something which you truly cannot handle, or if my input is genuinely required. If it is not about input but a step that I need to do, check if there is a way for the step to be done at the end so that you can do as much of it as possible without stopping.
 
 ## Problems are symptoms
 
