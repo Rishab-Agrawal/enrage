@@ -5,7 +5,7 @@ const DAY = 600;
 const NIGHT = 600;
 /** Seconds after sunrise at which the game opens: a golden early morning. */
 const OPENS = 75;
-const MOONLIGHT = new THREE.Color('#9db4ff');
+const MOONLIGHT = new THREE.Color('#b4ccff');
 /** Shadows fall within this far of the wanderer, m: as far as the haze lets them show. */
 const SHADOW_REACH = 150;
 /** The light stands this far off, m, clear of the heights between. */
@@ -24,7 +24,7 @@ const hour = (ambient: number, colors: Record<Exclude<keyof Hour, 'ambient'>, st
 /** `tint` is what the hour does to colours no light falls on: clouds, far ranges, water, flowers. */
 const NOON = hour(1.2, { top: '#5d8fd0', mid: '#a9c7e6', horizon: '#f3dfb8', fog: '#ead9b8', sun: '#ffd49a', above: '#c8d8f0', below: '#7d7a3e', tint: '#ffffff' });
 const TWILIGHT = hour(0.8, { top: '#4a4f8f', mid: '#c98a9a', horizon: '#ffb37a', fog: '#e8a987', sun: '#ff9a5c', above: '#b9a4c9', below: '#6b5a44', tint: '#e0a48c' });
-const MIDNIGHT = hour(1.2, { top: '#060a1c', mid: '#0e1634', horizon: '#1c2a52', fog: '#141d3a', sun: '#9db4ff', above: '#4a5c9a', below: '#1a2238', tint: '#3a4670' });
+const MIDNIGHT = hour(1.5, { top: '#102a58', mid: '#1c4a7c', horizon: '#34709a', fog: '#2a5884', sun: '#b4ccff', above: '#8aa6e0', below: '#40506e', tint: '#7088c4' });
 
 /**
  * The sky and its light through day and night. The sun rises in the east, crosses to the south and sets in the west;
@@ -117,7 +117,7 @@ export class Sky {
     const up = sun.y >= 0 ? 1 : -1;
     blend('sun', this.light.color);
     if (up < 0) this.light.color.copy(MOONLIGHT);
-    this.light.intensity = (up > 0 ? 2.9 : 1.1) * THREE.MathUtils.smoothstep(sun.y * up, 0.02, 0.22);
+    this.light.intensity = (up > 0 ? 2.9 : 1.5) * THREE.MathUtils.smoothstep(sun.y * up, 0.02, 0.22);
     this.light.target.position.copy(focus);
     this.light.position.copy(focus).addScaledVector(sun, LIGHT_DISTANCE * up);
   }
