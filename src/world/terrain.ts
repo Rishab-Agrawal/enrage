@@ -16,8 +16,14 @@ const LEDGES = [12, 4];
 const { lerp, smoothstep, clamp } = THREE.MathUtils;
 const mound = (x: number, z: number, cx: number, cz: number, radius: number) => Math.exp(-((x - cx) ** 2 + (z - cz) ** 2) / radius ** 2);
 
-/** `height` stepped into ledges `step` high: flats, each ending in a sheer rise. */
-const ledged = (height: number, step: number) => (Math.floor(height / step) + smoothstep(height / step - Math.floor(height / step), 0.9, 1)) * step;
+/**
+ * `height` stepped into ledges `step` high: flats, each ending in a sheer rise. Low ones keep some of the land's
+ * slope, so the one at sea level is a beach shelving into the water.
+ */
+function ledged(height: number, step: number): number {
+  const flat = (Math.floor(height / step) + smoothstep(height / step - Math.floor(height / step), 0.9, 1)) * step;
+  return lerp(height, flat, smoothstep(flat, SEA_LEVEL - step, SEA_LEVEL + step));
+}
 
 /** The river's course from the lake to the south-east shore, and how far its bends swing off the straight line, m. */
 const RIVER = { x: 125, z: -55, toX: 0.8, toZ: 0.6, length: 300, swing: 24 };

@@ -778,7 +778,13 @@ function createCrags(rng: () => number, obstacles: Obstacle[]): THREE.InstancedM
   });
 }
 
-/** The sea, the lake and the river: one sheet, clear over the shallows and deepening to blue, with foam lapping its shores. */
+/** How high the swell washes up the shore above sea level, m. */
+const SWASH = 0.2;
+
+/**
+ * The sea, the lake and the river: one sheet, clear over the shallows and deepening to blue. The swell washes up the
+ * shores and drains back, a lacy edge of foam leading it.
+ */
 function createWater(uniforms: Uniforms): THREE.Mesh {
   const material = new THREE.MeshBasicMaterial({ transparent: true });
   material.onBeforeCompile = (shader) => {
@@ -798,17 +804,28 @@ function createWater(uniforms: Uniforms): THREE.Mesh {
       ${shader.fragmentShader}`.replace(
       '#include <color_fragment>',
       /* glsl */ `
-      float depth = ${SEA_LEVEL.toFixed(1)} - texture2D(uHeight, landUv(vSpot)).r;
+      vec2 east = vec2(${CELL.toFixed(4)}, 0.0);
+      float ground = texture2D(uHeight, landUv(vSpot)).r;
+      float slope = length(vec2(
+        texture2D(uHeight, landUv(vSpot + east)).r - texture2D(uHeight, landUv(vSpot - east)).r,
+        texture2D(uHeight, landUv(vSpot + east.yx)).r - texture2D(uHeight, landUv(vSpot - east.yx)).r)) / ${(2 * CELL).toFixed(4)};
+      // The swell rises and falls, along each stretch of shore in its own time; where it has drained off, no water.
+      float swell = ${SWASH.toFixed(2)} * (0.5 + 0.5 * sin(uTime * 0.8 - noise(vSpot * 0.04) * 9.0));
+      float depth = ${SEA_LEVEL.toFixed(1)} + swell - ground;
+      if (depth < 0.0) discard;
+      // How far in from the water's edge, m.
+      float reach = depth / max(slope, 0.03);
       float waves = noise(vSpot * vec2(0.5, 1.9) + uTime * 0.25) + noise(vSpot * vec2(1.3, 4.1) - uTime * 0.4);
-      // Glints, long and thin, where two swells cross, fading before distance turns them to speckle; and a line of
-      // foam that breathes in and out along the shore.
-      float glint = smoothstep(1.5, 1.56, waves) * 0.6 * (1.0 - smoothstep(60.0, 220.0, vFogDepth));
-      float foam = 1.0 - smoothstep(0.0, 0.22 + 0.14 * sin(uTime * 1.3 + waves * 3.0), depth);
-      diffuseColor.rgb = diffuse * mix(mix(uShallows, uDeep, smoothstep(0.0, 5.0, depth)), vec3(1.0), max(glint, foam * 0.85));
-      diffuseColor.a = mix(0.55, 0.94, max(smoothstep(0.0, 3.0, depth), foam));`,
+      // Glints, long and thin, where two swells cross, off the shallows and fading before distance turns them to
+      // speckle; and foam, a thin line at the edge with lace trailing a little way in.
+      float glint = smoothstep(1.5, 1.56, waves) * 0.6 * smoothstep(0.3, 1.5, depth) * (1.0 - smoothstep(60.0, 220.0, vFogDepth));
+      float lace = 0.45 + 0.6 * smoothstep(0.0, 2.0, reach);
+      float foam = max(1.0 - smoothstep(0.15, 0.3, reach), smoothstep(lace, lace + 0.04, noise(vSpot * 2.0 + vec2(0.0, uTime * 0.3))));
+      diffuseColor.rgb = diffuse * mix(mix(uShallows, uDeep, smoothstep(0.0, 5.0, depth)), vec3(1.0), max(glint, foam * 0.9));
+      diffuseColor.a = mix(0.35, 0.94, max(smoothstep(0.0, 3.0, depth), foam));`,
     );
   };
   const water = new THREE.Mesh(new THREE.CircleGeometry(1400, 64).rotateX(-Math.PI / 2), material);
-  water.position.y = SEA_LEVEL;
+  water.position.y = SEA_LEVEL + SWASH;
   return water;
 }
