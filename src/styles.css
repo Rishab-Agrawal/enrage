@@ -283,6 +283,34 @@ body,
   opacity: 1;
 }
 
+/* Once, as the camera settles behind her: the screens after the title keep it matched, so it never replays. */
+#hint {
+  position: absolute;
+  top: 28%;
+  inset-inline: 16px;
+  margin: 0;
+  color: var(--gold);
+  font-size: clamp(1.6rem, 4vw, 2.4rem);
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  text-align: center;
+  text-transform: uppercase;
+  text-shadow: 0 3px 0 var(--ink);
+  pointer-events: none;
+  opacity: 0;
+}
+
+#app:not([data-screen='loading'], [data-screen='title']) #hint {
+  animation: hint 4s 1.4s;
+}
+
+@keyframes hint {
+  15%,
+  70% {
+    opacity: 1;
+  }
+}
+
 /* The mood's goal over the push-to-talk mic. */
 #voice {
   position: absolute;
@@ -598,7 +626,7 @@ kbd {
   pointer-events: none;
 }
 
-#app:is([data-screen='brief'], [data-screen='paused'], [data-screen='map']) :is(#voice, #subtitle) {
+#app:is([data-screen='brief'], [data-screen='paused'], [data-screen='map']) :is(#voice, #subtitle, #hint) {
   visibility: hidden;
 }
 
