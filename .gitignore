@@ -12,3 +12,4 @@ artifacts/dev/
 *.webm
 .env.local
 .claude/skills/
+.impeccable/
