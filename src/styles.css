@@ -4,7 +4,7 @@
   --gold: #e9c77b;
   --frame: rgba(28, 30, 48, 0.62);
   --player: linear-gradient(90deg, #3ea98a, #9be6a4);
-  --npc: linear-gradient(270deg, #d8402a, #ffb257);
+  --npc: linear-gradient(90deg, #d8402a, #ffb257);
   --calm: #8fe6d5;
   --rage: #ff5a36;
   /* The sky the title shot opens on. */
@@ -77,7 +77,6 @@ body,
 
 .npc {
   top: 22px;
-  grid-template-columns: 1fr auto;
   opacity: 0;
   transition: opacity 0.4s;
 }
@@ -92,10 +91,6 @@ body,
   height: 64px;
 }
 
-.npc img {
-  grid-column: 2;
-}
-
 .fighter h2 {
   margin: 0 0 6px;
   font-size: 1.15rem;
@@ -103,10 +98,6 @@ body,
   letter-spacing: 0.06em;
   text-transform: uppercase;
   text-shadow: 0 2px 0 var(--ink), 0 0 12px rgba(0, 0, 0, 0.35);
-}
-
-.npc h2 {
-  text-align: right;
 }
 
 .bar {
@@ -118,18 +109,10 @@ body,
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
 }
 
-.npc .bar {
-  clip-path: polygon(0 0, calc(100% - 14px) 0, 100% 100%, 14px 100%);
-}
-
 .bar i {
   position: absolute;
   inset: 2px;
   transform-origin: left;
-}
-
-.npc .bar i {
-  transform-origin: right;
 }
 
 .bar .chip {
@@ -212,7 +195,6 @@ body,
   }
 }
 
-/* Gorran's lines, under the health bars. */
 /* The map: a thumbnail in the corner that opens over the middle of the screen. Its markers sit on the island by percentage. */
 #map {
   position: absolute;
@@ -274,13 +256,15 @@ body,
   display: none;
 }
 
-#subtitle {
+/* Gorran's line under his health bar, and under it what to say to him. */
+#talk {
   position: absolute;
   top: 110px;
   inset-inline: 16px;
-  margin: 0;
+  display: grid;
+  justify-items: center;
+  gap: 10px;
   font-weight: 700;
-  font-size: 1.4rem;
   text-align: center;
   text-shadow: 0 2px 0 var(--ink), 0 0 10px rgba(0, 0, 0, 0.5);
   pointer-events: none;
@@ -288,8 +272,28 @@ body,
   transition: opacity 0.4s;
 }
 
-#subtitle.shown {
+#talk.shown {
   opacity: 1;
+}
+
+#talk p {
+  margin: 0;
+}
+
+#subtitle {
+  font-size: 1.4rem;
+}
+
+#goal {
+  padding: 6px 16px;
+  border-radius: 999px;
+  background: var(--frame);
+  font-size: 1.1rem;
+  letter-spacing: 0.04em;
+}
+
+#goal b {
+  font-weight: 900;
 }
 
 /* Once, as the camera settles behind her: the screens after the title keep it matched, so it never replays. */
@@ -320,28 +324,11 @@ body,
   }
 }
 
-/* The mood's goal over the push-to-talk mic, beside her health: over it, they would cover her. */
+/* Touch's push-to-talk mic, over the pad's buttons; the keyboard has Space. */
 #voice {
   position: absolute;
-  bottom: 16px;
-  left: calc(50% + 254px);
-  display: grid;
-  justify-items: center;
-  gap: 8px;
-  font-weight: 700;
-  white-space: nowrap;
-  text-shadow: 0 2px 0 var(--ink), 0 0 10px rgba(0, 0, 0, 0.5);
-  pointer-events: none;
-}
-
-#voice p {
-  margin: 0;
-  font-size: 1.1rem;
-  letter-spacing: 0.04em;
-}
-
-#voice b {
-  font-weight: 900;
+  left: 54px;
+  bottom: 82px;
 }
 
 b.calm {
@@ -354,6 +341,7 @@ b.enraged {
 
 /* The SVG draws in px: its viewBox matches its size, centred on the 24-unit icon. */
 #voice svg {
+  display: block;
   width: 60px;
   height: 60px;
   border-radius: 50%;
@@ -368,24 +356,19 @@ b.enraged {
 
 #voice circle {
   fill: var(--frame);
-  stroke: var(--gold);
-  transition: stroke 0.3s;
+  stroke: none;
 }
 
 #voice .timer {
   fill: none;
+  stroke: var(--paper);
   stroke-width: 3;
   stroke-dasharray: 1;
   stroke-linecap: butt;
   opacity: 0;
 }
 
-#voice:is(.listening, .cooldown) circle {
-  stroke: rgba(233, 199, 123, 0.3);
-}
-
 #voice:is(.listening, .cooldown) .timer {
-  stroke: var(--paper);
   opacity: 1;
 }
 
@@ -404,14 +387,9 @@ b.enraged {
   }
 }
 
-#voice.cooldown :is(svg, span) {
+#voice.cooldown svg {
   opacity: 0.55;
   filter: grayscale(1);
-}
-
-#voice span {
-  font-size: 0.85rem;
-  text-shadow: 0 1px 0 var(--ink);
 }
 
 #controls {
@@ -631,7 +609,7 @@ kbd {
   pointer-events: none;
 }
 
-#app:is([data-screen='brief'], [data-screen='paused'], [data-screen='map']) :is(#voice, #subtitle, #hint) {
+#app:is([data-screen='brief'], [data-screen='paused'], [data-screen='map']) :is(#voice, #talk, #hint) {
   visibility: hidden;
 }
 
@@ -888,28 +866,18 @@ kbd {
     width: 92px;
   }
 
-  #subtitle {
+  #talk {
     top: 74px;
+    gap: 6px;
+  }
+
+  #subtitle {
     font-size: 1.1rem;
   }
 
-  #voice {
-    bottom: 80px;
-    inset-inline: 0;
-  }
-
-  #voice svg {
-    position: fixed;
-    left: 54px;
-    bottom: 82px;
-  }
-
-  #app[data-screen='fight'] #voice svg {
-    pointer-events: auto;
-  }
-
-  #voice circle:not(.timer) {
-    stroke: none;
+  #goal {
+    padding: 4px 12px;
+    font-size: 0.95rem;
   }
 }
 

@@ -39,17 +39,18 @@
         <kbd class="mouse">M</kbd>
       </div>
 
-      <p id="subtitle" aria-live="polite"></p>
+      <div id="talk" aria-live="polite">
+        <p id="subtitle"></p>
+        <p id="goal"><span></span> Hold <kbd class="mouse">Space</kbd><span class="touch">the mic button</span> to speak.</p>
+      </div>
       <p id="hint">Find Gorran</p>
 
       <div id="voice">
-        <p></p>
-        <svg viewBox="-18 -18 60 60" data-code="Space" role="button" aria-label="Hold to speak">
+        <svg class="touch" viewBox="-18 -18 60 60" data-code="Space" role="button" aria-label="Hold to speak">
           <circle cx="12" cy="12" r="29" />
           <circle class="timer" cx="12" cy="12" r="29" pathLength="1" transform="rotate(-90 12 12)" />
           <path d="M12 19v3" /><path d="M19 10v2a7 7 0 0 1-14 0v-2" /><rect x="9" y="2" width="6" height="13" rx="3" />
         </svg>
-        <span class="mouse">Hold <kbd>Space</kbd> to speak</span>
       </div>
 
       <footer id="controls" class="mouse" aria-label="Controls">

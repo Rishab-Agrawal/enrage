@@ -28,8 +28,8 @@ type HudState = {
 };
 
 const GOALS: Record<Mood, string> = {
-  calm: '<b class="enraged">Enrage</b> him to fight',
-  enraged: '<b class="calm">Pacify</b> him to rest and heal',
+  calm: '<b class="enraged">Enrage</b> him to fight.',
+  enraged: '<b class="calm">Pacify</b> him to rest and heal.',
 };
 
 const $ = <T extends HTMLElement>(selector: string) => document.querySelector(selector) as T;
@@ -52,9 +52,11 @@ export class Hud {
   private readonly npcChip = $('.npc .chip');
   private readonly npcPortrait = $<HTMLImageElement>('.npc img');
   private readonly npcSection = $('.fighter.npc');
+  private readonly talk = $('#talk');
   private readonly subtitle = $('#subtitle');
+  private readonly goal = $('#goal');
+  private readonly goalMood = $('#goal span');
   private readonly voice = $('#voice');
-  private readonly goal = $('#voice p');
   private readonly voiceTimer = $('#voice .timer');
   private readonly result = $('#result');
   private readonly resultTitle = $('#result h1');
@@ -89,14 +91,11 @@ export class Hud {
       this.npcPortrait.className = state.mood;
       this.npcPortrait.alt = state.mood === 'calm' ? 'Calm' : 'Enraged';
       this.npcPortrait.src = this.mapGorran.src = `/portraits/gorran-${state.mood}.webp`;
-      this.goal.innerHTML = GOALS[state.mood];
-      if (this.last.mood) {
-        this.npcPortrait.animate([{ transform: 'scale(1.25)' }, { transform: 'scale(1)' }], { duration: 450, easing: 'cubic-bezier(.22,1,.36,1)' });
-        this.goal.animate([{ opacity: 0, transform: 'translateY(8px)' }, {}], { duration: 450, easing: 'cubic-bezier(.22,1,.36,1)' });
-      }
+      this.goalMood.innerHTML = GOALS[state.mood];
+      if (this.last.mood) this.npcPortrait.animate([{ transform: 'scale(1.25)' }, { transform: 'scale(1)' }], { duration: 450, easing: 'cubic-bezier(.22,1,.36,1)' });
     }
     if (state.line !== this.last.line) {
-      this.subtitle.classList.toggle('shown', !!state.line);
+      this.talk.classList.toggle('shown', !!state.line);
       // An empty line fades the last one out.
       if (state.line) {
         this.subtitle.textContent = state.line;
@@ -122,7 +121,7 @@ export class Hud {
       this.resultText.textContent =
         state.outcome === 'victory' ? 'Gorran is down. He never healed.' : `Gorran still had ${state.npcHealthLeft} health. Rest more between rounds.`;
     }
-    this.voice.hidden = !!state.outcome || state.away;
+    this.voice.hidden = this.goal.hidden = !!state.outcome || state.away;
     this.last = { ...state };
   }
 }

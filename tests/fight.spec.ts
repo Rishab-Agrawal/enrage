@@ -699,7 +699,7 @@ test('out of the arena he cannot hear her and walks off instead of chasing her, 
   await page.evaluate(() => window.__THREE_GAME_TEST_HOOKS__?.place(0, 30, 0));
   const apart = await read(page);
   // He can't hear her out there: the mic is put away and Space opens nothing.
-  await expect(page.locator('#voice')).toBeHidden();
+  await expect(page.locator('#voice')).toHaveJSProperty('hidden', true);
   await page.keyboard.down('Space');
   await page.waitForTimeout(2500);
   await expect(page.locator('#voice')).not.toHaveClass('listening');
@@ -731,7 +731,7 @@ test('knocked out of the arena, she fights on there, heard, as long as she likes
   await page.evaluate(() => window.__THREE_GAME_TEST_HOOKS__?.place(11, -9, -2));
   const out = (d: Diagnostics) => Math.hypot(d.npc.position.x, d.npc.position.z) > ARENA_RADIUS;
   await expect.poll(async () => out(await read(page)), { timeout: 10000 }).toBe(true);
-  await expect(page.locator('#voice')).toBeVisible();
+  await expect(page.locator('#voice')).toHaveJSProperty('hidden', false);
   await page.waitForTimeout(6000);
   const fighting = await read(page);
   expect(out(fighting)).toBe(true);
