@@ -2,7 +2,7 @@ import GUI from 'lil-gui';
 import type { Mood } from '../game/events';
 import { tuning } from '../game/tuning';
 
-/** Sets the NPC's mood by hand, shows what she was heard to say, and tunes balance live. */
+/** Sets the NPC's mood by hand, skips to noon or midnight, shows what she was heard to say, and tunes balance live. */
 export class DebugPanel {
   private readonly gui = new GUI({ title: 'Debug', container: document.querySelector<HTMLElement>('#debug') ?? undefined });
   private readonly state: { mood: Mood };
@@ -12,6 +12,7 @@ export class DebugPanel {
     private readonly getMood: () => Mood,
     setMood: (mood: Mood) => void,
     rematch: () => void,
+    skipTo: (hour: 'noon' | 'midnight') => void,
   ) {
     this.state = { mood: getMood() };
     this.gui
@@ -19,6 +20,8 @@ export class DebugPanel {
       .name('NPC mood')
       .onChange((mood: Mood) => setMood(mood));
     this.gui.add({ rematch }, 'rematch').name('Rematch');
+    this.gui.add({ day: () => skipTo('noon') }, 'day').name('Skip to day');
+    this.gui.add({ night: () => skipTo('midnight') }, 'night').name('Skip to night');
     this.heardText.className = 'heard';
     this.gui.$children.append(this.heardText);
     const balance = this.gui.addFolder('Balance').close();

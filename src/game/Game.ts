@@ -14,6 +14,7 @@ import { Vfx } from '../systems/Vfx';
 import { Voice } from '../systems/Voice';
 import { createSeededRandom } from '../utils/random';
 import { SEA_LEVEL, groundHeight, groundSlope } from '../world/terrain';
+import { secondsTo } from '../world/Sky';
 import { type Obstacle, World, pushOut, within } from '../world/World';
 import type { FightEvent, Mood } from './events';
 import { LINES } from './lines';
@@ -42,7 +43,8 @@ function reaches(from: THREE.Vector3, at: THREE.Vector3, body: Obstacle): boolea
 }
 /** A fighter's body as an obstacle: an upright cylinder. */
 const cylinder = ({ position, radius }: { position: THREE.Vector3; radius: number }): Obstacle => ({ x: position.x, z: position.z, along: radius, across: radius, cos: 1, sin: 0 });
-const PLAYER_RIM = new THREE.Color('#ffd9a0').multiplyScalar(0.3);
+/** Daylight catching a fighter's edges, and the glow of his rage. */
+const DAY_RIM = new THREE.Color('#ffd9a0').multiplyScalar(0.3);
 const RAGE_RIM = new THREE.Color('#ff3a14').multiplyScalar(0.75);
 
 export class Game {
@@ -92,6 +94,7 @@ export class Game {
   /** Where she stood before this frame moved her. */
   private readonly from = new THREE.Vector3();
   private readonly slope = new THREE.Vector2();
+  private readonly rim = new THREE.Color();
 
   constructor(
     private readonly canvas: HTMLCanvasElement,
@@ -109,6 +112,10 @@ export class Game {
         () => this.npc.mood,
         (mood) => this.setMood(mood),
         () => this.rematch(),
+        (hour) => {
+          this.elapsed += secondsTo(hour, this.elapsed);
+          this.world.update(this.elapsed, this.camera);
+        },
       );
     }
     this.buildScene();
@@ -139,7 +146,6 @@ export class Game {
   private buildScene(): void {
     this.scene.fog = this.world.sky.fog;
     this.scene.add(this.world.group, this.player.character.root, this.npc.character.root, this.vfx.group);
-    this.player.character.rim.value.copy(PLAYER_RIM);
   }
 
   private rematch(): void {
@@ -249,7 +255,10 @@ export class Game {
     if (live && this.away >= LEAVE_TIME && this.away - delta < LEAVE_TIME) this.disengage();
 
     const rage = this.npc.mood === 'enraged' && this.npc.state !== 'down';
-    this.npc.character.rim.value.lerp(rage ? RAGE_RIM : PLAYER_RIM, 1 - Math.exp(-5 * delta));
+    // The daylight on their edges goes out with the day.
+    const rim = this.rim.copy(DAY_RIM).multiplyScalar(1 - this.world.sky.night);
+    this.player.character.rim.value.copy(rim);
+    this.npc.character.rim.value.lerp(rage ? RAGE_RIM : rim, 1 - Math.exp(-5 * delta));
     this.vfx.update(delta, this.npc.position, rage ? 'enraged' : 'calm');
     // He stands down once she's beaten, but the music stays with the loss until the rematch.
     this.audio.music(rage || this.outcome === 'defeat' ? 'enraged' : 'calm');

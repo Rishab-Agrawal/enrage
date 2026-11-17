@@ -58,12 +58,11 @@ export class World {
   /** Materials no light falls on, which take the hour's tint instead. */
   private readonly unlit: { color: THREE.Color }[];
   private readonly time = { value: 0 };
-  private readonly motes: THREE.Points;
   private readonly patch = new THREE.Vector3();
   /** Each terrain vertex's colour, as the map paints it. */
   private readonly ground: Float32Array;
 
-  /** The pollen keeps to `wanderer`, who parts the grass, as `other` does. */
+  /** The sky lights the land round `wanderer`, who parts the grass, as `other` does. */
   constructor(
     private readonly wanderer: THREE.Vector3,
     other: THREE.Vector3,
@@ -84,15 +83,11 @@ export class World {
     this.unlit = far.map((object) => object.material as THREE.MeshBasicMaterial);
     this.group.add(this.sky.group, ...far, terrain, createGrass(rng, uniforms), ...createRocks(rng, this.obstacles));
     this.group.add(...createPlants(rng, land, this.obstacles), ...createCrags(rng, this.obstacles));
-    this.motes = createMotes(rng);
-    this.group.add(this.motes);
   }
 
   /** The grass grows in front of `camera`: the patch reaches from just behind it to as far as blades show. */
   update(elapsed: number, camera: THREE.Camera): void {
     this.time.value = elapsed;
-    this.motes.rotation.y = elapsed * 0.01;
-    this.motes.position.copy(this.wanderer).y += Math.sin(elapsed * 0.3) * 0.3;
     camera.getWorldDirection(this.patch).setY(0).setLength(PATCH / 2 - 2).add(camera.position);
     this.sky.update(elapsed, this.wanderer);
     for (const material of this.unlit) material.color.copy(this.sky.tint);
@@ -816,41 +811,4 @@ function createWater(uniforms: Uniforms): THREE.Mesh {
   const water = new THREE.Mesh(new THREE.CircleGeometry(1400, 64).rotateX(-Math.PI / 2), material);
   water.position.y = SEA_LEVEL;
   return water;
-}
-
-function moteTexture(): THREE.CanvasTexture {
-  const canvas = document.createElement('canvas');
-  canvas.width = canvas.height = 32;
-  const ctx = canvas.getContext('2d') as CanvasRenderingContext2D;
-  const g = ctx.createRadialGradient(16, 16, 0, 16, 16, 16);
-  g.addColorStop(0, 'rgba(255,255,255,1)');
-  g.addColorStop(1, 'rgba(255,255,255,0)');
-  ctx.fillStyle = g;
-  ctx.fillRect(0, 0, 32, 32);
-  return new THREE.CanvasTexture(canvas);
-}
-
-/** Drifting pollen catching the low sun. */
-function createMotes(rng: () => number): THREE.Points {
-  const count = 260;
-  const positions = new Float32Array(count * 3);
-  for (let i = 0; i < count; i += 1) {
-    const r = Math.sqrt(rng()) * 18;
-    const angle = rng() * Math.PI * 2;
-    positions.set([Math.cos(angle) * r, 0.4 + rng() * 3.5, Math.sin(angle) * r], i * 3);
-  }
-  const geometry = new THREE.BufferGeometry();
-  geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-  return new THREE.Points(
-    geometry,
-    new THREE.PointsMaterial({
-      color: '#fff1c4',
-      map: moteTexture(),
-      size: 0.08,
-      transparent: true,
-      opacity: 0.75,
-      depthWrite: false,
-      blending: THREE.AdditiveBlending,
-    }),
-  );
 }

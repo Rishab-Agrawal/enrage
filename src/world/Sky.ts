@@ -6,6 +6,16 @@ const NIGHT = 600;
 /** Seconds after sunrise at which the game opens: a golden early morning. */
 const OPENS = 75;
 const MOONLIGHT = new THREE.Color('#9db4ff');
+/** Shadows fall within this far of the wanderer, m: as far as the haze lets them show. */
+const SHADOW_REACH = 150;
+/** The light stands this far off, m, clear of the heights between. */
+const LIGHT_DISTANCE = 260;
+
+/** Seconds from `seconds` into the game to the next noon, or midnight. */
+export function secondsTo(hour: 'noon' | 'midnight', seconds: number): number {
+  const wait = (hour === 'noon' ? DAY / 2 : DAY + NIGHT / 2) - ((seconds + OPENS) % (DAY + NIGHT));
+  return wait > 0 ? wait : wait + DAY + NIGHT;
+}
 
 /** How the sky and its light look at an hour: the dome from the top down, the haze, the sun's light, and the light off the sky and the ground. */
 type Hour = Record<'top' | 'mid' | 'horizon' | 'fog' | 'sun' | 'above' | 'below' | 'tint', THREE.Color> & { ambient: number };
@@ -40,11 +50,10 @@ export class Sky {
   constructor() {
     const { light } = this;
     light.castShadow = true;
-    // Wide enough that the trees whose long shadows reach the wanderer are in it.
     light.shadow.mapSize.set(4096, 4096);
-    Object.assign(light.shadow.camera, { left: -32, right: 32, top: 32, bottom: -32, near: 1, far: 160 });
+    Object.assign(light.shadow.camera, { left: -SHADOW_REACH, right: SHADOW_REACH, top: SHADOW_REACH, bottom: -SHADOW_REACH, near: 1, far: LIGHT_DISTANCE * 2 });
     light.shadow.bias = -0.0002;
-    light.shadow.normalBias = 0.03;
+    light.shadow.normalBias = 0.12;
     const dome = new THREE.Mesh(
       new THREE.SphereGeometry(1400, 32, 16),
       new THREE.ShaderMaterial({
@@ -110,6 +119,6 @@ export class Sky {
     if (up < 0) this.light.color.copy(MOONLIGHT);
     this.light.intensity = (up > 0 ? 2.9 : 0.8) * THREE.MathUtils.smoothstep(sun.y * up, 0.02, 0.22);
     this.light.target.position.copy(focus);
-    this.light.position.copy(focus).addScaledVector(sun, 70 * up);
+    this.light.position.copy(focus).addScaledVector(sun, LIGHT_DISTANCE * up);
   }
 }

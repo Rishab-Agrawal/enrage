@@ -720,6 +720,11 @@ test('day gives way to night and night to day, ten minutes each', async ({ page 
   expect(await night(225)).toBe(0);
   expect(await night(600)).toBe(1);
   expect(await night(600)).toBe(0);
+  // The debug panel skips straight to either.
+  await page.getByRole('button', { name: 'Skip to night' }).click();
+  await expect.poll(async () => (await read(page)).night).toBe(1);
+  await page.getByRole('button', { name: 'Skip to day' }).click();
+  await expect.poll(async () => (await read(page)).night).toBe(0);
 });
 
 test('she wades into the sea only so deep, however long she runs at it', async ({ page }) => {
