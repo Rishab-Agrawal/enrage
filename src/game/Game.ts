@@ -45,7 +45,7 @@ function reaches(from: THREE.Vector3, at: THREE.Vector3, body: Obstacle): boolea
 const cylinder = ({ position, radius }: { position: THREE.Vector3; radius: number }): Obstacle => ({ x: position.x, z: position.z, along: radius, across: radius, cos: 1, sin: 0 });
 /** Daylight catching a fighter's edges, and the glow of his rage. */
 const DAY_RIM = new THREE.Color('#ffd9a0').multiplyScalar(0.3);
-const NIGHT_RIM = new THREE.Color('#9db4ff').multiplyScalar(0.4);
+const NIGHT_FILL = new THREE.Color('#9db4ff').multiplyScalar(0.45);
 const RAGE_RIM = new THREE.Color('#ff3a14').multiplyScalar(0.75);
 
 export class Game {
@@ -256,8 +256,9 @@ export class Game {
     if (live && this.away >= LEAVE_TIME && this.away - delta < LEAVE_TIME) this.disengage();
 
     const rage = this.npc.mood === 'enraged' && this.npc.state !== 'down';
-    // Daylight on their edges gives way to moonlight, which picks them out of the dark.
-    const rim = this.rim.lerpColors(DAY_RIM, NIGHT_RIM, this.world.sky.night);
+    // The daylight on their edges goes out with the day; by night they keep a cool light of their own.
+    const rim = this.rim.copy(DAY_RIM).multiplyScalar(1 - this.world.sky.night);
+    for (const { character } of [this.player, this.npc]) character.fill.value.copy(NIGHT_FILL).multiplyScalar(this.world.sky.night);
     this.player.character.rim.value.copy(rim);
     this.npc.character.rim.value.lerp(rage ? RAGE_RIM : rim, 1 - Math.exp(-5 * delta));
     this.vfx.update(delta, this.npc.position, rage ? 'enraged' : 'calm');

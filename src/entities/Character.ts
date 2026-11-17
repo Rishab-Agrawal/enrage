@@ -68,13 +68,15 @@ function cue(action: THREE.AnimationAction, { loop = true, speed = 1, from = 0 }
 type Pivot = { step: number; t: number; from: number; about: THREE.Vector3; leg: number; size: number };
 
 /**
- * A Tripo-baked GLB as a cel-shaded, animated fighter with a rim-light and hit-flash channel.
+ * A Tripo-baked GLB as a cel-shaded, animated fighter with rim-light, fill-light and hit-flash channels.
  * Locomotion is drawn from the root's measured displacement, never from intent, so the legs
  * always show what the body actually did, whatever moved it; only whether they walk or run is the owner's call.
  */
 export class Character {
   readonly root = new THREE.Group();
   readonly rim = { value: new THREE.Color(0, 0, 0) };
+  /** Light of its own, by its own colours: keeps it readable where little light falls. */
+  readonly fill = { value: new THREE.Color(0, 0, 0) };
   readonly flash = { value: 0 };
   /** Ground velocity over the last frame, m/s, beyond what action clips carried the body: that motion is theirs to show. */
   readonly velocity = new THREE.Vector3();
@@ -415,12 +417,13 @@ export class Character {
     });
     material.onBeforeCompile = (shader) => {
       shader.uniforms.uRim = this.rim;
+      shader.uniforms.uFill = this.fill;
       shader.uniforms.uFlash = this.flash;
-      shader.fragmentShader = `uniform vec3 uRim;\nuniform float uFlash;\n${shader.fragmentShader}`.replace(
+      shader.fragmentShader = `uniform vec3 uRim, uFill;\nuniform float uFlash;\n${shader.fragmentShader}`.replace(
         '#include <emissivemap_fragment>',
         `#include <emissivemap_fragment>
         float fresnel = pow(1.0 - saturate(dot(normal, normalize(vViewPosition))), 4.0);
-        totalEmissiveRadiance += uRim * fresnel + vec3(uFlash);`,
+        totalEmissiveRadiance += uRim * fresnel + diffuseColor.rgb * uFill + vec3(uFlash);`,
       );
     };
     material.customProgramCacheKey = () => 'character-rim';
