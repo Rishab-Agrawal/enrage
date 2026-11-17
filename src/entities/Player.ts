@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import type { GLTF } from 'three/addons/loaders/GLTFLoader.js';
 import type { Input } from '../core/Input';
 import type { FightEvent } from '../game/events';
-import { inArena, tuning } from '../game/tuning';
+import { inFight, tuning } from '../game/tuning';
 import { Character } from './Character';
 import { angleTo, yawTo } from './steering';
 
@@ -46,6 +46,8 @@ export class Player {
   private drained = 0;
   /** Emptied, the bar ignores a held Shift: she presses it afresh to sprint again. */
   private spent = false;
+  /** Out of the fight, exploring: her stamina lasts longer. */
+  private roaming = false;
   state: State = 'move';
   private timer = 0;
   private contactAt = 0;
@@ -120,6 +122,7 @@ export class Player {
       this.move.set(0, 0);
     }
     this.toNpc.subVectors(npc, this.position).setY(0);
+    this.roaming = !inFight(this.position, npc);
     if (!input?.sprinting) this.spent = false;
     const sprint = this.move.y > 0 && !!input?.sprinting && !this.spent;
     this.drained = this.stamina === 0 && !sprint ? this.drained + delta : 0;
@@ -210,7 +213,7 @@ export class Player {
   }
 
   private spend(seconds: number): void {
-    this.stamina = Math.max(0, this.stamina - seconds / (inArena(this.position) ? 1 : tuning.roamStamina));
+    this.stamina = Math.max(0, this.stamina - seconds / (this.roaming ? tuning.roamStamina : 1));
     if (this.stamina === 0) this.spent = true;
   }
 

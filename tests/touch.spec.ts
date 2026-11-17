@@ -39,11 +39,11 @@ test('held sideways, a tap starts the fight; the stick walks and turns her, a dr
   expect(Math.hypot(dx, dz)).toBeGreaterThan(1);
   expect(Math.abs(turn(before.player.yaw, Math.atan2(dx, dz)))).toBeLessThan(0.1);
 
-  // Pushed right, it turns her clockwise from above, on the spot: her feet pivot, but she doesn't walk.
+  // Pushed right, it turns her clockwise from above as she walks on.
   await touch('touchStart', x, y);
   await touch('touchMove', x + 60, y);
   await page.waitForTimeout(500);
-  expect((await read(page)).player.speed).toBeLessThan(0.01);
+  expect((await read(page)).player.speed).toBeCloseTo(tuning.playerWalkSpeed, 0);
   await touch('touchEnd');
   await page.waitForTimeout(200);
   const turned = await read(page);

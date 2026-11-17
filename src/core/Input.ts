@@ -5,14 +5,14 @@ type Intent = 'strike' | 'dodge' | 'rematch' | 'speak' | 'pause' | 'map';
 /** Phones and tablets, played on the on-screen pad instead of a keyboard and mouse. */
 export const TOUCH = matchMedia('(hover: none) and (pointer: coarse)').matches;
 const UPRIGHT = matchMedia('(orientation: portrait)');
-/** How far the stick must be pushed, as a share of its reach, up or down to walk, and sideways to start turning. */
+/** How far the stick must be pushed, as a share of its reach, to walk or back her up, or to turn her. */
 const DEAD = 0.3;
 
 /**
  * Keyboard + mouse, or touch, as game intents. Presses are latched until consumed so none are lost between frames.
  * A click captures the mouse (pointer lock) for looking; Esc releases it, natively. Losing it, or focus, asks for a pause.
  * On touch, a tap on the game captures it instead, a drag there looks, the pad's buttons hold keys, and the stick walks
- * her forward or back and turns her: a thumb can steer her without a second finger dragging.
+ * her forward or back and turns her as she walks: a thumb can steer her without a second finger dragging.
  */
 export class Input {
   private readonly keys = new Set<string>();
@@ -28,7 +28,7 @@ export class Input {
   private steering = -1;
   private looking = -1;
   private readonly last = new THREE.Vector2();
-  /** The stick's push up or down, -1, 0 or 1 like the keys, and sideways, -1..1, rightward positive. */
+  /** Where the stick walks her, -1, 0 or 1 like the keys, and its push sideways, -1..1, rightward positive. */
   private walk = 0;
   private turn = 0;
   /** While set, moves, strikes, dodges and mouse travel are dropped, not saved for later; the mic and Esc still work. */
@@ -217,7 +217,8 @@ export class Input {
     const push = new THREE.Vector2(clientX - box.left - reach, clientY - box.top - reach).clampLength(0, reach);
     this.knob.style.translate = `${push.x}px ${push.y}px`;
     push.divideScalar(reach);
-    this.walk = Math.abs(push.y) > DEAD ? -Math.sign(push.y) : 0;
+    // Down backs her up; up or sideways walks her on, so turning never stops her.
+    this.walk = push.y > DEAD ? -1 : push.y < -DEAD || Math.abs(push.x) > DEAD ? 1 : 0;
     this.turn = Math.sign(push.x) * Math.max(0, (Math.abs(push.x) - DEAD) / (1 - DEAD));
   }
 }

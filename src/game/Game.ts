@@ -18,14 +18,14 @@ import { secondsTo } from '../world/Sky';
 import { type Obstacle, World, pushOut, within } from '../world/World';
 import type { FightEvent, Mood } from './events';
 import { LINES } from './lines';
-import { ARENA_RADIUS, inArena, tuning } from './tuning';
+import { ARENA_RADIUS, inArena, inFight, near, tuning } from './tuning';
 
 const STEP = 1 / 60;
 /** How long a line of Gorran's stays up, s. */
 const LINE_TIME = 2.5;
 /** Radius of a fist, m. */
 const FIST = 0.1;
-/** Out of the arena this long, s, she has left the fight. */
+/** Out of the fight this long, s, she has left it. */
 const LEAVE_TIME = 5;
 /** The steepest ground she climbs, m risen per m; the steepest she steps down, past which is a cliff; and the deepest water she wades, m. */
 const MAX_SLOPE = 0.8;
@@ -90,7 +90,7 @@ export class Game {
   /** Held still for screenshots, without the pause card. */
   private frozen = false;
   private readonly offset = new THREE.Vector3();
-  /** Seconds she has been out of the arena. */
+  /** Seconds she has been out of the fight. */
   private away = 0;
   /** Where she stood before this frame moved her. */
   private readonly from = new THREE.Vector3();
@@ -235,8 +235,8 @@ export class Game {
     this.elapsed += delta;
     if (this.input.consume('rematch') && this.outcome) this.rematch();
     const playing = this.screen === 'fight';
-    // He only hears her in the arena: out of it, the mic lets go.
-    const heard = inArena(this.player.position);
+    // He only hears her in the fight: out of it, the mic lets go.
+    const heard = inFight(this.player.position, this.npc.position);
     if (playing) this.voice.update(delta, this.input.consume('speak') && heard, this.input.speaking && heard);
     this.lineLeft -= delta;
     if (this.lineLeft <= 0) this.line = '';
@@ -258,7 +258,9 @@ export class Game {
     this.react();
     this.judge(delta);
     this.away = heard ? 0 : this.away + delta;
-    if (live && this.away >= LEAVE_TIME && this.away - delta < LEAVE_TIME) this.disengage();
+    // Out of the arena with him, she leaves the fight as soon as she gets away from him.
+    const fled = this.npc.mood === 'enraged' && !inArena(this.npc.position) && !near(this.player.position, this.npc.position);
+    if (live && (fled || (this.away >= LEAVE_TIME && this.away - delta < LEAVE_TIME))) this.disengage();
 
     const rage = this.npc.mood === 'enraged' && this.npc.state !== 'down';
     // The daylight on their edges goes out with the day; by night they keep a cool light of their own.
@@ -279,7 +281,8 @@ export class Game {
 
   /**
    * Combat rules: a blow lands only where the fist meets the other's body, and only an enraged NPC is hurt; bodies don't
-   * overlap. Both stand on the ground: he keeps to the arena, and she roams wherever the land lets her.
+   * overlap. Both stand on the ground and go round whatever is solid: he keeps within twice the arena's radius, and she
+   * roams wherever the land lets her.
    */
   private resolve(): void {
     for (const event of this.events) {
@@ -302,16 +305,18 @@ export class Game {
     const minimum = this.player.radius + this.npc.radius;
     if (distance < minimum && distance > 0.001) this.player.position.addScaledVector(toNpc, (distance - minimum) / distance);
     const r = Math.hypot(this.npc.position.x, this.npc.position.z);
-    if (r > ARENA_RADIUS) this.npc.position.multiplyScalar(ARENA_RADIUS / r);
+    if (r > 2 * ARENA_RADIUS) this.npc.position.multiplyScalar((2 * ARENA_RADIUS) / r);
+    // Twice over: pushed out of one, a body may stand in its neighbour.
+    for (const { position, radius } of [this.player, this.npc]) {
+      for (let pass = 0; pass < 2; pass += 1) for (const obstacle of this.world.obstacles) pushOut(obstacle, position, radius);
+    }
     this.roam();
     for (const body of [this.player.position, this.npc.position]) body.y = groundHeight(body.x, body.z);
   }
 
-  /** The land turns her aside: round trunks and boulders, off slopes too steep to climb, back from cliffs' edges and out of water too deep to wade. */
+  /** The land turns her aside: off slopes too steep to climb, back from cliffs' edges and out of water too deep to wade. */
   private roam(): void {
     const body = this.player.position;
-    // Twice over: pushed out of one, she may stand in its neighbour.
-    for (let pass = 0; pass < 2; pass += 1) for (const obstacle of this.world.obstacles) pushOut(obstacle, body, this.player.radius);
     const slope = groundSlope(body.x, body.z, this.slope);
     const steepness = slope.lengthSq();
     // Metres this frame's step climbed: taken back along the slope where she can't climb, or can't go deeper.
