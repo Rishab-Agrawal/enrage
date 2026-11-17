@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import type { GLTF } from 'three/addons/loaders/GLTFLoader.js';
 import type { FightEvent, Mood } from '../game/events';
-import { ARENA_RADIUS, tuning } from '../game/tuning';
+import { ARENA_RADIUS, inArena, tuning } from '../game/tuning';
 import { Character } from './Character';
 import { aimToward, angleTo, turnToward, yawTo } from './steering';
 
@@ -32,12 +32,14 @@ const RETREAT_TO = 7.5;
 const WALK_SPEED = 1.7;
 /** How fast he steps after her through a wind-up, m/s: past her walk, short of her sprint. */
 const STEP_IN_SPEED = 3.5;
+/** Enraged with her out of the arena, he turns his back on her and walks off this long, s, then stands glaring after her. */
+const WITHDRAW_TIME = 2;
 const ROAR_TIME = 1.4;
 const RECOVER_TIME = 0.5;
 const FLINCH_TIME = 0.35;
 const POISE_TIME = 1.6;
 
-type State = 'calm' | 'shove' | 'roar' | 'chase' | 'attack' | 'recover' | 'flinch' | 'down';
+type State = 'calm' | 'shove' | 'roar' | 'chase' | 'withdraw' | 'attack' | 'recover' | 'flinch' | 'down';
 
 export class Npc {
   readonly character: Character;
@@ -83,7 +85,7 @@ export class Npc {
     events.push({ type: 'mood', mood });
   }
 
-  /** The fight is over on his side: arms folded, no further reactions. */
+  /** He drops the fight without a word: she is beaten, or gone. */
   standDown(): void {
     this.mood = 'calm';
     this.enter('calm');
@@ -131,10 +133,16 @@ export class Npc {
       case 'chase': {
         // He swings once she'll still be in reach as the blow lands, judging by her speed toward him: he follows her off.
         const attack = ATTACKS[this.attack];
-        if (distance - Math.max(0, closing) * windUp(attack) <= attack.range || distance <= CLINCH) this.startAttack(events);
+        if (!inArena(player)) this.enter('withdraw');
+        else if (distance - Math.max(0, closing) * windUp(attack) <= attack.range || distance <= CLINCH) this.startAttack(events);
         else this.walk(this.toPlayer.normalize(), tuning.npcRunSpeed, delta);
         break;
       }
+      case 'withdraw':
+        if (inArena(player)) this.enter('chase');
+        else if (this.timer < WITHDRAW_TIME) this.walk(this.heading.copy(this.toPlayer).negate().normalize(), WALK_SPEED, delta);
+        else aimToward(this.character, yawTo(this.toPlayer), 1.5, delta);
+        break;
       case 'attack':
         // He tracks her through the wind-up, stepping after her as she backs off: a sprint or dash outruns the blow.
         // Committed after contact: sidestepping late works.
@@ -180,7 +188,7 @@ export class Npc {
     this.contactAt = 0;
     const play = this.character.play.bind(this.character);
     if (state === 'calm') this.character.locomote('calm');
-    if (state === 'chase' || state === 'recover') this.character.locomote('idle');
+    if (state === 'chase' || state === 'recover' || state === 'withdraw') this.character.locomote('idle');
     this.character.running = state === 'chase';
     if (state === 'chase') this.attack = this.rng() < 0.6 ? 'punch' : 'haymaker';
     if (state === 'shove') {

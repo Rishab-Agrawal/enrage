@@ -654,7 +654,7 @@ test('sprinting off as he swings outruns his blows', async ({ page }) => {
   expect(landed.every((s) => s.startsWith('0/') && s !== '0/0'), landed.join(', ')).toBe(true);
 });
 
-test('out of the arena he cannot hear her, and once she has been out 5 s he calms down, whole again; a shorter while changes nothing', async ({ page }) => {
+test('out of the arena he cannot hear her and walks off instead of chasing her, and once she has been out 5 s he calms down without a word, whole again; a shorter while changes nothing', async ({ page }) => {
   const errors = await start(page);
   await capture(page);
   await page.evaluate(() => window.__THREE_GAME_TEST_HOOKS__?.setState('resting'));
@@ -662,14 +662,19 @@ test('out of the arena he cannot hear her, and once she has been out 5 s he calm
   expect(hurt).toBeLessThan(tuning.npcMaxHealth);
   await setMood(page, 'enraged');
   await page.evaluate(() => window.__THREE_GAME_TEST_HOOKS__?.place(0, 30, 0));
+  const apart = await read(page);
   // He can't hear her out there: the mic is put away and Space opens nothing.
   await expect(page.locator('#voice')).toBeHidden();
   await page.keyboard.down('Space');
   await page.waitForTimeout(2500);
   await expect(page.locator('#voice')).not.toHaveClass('listening');
   await page.keyboard.up('Space');
-  expect((await read(page)).npc).toMatchObject({ mood: 'enraged', health: hurt });
+  const { npc } = await read(page);
+  expect(npc).toMatchObject({ mood: 'enraged', state: 'withdraw', health: hurt });
+  // She stands due south of the arena: he has walked north, away from her.
+  expect(npc.position.z).toBeLessThan(apart.npc.position.z - 1);
   await expect.poll(async () => (await read(page)).npc, { timeout: 6000 }).toMatchObject({ mood: 'calm', health: tuning.npcMaxHealth });
+  expect(LINES.mood.calm).not.toContain(await page.locator('#subtitle').textContent());
   expect(errors).toEqual([]);
 });
 

@@ -387,10 +387,11 @@ export class Game {
     this.debug?.sync();
   }
 
-  /** She has left him be: he calms down, whole again, and nothing said in the fight she left counts in the next. */
+  /** She has left him be: he calms down without a word, whole again, and nothing said in the fight she left counts in the next. */
   private disengage(): void {
     this.npc.health = tuning.npcMaxHealth;
-    this.setMood('calm');
+    this.npc.standDown();
+    this.debug?.sync();
     this.worked = [];
     this.fight = crypto.randomUUID();
   }
