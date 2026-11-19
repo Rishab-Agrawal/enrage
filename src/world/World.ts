@@ -464,35 +464,46 @@ function createFlowers(rng: () => number, land: Float32Array): THREE.Points {
   return new THREE.Points(geometry, new THREE.PointsMaterial({ map: petalTexture(), vertexColors: true, size: 0.24, alphaTest: 0.5 }));
 }
 
+/** How sharply a boulder's planes meet: the higher, the crisper its edges. */
+const WEAR = 14;
+const STONE = new THREE.Color('#97a2ba');
+
+/**
+ * A boulder about `size` m tall: a stone cut in a few broad planes, flat beneath and sloping on top, its edges worn
+ * round. Each plane has its own tone, paler the more it faces the sky.
+ */
 function boulderGeometry(rng: () => number, size: number): THREE.BufferGeometry {
-  const geometry = new THREE.IcosahedronGeometry(1, 3);
+  const cuts: [THREE.Vector3, number][] = [[new THREE.Vector3(0, -1, 0), 0.35], [new THREE.Vector3(rng() - 0.5, 1.5, rng() - 0.5).normalize(), 0.6 + rng() * 0.2]];
+  // Broad faces round the sides, and chamfers between them and the top.
+  for (let i = 0; i < 7; i += 1) cuts.push([new THREE.Vector3(Math.cos(i * 0.9 + rng() * 0.4), rng() * 0.5 - 0.1, Math.sin(i * 0.9 + rng() * 0.4)).normalize(), 0.85 + rng() * 0.15]);
+  for (let i = 0; i < 3; i += 1) cuts.push([new THREE.Vector3(Math.cos(i * 2.1 + rng()), 0.9 + rng() * 0.4, Math.sin(i * 2.1 + rng())).normalize(), 0.75]);
+  const tones = cuts.map(([normal]) => 0.72 + Math.max(normal.y, 0) * 0.24 + rng() * 0.2);
+  const geometry = mergeVertices(new THREE.IcosahedronGeometry(1, 5).deleteAttribute('normal').deleteAttribute('uv'));
   const position = geometry.getAttribute('position');
-  const seed = rng() * 100;
-  const v = new THREE.Vector3();
+  const colors = new Float32Array(position.count * 3);
+  const [v, color, seed] = [new THREE.Vector3(), new THREE.Color(), rng() * 100];
   for (let i = 0; i < position.count; i += 1) {
     v.fromBufferAttribute(position, i);
-    const lumps = 0.78 + fbm(v.x * 1.4 + seed, v.z * 1.4 + v.y * 1.1, 3) * 0.5;
-    v.multiplyScalar(lumps);
-    v.y = Math.max(v.y * 0.72, -0.25);
-    position.setXYZ(i, v.x * size * 1.2, v.y * size, v.z * size);
+    // Out to the nearest plane, by a smooth minimum so the planes round into each other, and never past 1.3; its tone
+    // blends the same way, and the worn edges, where no one plane holds, catch the light.
+    let [sum, tone, nearest] = [Math.exp(-WEAR * 1.3), 0, 0];
+    cuts.forEach(([normal, distance], cut) => {
+      const reach = normal.dot(v) > 0 ? Math.exp((-WEAR * distance) / normal.dot(v)) : 0;
+      sum += reach;
+      tone += reach * tones[cut];
+      nearest = Math.max(nearest, reach);
+    });
+    const mottle = fbm(v.x * 3 + seed, v.y * 3 + v.z * 2, 3) - 0.5;
+    color.copy(STONE).multiplyScalar(tone / sum + (1 - nearest / sum) * 0.35 + mottle * 0.25).toArray(colors, i * 3);
+    v.multiplyScalar(-Math.log(sum) / WEAR);
+    position.setXYZ(i, v.x * size * 1.25, v.y * size * 1.4, v.z * size * 1.05);
   }
   geometry.computeVertexNormals();
-  // Moss settles on the upward faces.
-  const normal = geometry.getAttribute('normal');
-  const colors = new Float32Array(position.count * 3);
-  const stone = new THREE.Color('#a3abbd');
-  const moss = new THREE.Color('#7f9a3a');
-  const color = new THREE.Color();
-  for (let i = 0; i < position.count; i += 1) {
-    const mossy = THREE.MathUtils.smoothstep(normal.getY(i) + (noise2(position.getX(i) * 3, position.getZ(i) * 3) - 0.5) * 0.5, 0.68, 0.88);
-    color.copy(stone).multiplyScalar(0.85 + noise2(position.getX(i) * 5 + seed, position.getY(i) * 5) * 0.25).lerp(moss, mossy);
-    color.toArray(colors, i * 3);
-  }
   geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
   return geometry;
 }
 
-/** Mossy boulders ringing the fighting circle, a few big ones on its slopes, and outcrops over the island, most on high ground: a great boulder with lesser ones about it. */
+/** Boulders ringing the fighting circle, a few big ones on its slopes, and outcrops over the island, most on high ground: a great boulder with lesser ones about it. */
 function createRocks(rng: () => number, obstacles: Obstacle[]): THREE.Mesh[] {
   const material = new THREE.MeshToonMaterial({ vertexColors: true, gradientMap: toonGradient });
   const rocks: THREE.Mesh[] = [];
@@ -553,7 +564,7 @@ function leafTexture(rng: () => number): THREE.CanvasTexture {
 /**
  * A plant, 1 m tall before its instance scales it, in two groups: its wood, then its leaf cards. A broadleaf: a trunk
  * flaring at the root and forking into boughs, each bearing a spray of leaves. A fir: ragged tiers. A shrub: low
- * sprays. Heather: spikes of lilac over a green tuft.
+ * sprays. Heather: a tuft of narrow leaves, and stems leaning out of it tipped with whorls of lilac florets.
  */
 function plantGeometry(rng: () => number, kind: Plant): THREE.BufferGeometry {
   const [color, lit, v] = [new THREE.Color(), new THREE.Color(), new THREE.Vector3()];
@@ -624,10 +635,20 @@ function plantGeometry(rng: () => number, kind: Plant): THREE.BufferGeometry {
   } else if (kind === 'shrub') {
     for (let i = 0; i < 5; i += 1) spray(0.22 + rng() * 0.12, around(i, i && 0.2 + rng() * 0.2, 0.2 + rng() * 0.12), foot, 0.02);
   } else {
-    spray(0.2, new THREE.Vector3(0, 0.1, 0), foot, 0.01);
+    for (let i = 0; i < 12; i += 1) {
+      const length = 0.3 + rng() * 0.15;
+      const blade = new THREE.ConeGeometry(0.03, length, 3).scale(1, 1, 0.4).translate(0, length / 2, 0);
+      part(blade.rotateZ(0.2 + rng() * 0.6).rotateY(i * 2.4 + rng()), '#3d6337', '#9cb58a');
+    }
     for (let i = 0; i < 11; i += 1) {
-      const spike = new THREE.ConeGeometry(0.045, 0.62, 5).translate(0, 0.31, 0).rotateZ(0.08 + rng() * 0.45).rotateY(i * 2.4 + rng());
-      part(spike.translate(...around(i, rng() * 0.12, 0.08).toArray()), '#8a6fd6', '#d8c4ff');
+      const [length, tilt, turn, at] = [0.6 + rng() * 0.3, 0.06 + rng() * 0.35, i * 2.4 + rng(), around(i, rng() * 0.08, 0)];
+      const lean = (geometry: THREE.BufferGeometry) => geometry.rotateZ(tilt).rotateY(turn).translate(at.x, 0, at.z);
+      part(lean(new THREE.CylinderGeometry(0.005, 0.008, length, 3).translate(0, length / 2, 0)), '#4d6b3c', '#86a067');
+      // Whorls of florets up the top of the stem, smaller towards its tip.
+      for (let whorl = 0; whorl < 7; whorl += 1) {
+        const floret = new THREE.OctahedronGeometry(0.03 * (1 - whorl * 0.07)).scale(1, 1.5, 1);
+        part(lean(floret.translate((whorl % 2) * 0.014 - 0.007, length * (0.6 + whorl * 0.065), 0)), '#5b3f9e', '#cbb5ff');
+      }
     }
   }
   const wood = mergeVertices(mergeGeometries(parts));
