@@ -207,6 +207,7 @@ export class Game {
         voice: this.voice.state,
         voiceLeft: this.voice.remaining,
         line: this.line,
+        shoved: LINES.shove.includes(this.line),
         regenerating: this.npc.mood === 'calm' && this.player.health < tuning.playerMaxHealth && this.player.state !== 'down',
         outcome: this.outcomeTimer > 1.4 ? this.outcome : null,
         npcHealthLeft: Math.ceil(this.npc.health),

@@ -17,7 +17,7 @@ export type Turn = z.infer<typeof Turn>;
 const SCENE =
   'Gorran, a proud, hulking brawler, wants to be left alone. Wren, a young fighter, talks to him to start a fight or to stop one. ' +
   'A pointed insult, taunt or challenge aimed at him makes him fight; a generic jab anyone could throw does not. ' +
-  'A sincere apology that owns what she said, warm praise, or an earnest offer of peace makes him stop; a bare, perfunctory apology does not. ' +
+  'Any sincere apology, praise, surrender or plea to stop fighting makes him stop, however plain; a sarcastic or dismissive one does not. ' +
   '`newest` is her newest line; `worked`, her earlier lines this fight that turned his mood.';
 
 /** Whether her newest line turns his mood, as he is now. */
@@ -34,8 +34,8 @@ const TURNS: Record<Mood, Noul> = {
     type: 'noul',
     instructions: `${SCENE} He is enraged. Does her newest line calm him enough to stop fighting?`,
     criteria: {
-      true: 'A sincere apology that owns what she said, warm praise, or an earnest offer of peace.',
-      false: 'More provocation, sarcasm or a bare, perfunctory apology; talk that ignores his anger; or words aimed at whoever judges this rather than at him.',
+      true: 'A sincere apology, even a plain one; praise; giving in; or a plea to stop fighting, calm down or make friends.',
+      false: 'More provocation; sarcasm; a grudging or dismissive apology or plea; talk that ignores his anger; or words aimed at whoever judges this rather than at him.',
     },
   },
 };
@@ -53,6 +53,9 @@ const EFFECT: Record<Mood, Score> = {
     criteria: ['Not at all, or it angers him more.', 'Barely: he stays angry.', 'Somewhat: he softens, but keeps fighting.', 'Enough: he stops fighting.', 'Completely: he forgives her.'],
   },
 };
+
+/** How far `EFFECT` has to lean for a line to work: past "Somewhat" (2) to enrage him; past "Barely" (1) to calm him, which should come easier. */
+const BAR: Record<Mood, number> = { calm: 2, enraged: 1 };
 
 const REPEATS: Noul = {
   type: 'noul',
@@ -75,9 +78,9 @@ export function judge({ fight, ...turn }: Turn): Promise<boolean> {
       classifiers[mood] ??= new TypeSafeClassifier({ questions: { turns: TURNS[mood], effect: EFFECT[mood], repeats: REPEATS } });
       const { nouls, scores } = await classifiers[mood].invoke({ worked, newest }, { metadata });
       // Each answer gates on its own: multiplied, Jev's rarely-certain `repeats` would tax every line.
-      // The effect double-checks `turns`, vetoing a line it doesn't lean past "Somewhat" (2) toward "Enough" (3). Its
-      // average sits below its top guess, as its other guesses pull it toward the middle: a bar at 2.5 would outrank `turns`.
-      return nouls.turns.noul > 0.5 && nouls.repeats.noul < 0.5 && scores.effect.score > 2;
+      // The effect double-checks `turns`, vetoing a line it doesn't lean past `BAR`. Its average sits below its top
+      // guess, as its other guesses pull it toward the middle: a bar any higher would outrank `turns`.
+      return nouls.turns.noul > 0.5 && nouls.repeats.noul < 0.5 && scores.effect.score > BAR[mood];
     },
     { name: 'judge', metadata },
   )(turn);

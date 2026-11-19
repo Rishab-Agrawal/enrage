@@ -6,14 +6,16 @@ import { alert, tell } from './telegram.ts';
 /** The game's server side, keeping API keys from the browser: the dev server mounts it, and `index.ts` serves it deployed. */
 export const api = express().disable('x-powered-by');
 
+/** The player's address: Railway's edge sets X-Real-IP to it; the dev server has no edge. */
+const ip = (request: Request) => request.get('x-real-ip') ?? request.ip ?? '';
+
 // Every route spends an API key: each player gets a ration, and all of them a daily budget, which caps what bots can spend.
 api.use(
   '/api',
   rateLimit({
     // A turn at the mic is two requests, a token and a verdict: this allows one every 6 s.
     limit: 20,
-    // Railway's edge sets X-Real-IP to the player's address; the dev server has no edge.
-    keyGenerator: (request) => ipKeyGenerator(request.get('x-real-ip') ?? request.ip ?? ''),
+    keyGenerator: (request) => ipKeyGenerator(ip(request)),
     validate: { xForwardedForHeader: false },
     handler: (_request, response) => {
       void alert('A player hit the rate limit: a bot?');
@@ -39,8 +41,8 @@ api.get('/api/stt-token', async (_request, response) => {
 });
 
 // A player left the title screen for the fight.
-api.post('/api/play', (_request, response) => {
-  void tell('🎮 Someone started playing.');
+api.post('/api/play', (request, response) => {
+  void tell(`🎮 Someone started playing: ${ip(request)}`);
   response.sendStatus(204);
 });
 
@@ -51,7 +53,9 @@ api.post('/api/judge', express.json(), async (request, response) => {
     response.sendStatus(400);
     return;
   }
-  response.json({ turns: await judge(turn.data) });
+  const turns = await judge(turn.data);
+  void tell(`🗣️ ${ip(request)}, Gorran ${turn.data.mood}: “${turn.data.newest}”${turns ? ' (turned him)' : ''}`);
+  response.json({ turns });
 });
 
 api.use((error: Error & { status?: number }, request: Request, response: Response, _next: NextFunction) => {

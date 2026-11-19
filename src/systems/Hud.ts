@@ -15,6 +15,8 @@ type HudState = {
   voice: VoiceState;
   voiceLeft: number; // 0..1
   line: string;
+  /** His line shoves her off: only then does the pill under it say what to do, as she hasn't spoken to him. */
+  shoved: boolean;
   regenerating: boolean;
   outcome: Outcome;
   npcHealthLeft: number;
@@ -58,6 +60,7 @@ export class Hud {
   private readonly goalMood = $('#goal span');
   private readonly voice = $('#voice');
   private readonly voiceTimer = $('#voice .timer');
+  private readonly speakKey = $('#controls .speak');
   private readonly result = $('#result');
   private readonly resultTitle = $('#result h1');
   private readonly resultText = $('#result p');
@@ -66,6 +69,7 @@ export class Hud {
   private readonly mapGorran = $<HTMLImageElement>('#map img');
   private readonly mapWren = $('#map .wren');
   private chips = { player: 1, npc: 1 };
+  private shoved = false;
   private last: Partial<HudState> = {};
 
   constructor(onRematch: () => void, onMap: () => void, onGorran: () => void) {
@@ -99,6 +103,7 @@ export class Hud {
       // An empty line fades the last one out.
       if (state.line) {
         this.subtitle.textContent = state.line;
+        this.shoved = state.shoved;
         this.subtitle.animate([{ transform: 'translateY(8px)' }, {}], { duration: 450, easing: 'cubic-bezier(.22,1,.36,1)' });
       }
     }
@@ -121,7 +126,8 @@ export class Hud {
       this.resultText.textContent =
         state.outcome === 'victory' ? 'Gorran is down. He never healed.' : `Gorran still had ${state.npcHealthLeft} health. Rest more between rounds.`;
     }
-    this.voice.hidden = this.goal.hidden = !!state.outcome || state.away;
+    this.voice.hidden = this.speakKey.hidden = !!state.outcome || state.away;
+    this.goal.hidden = this.voice.hidden || !this.shoved;
     this.last = { ...state };
   }
 }

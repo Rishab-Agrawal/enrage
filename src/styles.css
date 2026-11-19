@@ -301,7 +301,11 @@ body,
   position: absolute;
   top: 28%;
   inset-inline: 16px;
-  margin: 0;
+  width: fit-content;
+  margin: 0 auto;
+  padding: 6px 28px;
+  border-radius: 999px;
+  background: var(--frame);
   color: var(--rage);
   font-size: clamp(1.6rem, 4vw, 2.4rem);
   font-weight: 900;
@@ -396,8 +400,8 @@ b.enraged {
   position: absolute;
   top: 22px;
   left: 22px;
-  display: flex;
-  gap: 18px;
+  display: grid;
+  gap: 8px;
   font-size: 0.85rem;
   font-weight: 700;
   text-shadow: 0 1px 0 var(--ink);
