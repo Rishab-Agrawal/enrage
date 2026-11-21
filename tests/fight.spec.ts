@@ -296,7 +296,7 @@ test('what she says goes to the judge with her lines that already worked, and Go
   const errors = await start(page);
   await capture(page);
   await talk(page);
-  await expect(page.locator('#debug .heard')).toHaveText('You look tired.');
+  await expect(page.locator('#said')).toHaveText('You look tired.');
   await says(page, LINES.unmoved.calm);
   await expect(page.locator('#voice')).toHaveClass('ready', { timeout: 8_000 });
   await talk(page);

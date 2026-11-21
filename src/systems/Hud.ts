@@ -15,6 +15,8 @@ type HudState = {
   voice: VoiceState;
   voiceLeft: number; // 0..1
   line: string;
+  /** Her words, shown above his line. */
+  said: string;
   /** His line shoves her off: only then does the pill under it say what to do, as she hasn't spoken to him. */
   shoved: boolean;
   regenerating: boolean;
@@ -55,6 +57,7 @@ export class Hud {
   private readonly npcPortrait = $<HTMLImageElement>('.npc img');
   private readonly npcSection = $('.fighter.npc');
   private readonly talk = $('#talk');
+  private readonly said = $('#said');
   private readonly subtitle = $('#subtitle');
   private readonly goal = $('#goal');
   private readonly goalMood = $('#goal span');
@@ -98,13 +101,18 @@ export class Hud {
       this.goalMood.innerHTML = GOALS[state.mood];
       if (this.last.mood) this.npcPortrait.animate([{ transform: 'scale(1.25)' }, { transform: 'scale(1)' }], { duration: 450, easing: 'cubic-bezier(.22,1,.36,1)' });
     }
-    if (state.line !== this.last.line) {
-      this.talk.classList.toggle('shown', !!state.line);
-      // An empty line fades the last one out.
-      if (state.line) {
+    if (state.line !== this.last.line || state.said !== this.last.said) {
+      const shown = !!(state.line || state.said);
+      this.talk.classList.toggle('shown', shown);
+      // Emptied, the exchange fades out as it was.
+      if (shown) {
+        this.said.textContent = state.said;
         this.subtitle.textContent = state.line;
+        this.said.hidden = !state.said;
+        this.subtitle.hidden = !state.line;
         this.shoved = state.shoved;
-        this.subtitle.animate([{ transform: 'translateY(8px)' }, {}], { duration: 450, easing: 'cubic-bezier(.22,1,.36,1)' });
+        if (state.said && !this.last.said) this.rise(this.said);
+        if (state.line && state.line !== this.last.line) this.rise(this.subtitle);
       }
     }
     if (state.voice !== this.last.voice) this.voice.className = state.voice;
@@ -129,5 +137,9 @@ export class Hud {
     this.voice.hidden = this.speakKey.hidden = !!state.outcome || state.away;
     this.goal.hidden = this.voice.hidden || !this.shoved;
     this.last = { ...state };
+  }
+
+  private rise(line: HTMLElement): void {
+    line.animate([{ transform: 'translateY(8px)' }, {}], { duration: 450, easing: 'cubic-bezier(.22,1,.36,1)' });
   }
 }

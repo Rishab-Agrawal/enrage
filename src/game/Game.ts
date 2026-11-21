@@ -21,7 +21,7 @@ import { LINES } from './lines';
 import { ARENA_RADIUS, inArena, inFight, near, tuning } from './tuning';
 
 const STEP = 1 / 60;
-/** How long a line of Gorran's stays up, s. */
+/** How long a line of Gorran's stays up, with hers above it, s. */
 const LINE_TIME = 2.5;
 /** Radius of a fist, m. */
 const FIST = 0.1;
@@ -62,7 +62,10 @@ export class Game {
   private readonly vfx = new Vfx();
   private readonly audio = new Audio();
   private readonly voice = new Voice();
-  private readonly speech = new Speech((text) => this.hear(text));
+  private readonly speech = new Speech(
+    (text) => this.hearing(text),
+    (text) => this.hear(text),
+  );
   private readonly hud = new Hud(
     () => this.rematch(),
     () => this.openMap(),
@@ -82,6 +85,8 @@ export class Game {
   private hitstop = 0;
   private elapsed = 0;
   private line = '';
+  /** Her words, up until his answer to them goes. */
+  private said = '';
   private lineLeft = 0;
   /** Her lines that turned his mood this fight: one that repeats them doesn't work again. */
   private worked: string[] = [];
@@ -161,7 +166,7 @@ export class Game {
     this.outcomeTimer = 0;
     this.hitstop = 0;
     this.events.length = 0;
-    this.line = '';
+    this.line = this.said = '';
     this.worked = [];
     this.fight = crypto.randomUUID();
     this.away = 0;
@@ -207,6 +212,7 @@ export class Game {
         voice: this.voice.state,
         voiceLeft: this.voice.remaining,
         line: this.line,
+        said: this.said,
         shoved: LINES.shove.includes(this.line),
         regenerating: this.npc.mood === 'calm' && this.player.health < tuning.playerMaxHealth && this.player.state !== 'down',
         outcome: this.outcomeTimer > 1.4 ? this.outcome : null,
@@ -251,8 +257,8 @@ export class Game {
     // He only hears her in the fight: out of it, the mic lets go.
     const heard = inFight(this.player.position, this.npc.position);
     if (playing) this.voice.update(delta, this.input.consume('speak') && heard, this.input.speaking && heard);
-    this.lineLeft -= delta;
-    if (this.lineLeft <= 0) this.line = '';
+    // His line's time runs only once it is up, so hers waits for his answer.
+    if (this.line && (this.lineLeft -= delta) <= 0) this.line = this.said = '';
 
     // Hitstop slows the fight, never the camera or effects.
     this.hitstop -= delta;
@@ -421,7 +427,7 @@ export class Game {
 
   /** Her turn at the mic, as heard: his mood turns if the judge says her words do, else he answers as he is. */
   private async hear(text: string): Promise<void> {
-    this.debug?.heard(text);
+    this.hearing(text);
     if (this.outcome) return;
     const { worked, fight } = this;
     const mood = this.npc.mood;
@@ -450,6 +456,12 @@ export class Game {
     } else {
       this.say(LINES.unmoved[this.npc.mood]);
     }
+  }
+
+  /** Her words go up, and his last line, which they don't answer, comes down. */
+  private hearing(text: string): void {
+    this.said = text;
+    this.line = '';
   }
 
   /** A line from `lines` other than the one he just said, cosmetic so off the seeded RNG. */

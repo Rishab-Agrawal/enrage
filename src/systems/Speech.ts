@@ -1,6 +1,6 @@
 import { TOUCH } from '../core/Input';
 
-const DEEPGRAM = 'wss://api.deepgram.com/v1/listen?model=nova-3&smart_format=true&keyterm=Gorran&keyterm=Wren';
+const DEEPGRAM = 'wss://api.deepgram.com/v1/listen?model=nova-3&smart_format=true&interim_results=true&keyterm=Gorran&keyterm=Wren';
 /** How often the recorder hands audio to the socket, ms. */
 const CHUNK = 100;
 
@@ -14,7 +14,11 @@ export class Speech {
   private mic?: Promise<MediaStream>;
   private letGo?: () => void;
 
-  constructor(private readonly onHeard: (text: string) => void) {}
+  /** `onHearing` gets her words so far while she speaks, `onHeard` the whole turn once she lets go. */
+  constructor(
+    private readonly onHearing: (text: string) => void,
+    private readonly onHeard: (text: string) => void,
+  ) {}
 
   /**
    * The mic, kept open once granted: a fresh one each turn would clip her first words while it warms up. Refused, it is
@@ -63,7 +67,11 @@ export class Speech {
     const heard: string[] = [];
     socket.onmessage = (event) => {
       const result = JSON.parse(event.data) as Result;
-      if (result.type === 'Results' && result.is_final) heard.push(result.channel!.alternatives[0].transcript);
+      if (result.type !== 'Results') return;
+      // An interim result is Deepgram's guess at the words since the last final one, which replaces it.
+      const transcript = result.channel!.alternatives[0].transcript;
+      if (result.is_final) heard.push(transcript);
+      this.onHearing([...heard, result.is_final ? '' : transcript].filter(Boolean).join(' '));
     };
     const closed = new Promise((resolve) => (socket.onclose = resolve));
     await new Promise((resolve, reject) => {
