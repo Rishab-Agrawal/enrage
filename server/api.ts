@@ -41,9 +41,14 @@ api.get('/api/stt-token', async (_request, response) => {
 });
 
 // A player left the title screen for the fight.
-api.post('/api/play', (request, response) => {
-  void tell(`🎮 Someone started playing: ${ip(request)}`);
+api.post('/api/play', async (request, response) => {
   response.sendStatus(204);
+  const address = ip(request);
+  const where = await fetch(`https://ipwho.is/${address}?fields=city,country`)
+    .then((reply) => reply.json() as Promise<{ city?: string; country?: string }>)
+    .then(({ city, country }) => [city, country].filter(Boolean).join(', '))
+    .catch(() => '');
+  void tell(`🎮 Someone started playing: ${address}${where && ` (${where})`}`);
 });
 
 // Whether her newest line turns Gorran's mood. Only JSON is parsed: another site can't send that without CORS, which this API doesn't allow.
