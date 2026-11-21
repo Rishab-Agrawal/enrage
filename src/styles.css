@@ -280,23 +280,27 @@ body,
   margin: 0;
 }
 
-#exchange {
-  display: grid;
-  gap: 4px;
-  padding: 8px 22px;
+:is(#said, #subtitle) {
+  padding: 6px 20px;
   border-radius: 18px;
   background: var(--frame);
 }
 
 #said {
-  color: var(--gold);
   font-size: 1.15rem;
-  font-style: italic;
+}
+
+#said::before {
+  content: 'You: ';
+}
+
+#subtitle::before {
+  content: 'Gorran: ';
 }
 
 /* Still a guess while she speaks. */
 #app:has(#voice.listening) #said {
-  opacity: 0.7;
+  color: color-mix(in srgb, var(--paper) 70%, transparent);
 }
 
 #subtitle {
@@ -885,8 +889,8 @@ kbd {
     gap: 6px;
   }
 
-  #exchange {
-    padding: 6px 16px;
+  :is(#said, #subtitle) {
+    padding: 4px 14px;
   }
 
   #said {
