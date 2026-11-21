@@ -22,10 +22,8 @@ type HudState = {
   regenerating: boolean;
   outcome: Outcome;
   npcHealthLeft: number;
-  /** She is out of the arena, where he can't hear her. */
-  away: boolean;
-  /** His bar shows: she is in the arena, or he is enraged. */
-  rival: boolean;
+  /** She is in the arena: he hears her, and his bar shows. */
+  arena: boolean;
   /** Where the two stand, m, and the yaw she faces. */
   wren: { x: number; z: number; yaw: number };
   gorran: { x: number; z: number };
@@ -120,7 +118,7 @@ export class Hud {
     this.voiceTimer.style.strokeDashoffset = String(state.voiceLeft - 1);
     if (state.screen !== this.last.screen) this.app.dataset.screen = state.screen;
     if (state.regenerating !== this.last.regenerating) this.playerSection.classList.toggle('regen', state.regenerating);
-    if (state.rival !== this.last.rival) this.npcSection.classList.toggle('shown', state.rival);
+    if (state.arena !== this.last.arena) this.npcSection.classList.toggle('shown', state.arena);
     this.app.classList.toggle('hurt', state.player < 0.3 && !state.outcome);
     mark(this.mapGorran, state.gorran);
     mark(this.mapWren, state.wren);
@@ -134,7 +132,7 @@ export class Hud {
       this.resultText.textContent =
         state.outcome === 'victory' ? 'Gorran is down. He never healed.' : `Gorran still had ${state.npcHealthLeft} health. Rest more between rounds.`;
     }
-    this.voice.hidden = this.speakKey.hidden = !!state.outcome || state.away;
+    this.voice.hidden = this.speakKey.hidden = !!state.outcome || !state.arena;
     this.goal.hidden = this.voice.hidden || !this.shoved;
     this.last = { ...state };
   }

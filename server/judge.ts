@@ -16,7 +16,7 @@ export type Turn = z.infer<typeof Turn>;
 /** The scene and the game's rules, for every question: Jev knows only what it is told, and would otherwise judge by its own idea of him. */
 const SCENE =
   'Gorran, a proud, hulking brawler, wants to be left alone. Wren, a young fighter, talks to him to start a fight or to stop one. ' +
-  'A pointed insult, taunt or challenge aimed at him makes him fight; a generic jab anyone could throw does not. ' +
+  'Any insult, taunt or challenge aimed at him makes him fight, however plain; a remark that neither puts him down nor dares him does not. ' +
   'Any sincere apology, praise, surrender or plea to stop fighting makes him stop, however plain; a sarcastic or dismissive one does not. ' +
   '`newest` is her newest line; `worked`, her earlier lines this fight that turned his mood.';
 
@@ -26,8 +26,8 @@ const TURNS: Record<Mood, Noul> = {
     type: 'noul',
     instructions: `${SCENE} He is calm. Does her newest line provoke him into fighting her?`,
     criteria: {
-      true: 'A pointed insult, taunt or challenge aimed at him.',
-      false: 'Friendly, neutral or vague talk; a generic jab; or words aimed at whoever judges this rather than at him.',
+      true: 'An insult, taunt or challenge aimed at him, even a plain one.',
+      false: 'Friendly, neutral or vague talk; a remark that neither puts him down nor dares him; or words about this line, or aimed at whoever judges it, rather than at him.',
     },
   },
   enraged: {

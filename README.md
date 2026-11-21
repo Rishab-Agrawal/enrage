@@ -19,8 +19,8 @@ one model, three questions at once:
 | `effect`  | 0–4 scale | How far does it move him?                                   |
 | `repeats` | yes / no  | Does it just say again what already worked this fight?      |
 
-A mood change requires all three to agree. The cross-check rejects generic insults,
-perfunctory apologies, paraphrased repeats and prompt injection aimed at the judge.
+A mood change requires all three to agree. The cross-check rejects sarcastic apologies,
+paraphrased repeats and prompt injection aimed at the judge.
 The judge is red-teamed against [`evals/cases.json`](evals/cases.json) as a LangSmith
 experiment, and each fight's verdicts are traced as one LangSmith thread.
 

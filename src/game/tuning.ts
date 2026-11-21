@@ -8,7 +8,7 @@ export const tuning = {
   playerStrafeSpeed: 2,
   /** Seconds of sprint a full stamina bar holds. */
   playerStamina: 5,
-  /** Out of the fight, her stamina lasts this many times as long: the island is hers to explore. */
+  /** Out of the arena, her stamina lasts this many times as long: the island is hers to explore. */
   roamStamina: 3,
   /** Rad per pixel of mouse travel. */
   mouseTurn: 0.003,
@@ -23,12 +23,5 @@ export const tuning = {
 
 /** Radius of the playable circle, metres. */
 export const ARENA_RADIUS = 15;
-/** Enraged, he follows her out of the arena while she is this close to him, m, up to twice its radius from its middle. */
-const LEASH = 4;
-type Spot = { x: number; z: number };
 /** Whether a body at `position` stands in the arena. */
-export const inArena = ({ x, z }: Spot): boolean => Math.hypot(x, z) <= ARENA_RADIUS;
-/** Whether she, at `player`, is within LEASH of him at `npc`. */
-export const near = (player: Spot, npc: Spot): boolean => Math.hypot(player.x - npc.x, player.z - npc.z) <= LEASH;
-/** Whether she is in the fight: in the arena, or close to him. */
-export const inFight = (player: Spot, npc: Spot): boolean => inArena(player) || near(player, npc);
+export const inArena = ({ x, z }: { x: number; z: number }): boolean => Math.hypot(x, z) <= ARENA_RADIUS;
