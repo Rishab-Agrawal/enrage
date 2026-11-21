@@ -7,7 +7,7 @@ import type { Mood } from '../src/game/events';
 export const Turn = z.object({
   mood: z.enum(['calm', 'enraged'] satisfies Mood[]),
   worked: z.array(z.string().min(1).max(500)).max(100),
-  newest: z.string().min(1).max(500),
+  newest: z.string().max(500),
   /** The fight it's from: LangSmith groups a fight's verdicts into one thread by it. */
   fight: z.uuid().optional(),
 });

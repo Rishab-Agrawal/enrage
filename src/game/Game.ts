@@ -413,23 +413,20 @@ export class Game {
     if (this.outcome) return;
     const { worked, fight } = this;
     const mood = this.npc.mood;
-    let turns = false;
-    if (text) {
-      // The server asks Jev (`server/judge.ts`); a failure leaves him unmoved.
-      turns = await fetch('/api/judge', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mood, worked, newest: text, fight }),
+    // The server asks Jev (`server/judge.ts`); a failure leaves him unmoved.
+    const turns = await fetch('/api/judge', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mood, worked, newest: text, fight }),
+    })
+      .then(async (response) => {
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        return ((await response.json()) as { turns: boolean }).turns;
       })
-        .then(async (response) => {
-          if (!response.ok) throw new Error(`HTTP ${response.status}`);
-          return ((await response.json()) as { turns: boolean }).turns;
-        })
-        .catch((error) => {
-          console.warn('Judge failed:', error);
-          return false;
-        });
-    }
+      .catch((error) => {
+        console.warn('Judge failed:', error);
+        return false;
+      });
     // A verdict that lands after the fight ended, or a rematch began, is moot.
     if (this.outcome || fight !== this.fight) return;
     // Enraged, he keeps her in the arena: words that land once she has left it leave him as he is.

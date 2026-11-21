@@ -51,15 +51,16 @@ api.post('/api/play', async (request, response) => {
   void tell(`🎮 Someone started playing: ${address}${where && ` (${where})`}`);
 });
 
-// Whether her newest line turns Gorran's mood. Only JSON is parsed: another site can't send that without CORS, which this API doesn't allow.
+// Whether her newest line turns Gorran's mood; one in which nothing was heard doesn't, but the owner still hears of it. Only JSON is parsed: another site can't send that without CORS, which this API doesn't allow.
 api.post('/api/judge', express.json(), async (request, response) => {
   const turn = Turn.safeParse(request.body);
   if (!turn.success) {
     response.sendStatus(400);
     return;
   }
-  const turns = await judge(turn.data);
-  void tell(`🗣️ ${ip(request)}, Gorran ${turn.data.mood}: “${turn.data.newest}”${turns ? ' (turned him)' : ''}`);
+  const { mood, newest } = turn.data;
+  const turns = newest !== '' && (await judge(turn.data));
+  void tell(`🗣️ ${ip(request)}, Gorran ${mood}: ${newest ? `“${newest}”` : '(nothing heard)'}${turns ? ' (turned him)' : ''}`);
   response.json({ turns });
 });
 
