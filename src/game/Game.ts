@@ -409,7 +409,7 @@ export class Game {
 
   /** Her turn at the mic, as heard: his mood turns if the judge says her words do, else he answers as he is. */
   private async hear(text: string): Promise<void> {
-    this.hearing(text);
+    this.hearing(text || '(nothing heard)');
     if (this.outcome) return;
     const { worked, fight } = this;
     const mood = this.npc.mood;
